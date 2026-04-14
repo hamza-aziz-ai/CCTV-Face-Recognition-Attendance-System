@@ -1,0 +1,8 @@
+fastapi~=0.115.6
+uvicorn~=0.33.0
+pydantic~=2.10.6
+numpy~=1.24.4
+requests~=2.32.3
+psycopg2-binary~=2.9.10
+opencv-python~=4.10.0.84
+python-dotenv~=1.0.1

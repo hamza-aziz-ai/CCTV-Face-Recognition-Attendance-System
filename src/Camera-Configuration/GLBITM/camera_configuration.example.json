@@ -1,0 +1,80 @@
+{
+    "girlshostel": {
+        "api-endpoint": "https://ERP_HOST/attendance-endpoint",
+        "cctv-cameras": {
+            "entry": {
+                "cctv-camera-1": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "",
+                    "masking-coordinates": null
+                }
+            },
+            "exit": {
+                "cctv-camera-1": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "",
+                    "masking-coordinates": null
+                }
+            },
+            "reception-lobby": {
+                "cctv-camera-1": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "",
+                    "masking-coordinates": null
+                },
+                "cctv-camera-2": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "",
+                    "masking-coordinates": null
+                }
+            },
+            "garden-view": {
+                "cctv-camera-1": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "",
+                    "masking-coordinates": null
+                }
+            }
+        }
+    },
+    "bbalibrary": {
+        "api-endpoint": "https://ERP_HOST/attendance-endpoint",
+        "cctv-cameras": {
+            "entry": {
+                "cctv-camera-1": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "",
+                    "masking-coordinates": null
+                }
+            },
+            "exit": {
+                "cctv-camera-1": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "",
+                    "masking-coordinates": null
+                }
+            }
+        }
+    }
+}

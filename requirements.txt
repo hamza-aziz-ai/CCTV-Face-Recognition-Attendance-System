@@ -1,0 +1,9 @@
+# Core (Producer-Consumer) Requirements
+confluent-kafka~=2.7.0
+requests~=2.32.3
+numpy~=1.24.4
+msgpack~=1.1.0
+ujson~=5.10.0
+pymilvus~=2.5
+opencv-python~=4.10.0.84
+python-dotenv~=1.0.1

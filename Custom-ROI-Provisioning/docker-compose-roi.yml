@@ -1,0 +1,8 @@
+services:
+  custom-roi-provisioning:
+    image: custom-roi-provisioning:latest
+    container_name: custom-roi-provisioning-container
+    volumes:
+      - ../src:/Multi-Person-Face-Recognition/src
+    ports:
+      - "8069:8069"

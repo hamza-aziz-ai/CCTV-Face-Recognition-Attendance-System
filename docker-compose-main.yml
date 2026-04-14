@@ -1,0 +1,175 @@
+services:
+  mfr-cctv-producer-consumer:
+    image: cctv-face-recognition-producer-consumer:v-beta
+    build:
+      context: .
+      dockerfile: main.Dockerfile
+    container_name: cctv-face-recognition-producer-consumer
+    environment:
+      CAM_USERNAME: ${CAM_USERNAME}
+      CAM_PASSWORD: ${CAM_PASSWORD}
+    volumes:
+      - .:/Multi-Person-Face-Recognition/
+      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System/:/Multi-Person-Face-Recognition/logs/
+      - /workspace/CCTV-FACE-RECOGNITION-ATTENDANCE-SYSTEM/Recognition_Frames/:/Multi-Person-Face-Recognition/Recognition_Frames/
+    depends_on:
+      postgresql-face-recognition:
+        condition: service_healthy
+      mfr-database-controller:
+        condition: service_healthy
+      mfr-feedback-controller:
+        condition: service_healthy
+      mfr-api-service:
+        condition: service_healthy
+      display-image-server:
+        condition: service_healthy
+      dynamic-face-dataset-collector:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+  postgresql-face-recognition:
+    image: postgres:12-bullseye
+    container_name: cctv-face-recognition-postgresql-database
+    ports:
+      - "5432:5432"
+    volumes:
+      - /workspace/database/postgresql/cctv-face-recognition:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  mfr-database-controller:
+    image: cctv-face-recognition-database-controller:v-beta
+    build:
+      context: .
+      dockerfile: database-server.Dockerfile
+    container_name: cctv-face-recognition-database-controller
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./src:/Multi-Person-Face-Recognition/src
+      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
+    ports:
+      - "20001:20001"
+    depends_on:
+      postgresql-face-recognition:
+          condition: service_healthy
+    healthcheck:
+      test: ["CMD", "./src/database_server/healthcheck_db_controller.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mfr-feedback-controller:
+    image: cctv-face-recognition-feedback-controller:v-beta
+    build:
+      context: .
+      dockerfile: feedback-server.Dockerfile
+    container_name: cctv-face-recognition-feedback-controller
+    volumes:
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./src:/Multi-Person-Face-Recognition/src
+      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
+    ports:
+      - "20012:20012"
+    depends_on:
+      mfr-database-controller:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "./src/feedback_server/healthcheck_feedback_controller.sh" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  mfr-api-service:
+    image: cctv-face-recognition-api:v-beta
+    build:
+      context: .
+      dockerfile: api.Dockerfile
+    container_name: cctv-face-recognition-api
+    environment:
+      API_KEY: ${API_KEY}
+      POSTGRESQL_USERNAME: ${POSTGRES_USER}
+      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./src:/Multi-Person-Face-Recognition/src
+      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
+    ports:
+      - "9090:8000"
+    depends_on:
+      postgresql-face-recognition:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "./src/api/healthcheck_api.sh" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  dynamic-face-dataset-collector:
+    image: cctv-face-recognition-dynamic-face-dataset-collector:v-beta
+    build:
+      context: .
+      dockerfile: dynamic-face-dataset-collector.Dockerfile
+    container_name: cctv-face-recognition-dynamic-face-dataset-collector
+    volumes:
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
+      - ./src:/Multi-Person-Face-Recognition/src
+      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "8000:8000"
+    init: true
+    healthcheck:
+      test: [ "CMD", "./src/dynamic_face_data_collector/healthcheck.sh" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  automate-milvus-update:
+    image: cctv-face-recognition-automate-milvus-update:v-beta
+    build:
+      context: .
+      dockerfile: automatic-milvus-db-update.Dockerfile
+    container_name: cctv-face-recognition-automate-milvus-update
+    volumes:
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
+      - ./src:/Multi-Person-Face-Recognition/src
+      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+  display-image-server:
+    image: cctv-face-recognition-front-face-image-display:v-beta
+    build:
+      context: .
+      dockerfile: display-image.Dockerfile
+    container_name: cctv-face-recognition-front-face-image-display
+    volumes:
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./DISPLAY-FACE-DATASET:/Multi-Person-Face-Recognition/DISPLAY-FACE-DATASET
+      - ./src:/Multi-Person-Face-Recognition/src
+      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
+    ports:
+      - "20013:20013"
+    init: true
+    depends_on:
+      mfr-feedback-controller:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "./src/fetch_face_image_server/healthcheck_display_image_server.sh" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3

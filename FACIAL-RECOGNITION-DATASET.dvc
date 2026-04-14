@@ -1,0 +1,6 @@
+outs:
+- md5: 0f53b88bfd1bea202ca760eca9b9cebf.dir
+  size: 22540129971
+  nfiles: 54809
+  hash: md5
+  path: FACIAL-RECOGNITION-DATASET

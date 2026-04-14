@@ -1,0 +1,59 @@
+services:
+  ifr-trt-gpu0:
+    env_file:
+      - ../../standalone-services.env
+    image: ${IMAGE}:${TAG}
+    build:
+      context: ../src
+      dockerfile: ../src/Dockerfile_trt
+    hostname: ifr-trt-gpu0
+    volumes:
+      - ../models:/models
+      - ../src:/app
+    ports:
+      - "19000:18080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['${INSIGHTFACE_GPU_DEVICE_0}']
+              capabilities: [gpu]
+
+  ifr-trt-gpu1:
+    env_file:
+      - ../../standalone-services.env
+    image: ${IMAGE}:${TAG}
+    build:
+      context: ../src
+      dockerfile: ../src/Dockerfile_trt
+    hostname: ifr-trt-gpu1
+    volumes:
+      - ../models:/models
+      - ../src:/app
+    ports:
+      - "19001:18080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['${INSIGHTFACE_GPU_DEVICE_1}']
+              capabilities: [gpu]
+
+  nginx-load-balancer:
+    image: nginx
+    container_name: docker-nginx-insightface
+    volumes:
+      - ../misc/nginx_conf/conf.d:/etc/nginx/conf.d
+    ports:
+      - "6385:18080"
+    depends_on:
+      ifr-trt-gpu0:
+        condition: service_healthy
+      ifr-trt-gpu1:
+        condition: service_healthy
+    ulimits:
+      nofile:
+        soft: 200000
+        hard: 200000

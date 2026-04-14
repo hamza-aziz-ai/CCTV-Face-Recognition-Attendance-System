@@ -1,0 +1,671 @@
+{
+    "maingate": {
+        "api-endpoint": "https://ERP_HOST/attendance-endpoint",
+        "cctv-cameras": {
+            "entry": {
+                "cctv-camera-1": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            392,
+                            718
+                        ],
+                        [
+                            890,
+                            718
+                        ],
+                        [
+                            789,
+                            376
+                        ],
+                        [
+                            789,
+                            64
+                        ],
+                        [
+                            504,
+                            64
+                        ],
+                        [
+                            504,
+                            357
+                        ]
+                    ]
+                },
+                "cctv-camera-2": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            362,
+                            718
+                        ],
+                        [
+                            870,
+                            718
+                        ],
+                        [
+                            768,
+                            325
+                        ],
+                        [
+                            768,
+                            24
+                        ],
+                        [
+                            500,
+                            24
+                        ],
+                        [
+                            500,
+                            312
+                        ]
+                    ]
+                },
+                "cctv-camera-3": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            492,
+                            717
+                        ],
+                        [
+                            851,
+                            717
+                        ],
+                        [
+                            772,
+                            263
+                        ],
+                        [
+                            772,
+                            1
+                        ],
+                        [
+                            568,
+                            1
+                        ],
+                        [
+                            568,
+                            262
+                        ]
+                    ]
+                },
+                "cctv-camera-4": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            461,
+                            717
+                        ],
+                        [
+                            802,
+                            717
+                        ],
+                        [
+                            735,
+                            332
+                        ],
+                        [
+                            735,
+                            24
+                        ],
+                        [
+                            527,
+                            24
+                        ],
+                        [
+                            527,
+                            329
+                        ]
+                    ]
+                },
+                "cctv-camera-5": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            440,
+                            718
+                        ],
+                        [
+                            803,
+                            718
+                        ],
+                        [
+                            733,
+                            296
+                        ],
+                        [
+                            733,
+                            20
+                        ],
+                        [
+                            519,
+                            20
+                        ],
+                        [
+                            519,
+                            306
+                        ]
+                    ]
+                },
+                "cctv-camera-6": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            434,
+                            717
+                        ],
+                        [
+                            818,
+                            717
+                        ],
+                        [
+                            734,
+                            267
+                        ],
+                        [
+                            734,
+                            0
+                        ],
+                        [
+                            531,
+                            0
+                        ],
+                        [
+                            531,
+                            245
+                        ]
+                    ]
+                },
+                "cctv-camera-7": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            501,
+                            716
+                        ],
+                        [
+                            869,
+                            716
+                        ],
+                        [
+                            776,
+                            254
+                        ],
+                        [
+                            776,
+                            1
+                        ],
+                        [
+                            593,
+                            1
+                        ],
+                        [
+                            593,
+                            251
+                        ]
+                    ]
+                },
+                "cctv-camera-8": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            484,
+                            715
+                        ],
+                        [
+                            862,
+                            715
+                        ],
+                        [
+                            752,
+                            232
+                        ],
+                        [
+                            752,
+                            3
+                        ],
+                        [
+                            564,
+                            3
+                        ],
+                        [
+                            564,
+                            231
+                        ]
+                    ]
+                },
+                "cctv-camera-9": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "stream1",
+                    "masking-coordinates": [
+                        [
+                            300,
+                            718
+                        ],
+                        [
+                            797,
+                            718
+                        ],
+                        [
+                            641,
+                            241
+                        ],
+                        [
+                            641,
+                            3
+                        ],
+                        [
+                            423,
+                            2
+                        ],
+                        [
+                            423,
+                            237
+                        ]
+                    ]
+                },
+                "cctv-camera-10": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            479,
+                            719
+                        ],
+                        [
+                            991,
+                            718
+                        ],
+                        [
+                            851,
+                            319
+                        ],
+                        [
+                            851,
+                            38
+                        ],
+                        [
+                            548,
+                            37
+                        ],
+                        [
+                            548,
+                            337
+                        ]
+                    ]
+                }
+            },
+            "exit": {
+                "cctv-camera-1": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            384,
+                            714
+                        ],
+                        [
+                            957,
+                            714
+                        ],
+                        [
+                            784,
+                            161
+                        ],
+                        [
+                            784,
+                            1
+                        ],
+                        [
+                            516,
+                            1
+                        ],
+                        [
+                            516,
+                            168
+                        ]
+                    ]
+                },
+                "cctv-camera-2": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            266,
+                            716
+                        ],
+                        [
+                            861,
+                            716
+                        ],
+                        [
+                            715,
+                            124
+                        ],
+                        [
+                            715,
+                            2
+                        ],
+                        [
+                            433,
+                            2
+                        ],
+                        [
+                            433,
+                            121
+                        ]
+                    ]
+                },
+                "cctv-camera-3": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            365,
+                            716
+                        ],
+                        [
+                            754,
+                            717
+                        ],
+                        [
+                            676,
+                            165
+                        ],
+                        [
+                            676,
+                            2
+                        ],
+                        [
+                            478,
+                            2
+                        ],
+                        [
+                            478,
+                            159
+                        ]
+                    ]
+                },
+                "cctv-camera-4": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            435,
+                            716
+                        ],
+                        [
+                            808,
+                            717
+                        ],
+                        [
+                            717,
+                            223
+                        ],
+                        [
+                            717,
+                            3
+                        ],
+                        [
+                            519,
+                            3
+                        ],
+                        [
+                            519,
+                            220
+                        ]
+                    ]
+                },
+                "cctv-camera-5": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            436,
+                            717
+                        ],
+                        [
+                            824,
+                            717
+                        ],
+                        [
+                            721,
+                            202
+                        ],
+                        [
+                            721,
+                            3
+                        ],
+                        [
+                            516,
+                            3
+                        ],
+                        [
+                            516,
+                            181
+                        ]
+                    ]
+                },
+                "cctv-camera-6": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            404,
+                            714
+                        ],
+                        [
+                            783,
+                            714
+                        ],
+                        [
+                            673,
+                            253
+                        ],
+                        [
+                            673,
+                            16
+                        ],
+                        [
+                            459,
+                            16
+                        ],
+                        [
+                            459,
+                            269
+                        ]
+                    ]
+                },
+                "cctv-camera-7": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            442,
+                            718
+                        ],
+                        [
+                            834,
+                            718
+                        ],
+                        [
+                            742,
+                            193
+                        ],
+                        [
+                            742,
+                            1
+                        ],
+                        [
+                            537,
+                            1
+                        ],
+                        [
+                            537,
+                            190
+                        ]
+                    ]
+                },
+                "cctv-camera-8": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            429,
+                            718
+                        ],
+                        [
+                            817,
+                            718
+                        ],
+                        [
+                            726,
+                            214
+                        ],
+                        [
+                            726,
+                            2
+                        ],
+                        [
+                            522,
+                            2
+                        ],
+                        [
+                            522,
+                            209
+                        ]
+                    ]
+                },
+                "cctv-camera-9": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            360,
+                            717
+                        ],
+                        [
+                            913,
+                            717
+                        ],
+                        [
+                            753,
+                            226
+                        ],
+                        [
+                            753,
+                            7
+                        ],
+                        [
+                            504,
+                            7
+                        ],
+                        [
+                            504,
+                            225
+                        ]
+                    ]
+                },
+                "cctv-camera-10": {
+                    "username": null,
+                    "password": null,
+                    "ip_address": "CAMERA_IP",
+                    "port": 554,
+                    "endpoint": "cam/realmonitor?channel=1&subtype=0",
+                    "masking-coordinates": [
+                        [
+                            286,
+                            717
+                        ],
+                        [
+                            848,
+                            717
+                        ],
+                        [
+                            697,
+                            209
+                        ],
+                        [
+                            697,
+                            2
+                        ],
+                        [
+                            439,
+                            2
+                        ],
+                        [
+                            439,
+                            195
+                        ]
+                    ]
+                }
+            }
+        }
+    }
+}

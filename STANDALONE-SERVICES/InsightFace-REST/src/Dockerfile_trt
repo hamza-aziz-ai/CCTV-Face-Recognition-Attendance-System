@@ -1,0 +1,34 @@
+FROM nvcr.io/nvidia/tensorrt:22.10-py3
+
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Kolkata
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
+    && apt-get update && apt-get install -y tzdata
+
+RUN python3 -m pip install --upgrade pip
+ENV PIP_INSTALL="python3 -m pip --no-cache-dir install"
+
+RUN apt-get update &&\
+    apt-get install -y\
+            libgl1-mesa-glx \
+            protobuf-compiler \
+            libprotoc-dev \
+            libb64-0d \
+            libturbojpeg \
+            python3-opencv \
+            ffmpeg &&\
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN $PIP_INSTALL -r requirements.txt
+# GPU specific packages
+RUN $PIP_INSTALL cupy-cuda11x pynvjpeg
+
+WORKDIR /app
+COPY api_trt /app/api_trt
+COPY entrypoint.sh /app/entrypoint.sh
+
+ENTRYPOINT [ "bash" ]
+CMD ["entrypoint.sh"]

@@ -170,3 +170,13 @@ FACE-LANDMARKS
 FACIAL-RECOGNITION-DATASET
 DISPLAY-FACE-DATASET
 DYNAMIC-FACIAL-RECOGNITION-DATASET
+
+# Confidential: real camera configs (credentials, IPs, ERP endpoints). Templates: camera_configuration.example.json
+src/Camera-Configuration/*/camera_configuration.json
+src/Camera-Configuration/*/backup.json
+# Personal / client data
+.bash_history
+dataset-folder-structure.txt
+Custom-ROI-Provisioning/input.jpg
+# Local knowledge graph (contains extracted source, incl. old secrets)
+graphify-out/

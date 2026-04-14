@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>ROI Provisioning</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+
+        h1 {
+            background-color: #00008b;
+            color: #fff;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        form {
+            margin-top: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        input[type="text"] {
+            width: 770px;
+            margin-right: 10px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        input[type="submit"] {
+            background-color: #00008b;
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+            display: inline-block;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Custom Region of Interest Provisioning</h1>
+    <div class="container">
+        <form method="POST">
+            <label for="camera_name">Camera Name:</label>
+            <input type="text" id="camera_name" name="camera_name" required>
+
+            <p>Region of Interest Details: </p>
+
+            <label for="width">ROI Width:</label>
+            <input type="text" id="width" name="width" required><br>
+
+            <label for="height">ROI Height:</label>
+            <input type="text" id="height" name="height" required><br>
+
+            <label for="pos_x">X-Axis:</label>
+            <input type="text" id="pos_x" name="pos_x" required><br>
+
+            <label for="pos_y">Y-Axis:</label>
+            <input type="text" id="pos_y" name="pos_y" required><br>
+
+            <input type="submit" value="Preview">
+        </form>
+        <form method="POST" action="/send_variables">
+            <input type="submit" value="Submit Details" id="submitButton">
+        </form>
+        <script>
+        document.getElementById("submitButton").addEventListener("click", function() {
+            alert("Region of Interest Updated!");
+        });
+        </script>
+        <img src="{{ url_for('video_feed') }}" alt="Video Stream">
+    </div>
+</body>
+
+</html>

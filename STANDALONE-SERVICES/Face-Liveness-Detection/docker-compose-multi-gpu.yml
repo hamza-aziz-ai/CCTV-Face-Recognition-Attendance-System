@@ -1,0 +1,65 @@
+services:
+  face-liveness-detection-gpu0:
+    image: face-liveness-detection:v-beta
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: face-liveness-detection-container-0
+    ports:
+      - "6970:6969"
+    init: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [ gpu ]
+              driver: nvidia
+              device_ids: [ "${FACE_LIVENESS_DETECTION_GPU_DEVICE_0}" ]
+    volumes:
+      - .:/Face-Liveness-Detection
+    healthcheck:
+      test: [ "CMD", "./healthcheck_face_liveness.sh" ]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+
+  face-liveness-detection-gpu1:
+    image: face-liveness-detection:v-beta
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: face-liveness-detection-container-1
+    ports:
+      - "6971:6969"
+    init: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [ gpu ]
+              driver: nvidia
+              device_ids: [ "${FACE_LIVENESS_DETECTION_GPU_DEVICE_1}" ]
+    volumes:
+      - .:/Face-Liveness-Detection
+    healthcheck:
+      test: [ "CMD", "./healthcheck_face_liveness.sh" ]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+
+  nginx:
+    image: nginx
+    container_name: docker-nginx-face-liveness-detection
+    volumes:
+      - ./misc/nginx_conf/conf.d:/etc/nginx/conf.d
+    ports:
+      - "6386:6969"
+    depends_on:
+      face-liveness-detection-gpu0:
+        condition: service_healthy
+      face-liveness-detection-gpu1:
+        condition: service_healthy
+    ulimits:
+      nofile:
+        soft: 200000
+        hard: 200000

@@ -1,0 +1,19 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = false
+name = "pip_conf_index_global"
+
+[packages]
+confluent-kafka = "~=2.7.0"
+requests = "~=2.32.3"
+numpy = "~=1.24.4"
+msgpack = "~=1.1.0"
+ujson = "~=5.10.0"
+pymilvus = "~=2.5"
+opencv-python = "~=4.10.0.84"
+python-dotenv = "~=1.0.1"
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"

@@ -1,0 +1,3 @@
+[submodule "Kafka-WebApp"]
+	path = Kafka-WebApp
+	url = git@github.com:gi-hamza-eatai241/Kafka-WebApp.git
