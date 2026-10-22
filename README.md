@@ -238,7 +238,7 @@ The display client lives in the `Kafka-WebApp` submodule. See [Kafka-WebApp/READ
 
 ## Authors
 
-Developed at Global InfoVentures Pvt. Ltd. by **Anubhav Patrick**, **Hamza Aziz** and **Kshitij Parashar**.
+Developed at Global InfoVentures Pvt. Ltd. by **Hamza Aziz**.
 
 Third-party components:
 
