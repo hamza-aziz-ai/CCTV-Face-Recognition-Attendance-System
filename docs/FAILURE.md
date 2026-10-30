@@ -1,6 +1,6 @@
 # Failure map
 
-Marked **seen** where it actually happened on this host, otherwise **from the code**, not tested. There are no alerts or dashboards: you find out from `docker ps`, the service logs under `logs/`, `deploy/watch.log`, or a Windows message from the watcher.
+Marked **seen** where it actually happened on this host, otherwise **from the code**, not tested. There are no dashboards. A failed release opens a GitHub issue assigned to the owner, and a failed deploy shows a Windows message from the watcher. Otherwise you find out from `docker ps`, the service logs under `logs/`, or `deploy/watch.log`.
 
 | Dependency | If it is down, slow or wrong | How you notice | Status |
 |---|---|---|---|
