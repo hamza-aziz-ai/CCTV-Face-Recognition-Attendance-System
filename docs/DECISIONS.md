@@ -188,3 +188,17 @@ Trade-off:
 - DockerHub stays unused.
 - Pushes run one at a time (`--parallel 1`): the first v0.3.0 release run pushed all 7 in parallel and ghcr.io answered "denied" for a random subset, twice.
 Revisit if: the free GHCR policy changes, the repo goes public (DockerHub mirror for discoverability), or a CI-to-release digest match is required (push from the CI image job instead).
+
+## D-018: Containers restart themselves; headless operation planned, not built
+Date: 2026-10-30   Model: Claude Opus 5.5
+Context: The owner wants the standalone services (InsightFace-REST, Milvus, Kafka) and the app stack to come back on their own after a crash or a reboot, with nobody starting them. PTZ-Camera-Classroom-Attendance-System uses the same InsightFace-REST and Milvus instances (ports 6385 and 19530; it has no copy of its own), and both projects will be merged later.
+Options: 1) restart policies, with Docker Desktop starting at sign-in  2) a watchdog that re-runs the start scripts  3) Docker Engine as a service in WSL2, running without sign-in
+Chosen: 1 now. `restart: unless-stopped` on every Milvus, Kafka and main-stack container, and `--restart unless-stopped` on the InsightFace workers and their nginx. The InsightFace deploy script now removes an old container of the same name whether it is running or stopped, so a redeploy no longer collides with a stopped one. The manifest records the InsightFace-REST upstream: SthPhoenix/InsightFace-REST at `e9b85b9` (2024-11-02), with local changes to its two Dockerfiles and `requirements.txt` (the vendored `src/` matches no upstream commit exactly; `e9b85b9` differs in only those 3 files).
+Why: Docker brings the containers back after a crash and whenever its daemon starts, with no extra code. `unless-stopped` keeps a deliberate `docker stop` in force, which the watcher relies on ("never start a stack the owner stopped").
+Trade-off:
+- Docker Desktop runs only while the owner is signed in to Windows ("Start Docker Desktop when you sign in" must be on).
+- A container that is running but unhealthy is not restarted.
+- The first start is still manual (`start_standalone_services.sh`): it builds the InsightFace image and the TensorRT engines.
+Headless plan (option 3, not built): Docker Engine plus the NVIDIA Container Toolkit in a WSL2 Ubuntu with systemd; Docker Desktop off; a Task Scheduler task "at startup, whether signed in or not" that starts the distro and keeps it alive (`vmIdleTimeout=-1` in `.wslconfig`); the watcher moves into WSL as a systemd timer, with a notification other than `msg`. Containers then restart when dockerd starts at boot.
+Revisit if: the host must run unattended through reboots (build the headless plan), or the deployment moves to a Linux GPU server (restart policies alone are enough there).
+
