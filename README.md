@@ -169,6 +169,34 @@ When `upload_embeddings.py` asks whether to delete the existing collection, **Y 
 
 This also stops the standalone stacks: InsightFace-REST, Milvus and Kafka.
 
+## CI/CD
+
+- **CI** (`.github/workflows/ci.yml`) runs on every PR: lint, secret scan, compose validation, model-manifest drift check, watcher tests, and builds and smoke-tests all 8 images. The aggregate check is `ci`.
+- **Auto-merge** (`automerge.yml`): a PR into `main` is squash-merged, and its branch deleted, once `ci` and every other check passed on its latest commit.
+- **Auto-release** (`release.yml`): after a merge, the PR titles since the last tag decide the version as Conventional Commits. `feat:` gives a minor bump, `fix:`/`perf:` a patch, and `type!:` or a `BREAKING CHANGE` footer a major; anything else gives no release. CI then re-runs on the exact commit, and the tag and GitHub Release are created with `mlops/model-manifest.json` attached. **PR titles must follow this convention.**
+- **Auto-deploy** (`deploy/watch.py`): a poller on the deployment host deploys each new release and rolls back on failure.
+
+### Deployment watcher setup (Windows deployment host)
+
+Run once, after the first release exists. The watcher manages only the main compose stack; start the standalone services first (`./start_standalone_services.sh`).
+
+```powershell
+gh repo clone hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System C:\deploy\cctv
+Copy-Item .env C:\deploy\cctv\.env      # from the dev checkout; the clone needs the same secrets
+cd C:\deploy\cctv
+python deploy\watch.py --enroll         # deploys the newest release now and starts watching
+schtasks /Create /TN "CCTV deploy watcher" /SC MINUTE /MO 10 /IT /F `
+  /TR "\"C:\ProgramData\anaconda3\pythonw.exe\" \"C:\deploy\cctv\deploy\watch.py\""
+```
+
+Every 10 minutes, while you are signed in and Docker Desktop is running, the watcher does the following:
+- It reads the newest published release, skipping drafts and pre-releases. It deploys it only if the tag is on `main`, the release is not the current one, and it has not failed before.
+- It checks the tag out in the deploy clone, builds images tagged with the release, and runs `up --wait`. It records the release as current only after `http://localhost:9090/docs` answers.
+- On failure it rolls back to the last good release, marks the failed one so it is never retried, and shows a Windows message.
+- It never starts a stack you stopped.
+
+Its log is in `C:\deploy\cctv\deploy\watch.log`. To retry a failed release, run `python deploy\watch.py --enroll`. To stop watching, run `schtasks /Delete /TN "CCTV deploy watcher" /F`.
+
 ## Reporting API
 
 All routes need `api_key` as a query parameter. Dates use `DD-MM-YYYY`.

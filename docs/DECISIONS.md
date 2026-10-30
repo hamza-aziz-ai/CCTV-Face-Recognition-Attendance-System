@@ -147,3 +147,24 @@ Chosen: 3: `hosts/laptop-rtx4050.env`. It places both InsightFace containers and
 Why: The A100 defaults stay intact for the real site. The profile is reviewed in git and is the same on every deploy (the watcher relies on that). Option 2 would hide the host's config from review.
 Trade-off: The batch sizes are untested guesses for 6 GB shared by two TensorRT containers plus Milvus; they must be tuned after the first bring-up. Models, detection threshold and ports are unchanged, so recognition behaviour matches the A100 config. Engine batch size does not change results, so the model manifest keeps describing the base config.
 Revisit if: the first bring-up runs out of GPU memory (drop to one InsightFace container and a single-backend nginx config), or another host type is added (add a profile).
+
+## D-016: Pull-based deployment watcher on the deployment host
+Date: 2026-10-30   Model: Claude Opus 5.5 (lessons from the Medical-ChatBot and HalalLens sessions)
+Context: The owner wants the deployment server to update itself when a release is published. For now the deployment host is this Windows laptop, which is also the dev machine.
+Options: 1) a self-hosted Actions runner deploying on release  2) Watchtower  3) a poller run by Task Scheduler from a dedicated deploy clone
+Chosen: 3: `deploy/watch.py`, stdlib Python, every 10 minutes through `pythonw` (no console window).
+Why:
+- A self-hosted runner with Docker access on the dev box would hand host-admin power to workflow code.
+- Watchtower cannot roll back to a known tag or run the repo's build.
+- The poller needs no inbound access and no extra credentials (it uses the owner's `gh` login).
+- It records a release as current only after `up --wait` and an HTTP smoke test pass, rolls back to the last good tag on failure, and never retries a failed release unattended.
+- It never restarts a stack the owner stopped, and never touches the dev checkout.
+- Images are tagged per release (`IMAGE_TAG` in `docker-compose-main.yml`), so a rollback reuses the previous release's images instead of rebuilding over them.
+Trade-off:
+- It runs only while the owner is signed in and Docker Desktop is up.
+- Each deploy restarts the producer-consumer, and `main.py` deletes Kafka topics on start (pending feedback may be lost).
+- The rollback cannot undo data changes in Postgres or Milvus.
+- Dev and deployed stacks share container names and ports, so only one runs at a time.
+- It deploys whatever reached `main` through auto-merge, including Dependabot updates once they cause a release.
+- The datasets are not present on this host yet (DVC not pulled).
+Revisit if: a separate deployment host exists (pull registry images by digest instead of building), or a deploy loses data (add a backup step before `up`).
