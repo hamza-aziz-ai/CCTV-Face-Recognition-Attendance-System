@@ -27,13 +27,14 @@ services:
     stop_grace_period: 30s
 
   postgresql-face-recognition:
-    image: postgres:12-bullseye
+    image: postgres:18.6-trixie
     container_name: cctv-face-recognition-postgresql-database
     restart: unless-stopped
     ports:
       - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
-      - /workspace/database/postgresql/cctv-face-recognition:/var/lib/postgresql/data
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/18; a new host folder leaves the PostgreSQL 12 data untouched (D-020)
+      - /workspace/database/postgresql18/cctv-face-recognition:/var/lib/postgresql
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

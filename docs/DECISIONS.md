@@ -219,6 +219,19 @@ Trade-off:
 - The store lives on this laptop: no backup copy yet.
 Revisit if: a second machine needs the data regularly (read-only user, endpoint by hostname), or the store holds the only copy (add a replica or backup).
 
+## D-020: PostgreSQL 12 to 18.6
+Date: 2026-10-30   Model: Claude Opus 5.5
+Context: The stack ran `postgres:12-bullseye`; PostgreSQL 12 is out of support. The owner asked for the latest stable release. 18.6 is the current stable (`latest` points to it); 19 is a release candidate.
+Options: 1) `postgres:latest`  2) pin `postgres:18.6-trixie`  3) 17.11
+Chosen: 2, with `psycopg2-binary` 2.9.10 to 2.9.13. The 18 images keep data in `/var/lib/postgresql/18/docker` and expect the volume at `/var/lib/postgresql`, so the stack now mounts a new host folder, `/workspace/database/postgresql18/cctv-face-recognition`, at that path.
+Why: A pinned tag keeps every deploy identical; `latest` would jump to 19 on its release. A new folder never lets an 18 server open 12 data files, and leaves the 12 data in place for a rollback to v0.5.x.
+Trade-off: A site with existing data starts with an empty database until it is migrated. Upgrade runbook, before deploying this release on such a site:
+1. With the old stack running: `docker exec cctv-face-recognition-postgresql-database pg_dumpall -U "$POSTGRES_USER" > pg12-dump.sql`
+2. Deploy this release (the new folder is created empty and initialised).
+3. `docker exec -i cctv-face-recognition-postgresql-database psql -U "$POSTGRES_USER" -d postgres < pg12-dump.sql`
+4. Check row counts, then remove `/workspace/database/postgresql/cctv-face-recognition` once nothing needs a rollback.
+Revisit if: PostgreSQL 19 is released and has been stable for a minor release or two.
+
 ## D-022: Milvus 2.5.1 to 3.0.5, following the official compose file
 Date: 2026-10-30   Model: Claude Opus 5.5
 Context: The owner asked for the latest stable Milvus and pointed at the official standalone compose file of the 3.0 line. The newest release is v3.0.5 (2026-10), newer than the v3.0.3 linked.
