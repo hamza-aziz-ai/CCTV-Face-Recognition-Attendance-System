@@ -18,3 +18,9 @@ updates:
     groups:
       base-images:
         patterns: ["*"]
+
+  # Kafka-WebApp is versioned in its own repository; each update is a PR that bumps the pinned commit here.
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: weekly
