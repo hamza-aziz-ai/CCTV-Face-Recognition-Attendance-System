@@ -8,6 +8,11 @@ if [ -f "$ENV_FILE" ]; then
     set -a # Automatically export variables
     # shellcheck disable=SC1090
     source "$ENV_FILE"
+    # Per-host overrides (GPU placement, batch sizes), selected by HOST_PROFILE in the root .env
+    if [ -n "${HOST_PROFILE:-}" ]; then
+        # shellcheck disable=SC1090
+        source "../hosts/$HOST_PROFILE.env" || { echo "Host profile $HOST_PROFILE not found"; exit 1; }
+    fi
     set +a # Stop exporting variables
 else
     echo "Environment file $ENV_FILE not found!"

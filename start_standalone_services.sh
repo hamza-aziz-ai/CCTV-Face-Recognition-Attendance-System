@@ -9,6 +9,15 @@
 # Load the INSTITUTE and IP_ADDRESS variable from master.env
 . set_configuration.sh
 
+# Per-host overrides (GPU placement, batch sizes) from STANDALONE-SERVICES/hosts/, selected by HOST_PROFILE in .env
+export HOST_PROFILE
+ENV_FILES=(--env-file ../standalone-services.env)
+if [ -n "${HOST_PROFILE:-}" ]; then
+    [ -f "STANDALONE-SERVICES/hosts/$HOST_PROFILE.env" ] || { echo "Host profile $HOST_PROFILE not found"; exit 1; }
+    ENV_FILES+=(--env-file "../hosts/$HOST_PROFILE.env")
+    echo "Using host profile: $HOST_PROFILE"
+fi
+
 # start InsightFace-REST container
 echo "Starting InsightFace-REST API Service"
 # shellcheck disable=SC2164
@@ -30,7 +39,7 @@ echo
 echo "Starting Milvus Vector Database Service"
 # shellcheck disable=SC2164
 cd STANDALONE-SERVICES/Milvus-Vector-Database
-docker-compose --env-file ../standalone-services.env up -d
+docker-compose "${ENV_FILES[@]}" up -d
 cd ../..
 
 echo
@@ -39,5 +48,5 @@ echo
 echo "Starting Confluent Kafka Service"
 # shellcheck disable=SC2164
 cd STANDALONE-SERVICES/Confluent-Kafka
-docker-compose --env-file ../standalone-services.env up -d
+docker-compose "${ENV_FILES[@]}" up -d
 cd ../..
