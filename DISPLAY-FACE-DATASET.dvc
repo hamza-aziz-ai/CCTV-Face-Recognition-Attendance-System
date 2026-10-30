@@ -1,6 +1,6 @@
 outs:
-- md5: de7741a420bc0843973cfcf64c7256b8.dir
-  size: 1575272962
-  nfiles: 7889
+- md5: e9cbc3bf91e6ed3dbd611b32da3ffd67.dir
+  size: 220557
+  nfiles: 1
   hash: md5
   path: DISPLAY-FACE-DATASET
