@@ -100,3 +100,12 @@ Chosen: 2, weekly, one grouped PR per ecosystem
 Why: A base-image digest goes stale for the same reason action SHAs do, and misses OS security patches. Python vulnerabilities already arrive through Dependabot security updates. Pip version updates across 8 requirement files would be noise without tests.
 Trade-off: Up to two automated PRs a week to review and merge by hand (manual merges on the Free plan).
 Revisit if: unit tests exist (consider pip updates), or the account moves to Pro (consider auto-merge for patch updates).
+
+## D-012: Model manifest with a CI drift check
+Date: 2026-10-30   Model: Claude Opus 5.5 with Codex gpt-6.1-sol (council)
+Context: There is no training loop. What can change behaviour is the external models (InsightFace-REST TensorRT engines), thresholds, the Milvus index and search settings, and the datasets. None of this was recorded in one place, and the README model names were unchecked.
+Options: 1) MLflow or a model registry  2) image labels only  3) a hand-maintained `mlops/model-manifest.json`, checked against source in CI
+Chosen: 3
+Why: MLflow needs a training/eval loop this repo does not have. Labels cannot be checked. A manifest plus `mlops/check_manifest.py` (reads `parameters.py`, `standalone-services.env`, `models.json`, `milvus_server.py` and the `.dvc` files as text) fails CI the moment the manifest and the code disagree.
+Trade-off: Host-only facts (TensorRT engine sha256, InsightFace image digest, embedding snapshot) cannot be derived in CI. They stay `null` with instructions, and `--release` fails until they are filled from the GPU host. ONNX md5 values are the ones InsightFace-REST expects; the files actually deployed are not verified.
+Revisit if: a training or evaluation loop is added (then consider a registry), or models move to a different inference service.
