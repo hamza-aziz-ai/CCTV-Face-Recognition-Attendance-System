@@ -101,6 +101,8 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
+      # Only to hand a stale run over to a release of main
+      actions: write
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ needs.plan.outputs.tag }}
@@ -108,14 +110,30 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Drift fails the release; host-only values still null are listed as unverified but do not block (D-014).
       - run: python3 -I mlops/check_manifest.py
-      - name: Tag and publish
+      # GitHub refused GITHUB_TOKEN the v2.0.2 tag (HTTP 403) on a commit whose workflow files no longer matched main,
+      # after the next merge had changed one mid-run. The newer main holds this commit too, so release main instead.
+      - name: Tag
+        id: tag
+        env:
+          BUMP: ${{ inputs.bump }}
         run: |
           set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
+          if gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null; then
+            echo "tagged=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$head" = "$GITHUB_SHA" ]; then exit 1; fi
+          echo "::warning::Tagging $GITHUB_SHA failed and main has moved on to $head; starting a release of main instead."
+          gh workflow run release.yml --ref main -f bump="${BUMP:-auto}"
+      - name: Publish
+        if: steps.tag.outputs.tagged == 'true'
+        run: |
+          set -euo pipefail
           gh release create "$TAG" --verify-tag --generate-notes --title "$TAG" mlops/model-manifest.json
       # The release is already out, so a failure here only leaves the changelog behind. Read from main, not the
       # checkout: a queued release may have added its entry since this commit. docs: commits never start a release.
       - name: Add the release notes to CHANGELOG.md
+        if: steps.tag.outputs.tagged == 'true'
         run: |
           set -euo pipefail
           url="repos/$GITHUB_REPOSITORY/contents/CHANGELOG.md"
