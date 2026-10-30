@@ -63,6 +63,7 @@ Frames travel from the camera threads to the recognition threads through an in-m
 | nginx load balancer | `nginx` | 6385 → 18080 | — |
 | Milvus standalone | `milvusdb/milvus:v2.5.1-gpu` (+ etcd, MinIO) | 19530, 9091, 9000, 9001 | 7:4 (5 GB) |
 | Kafka broker (KRaft) | `confluentinc/cp-kafka:7.8.0` (+ Confluent tools) | 9092, 9101 | — |
+| Dataset store (DVC remote) | `pgsty/minio` (MinIO) | 9010 (S3 API), 9011 (console) | — |
 | Face liveness detection (disabled) | `face-liveness-detection:v-beta` + nginx | 6970, 6971, 6386 | 7:2, 7:3 (5 GB each) |
 
 Liveness detection (MiniFASNet anti-spoofing) is switched off by `ENABLE_FACE_LIVENESS_DETECTION = False` in `src/parameters.py`, and its start command is commented out.
@@ -83,6 +84,7 @@ cp .env.example .env
 | `API_KEY` | Reporting API (`?api_key=` query parameter) |
 | `CAM_USERNAME`, `CAM_PASSWORD` | Default camera credentials |
 | `ABESIT_HOST_IP`, `GLBITM_HOST_IP` | `set_configuration.sh`, to pick `INSTITUTE` from the host IP |
+| `DATASET_STORE_USER`, `DATASET_STORE_PASSWORD`, `DATASET_STORE_DIR` | Dataset store (MinIO DVC remote): root login and the host folder holding the data, outside the repo |
 
 ### Cameras
 
@@ -123,7 +125,7 @@ Create `.env` and the camera configuration as described in [Configuration](#conf
 
 ### 3. Get the datasets
 
-The face datasets are versioned with DVC on a Google Drive remote and are not stored in git:
+The face datasets are versioned with DVC and are not stored in git. The default remote `minio` is the dataset store started by `start_standalone_services.sh` (bucket `dvc`, S3 API on port 9010, D-019):
 
 | DVC file | Contents |
 |---|---|
@@ -131,13 +133,17 @@ The face datasets are versioned with DVC on a Google Drive remote and are not st
 | `DISPLAY-FACE-DATASET.dvc` | Portraits shown on the displays (`<id>/front_face.jpg`) |
 
 ```bash
-# Authenticate the Google Drive remote once on a machine with a browser,
-# then copy ~/.gdrive to the server if needed
-dvc remote modify --local face-recognition-dataset-gdrive gdrive_user_credentials_file ~/.gdrive/user-credentials.json
+# Credentials stay in .dvc/config.local (git-ignored); use the DATASET_STORE_* values from .env
+dvc remote modify --local minio access_key_id <DATASET_STORE_USER>
+dvc remote modify --local minio secret_access_key <DATASET_STORE_PASSWORD>
+# On any machine other than the dataset store host, point at that host
+dvc remote modify --local minio endpointurl http://<store-host-ip>:9010
 dvc pull
 ```
 
-To add new data, run `dvc add FACIAL-RECOGNITION-DATASET`, commit the updated `.dvc` file, then `dvc push --remote face-recognition-dataset-gdrive`.
+To add new data, run `dvc add FACIAL-RECOGNITION-DATASET`, commit the updated `.dvc` file, then `dvc push`.
+
+The datasets were first kept on a Google Drive remote (`face-recognition-dataset-gdrive`). To move them, on a machine that has that remote configured: `dvc pull -r face-recognition-dataset-gdrive`, then `dvc push -r minio`.
 
 ### 4. Build and start
 
