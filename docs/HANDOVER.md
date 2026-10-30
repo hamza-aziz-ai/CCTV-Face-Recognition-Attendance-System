@@ -23,7 +23,7 @@ Done:
 - PRs #1–#6 merged. #2–#6 were recreated as #7–#11 after a stacked base branch was deleted: #2 closed, and an accidental push marked #3–#6 merged into a side branch. Auto-merge took #9–#11 and released v0.1.0 and v0.2.0, with no images.
 - Release images: `release.yml` pushes the 7 app images to `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>` before tagging; the watcher pulls them instead of building (D-017).
 - Restart policies (`unless-stopped`) on all standalone and main-stack containers; InsightFace-REST upstream recorded in the manifest; headless (no sign-in) plan written in D-018, not built.
-- Kafka-WebApp: the owner chose to absorb it into this repo (not a submodule). It must run both on this host and on Raspberry Pis (amd64 and arm64 images). Not started.
+- Kafka-WebApp is a submodule pointing at `hamza-aziz-ai/Kafka-WebApp` (D-024). It must run both on this host and on Raspberry Pis (amd64 and arm64 images). Its Dockerfile, CI and releases live in that repository.
 - Standalone services running on this host (2026-10-30) via the root `./start_standalone_services.sh` with `HOST_PROFILE=laptop-rtx4050`: InsightFace-REST (2 workers on GPU 0 behind nginx :6385, TRT engines built), Milvus (MinIO now `pgsty/minio`; MinIO withdrew its free images), Kafka. Fixes: `fastrlock==0.8.3` pin, Git Bash mount paths, duplicate scripts under `STANDALONE-SERVICES/` removed. Dev checkouts made before `.gitattributes` may still hold CRLF `.sh` files: delete and `git checkout --` them.
 - DVC remote: dedicated MinIO dataset store (`STANDALONE-SERVICES/Dataset-Store`, port 9010, bucket `dvc`), default remote `minio` in a now-tracked `.dvc/config` (D-019). Verified with a throwaway instance: `dvc push` 2 files, local copy deleted, `dvc pull` restored them. Datasets still need migrating from the Google Drive remote.
 - Repo settings applied: squash merge only (PR title and body become the commit), automatically delete head branches. Dependabot alerts, Dependabot security updates and the read-only default workflow token were already on.
@@ -48,7 +48,7 @@ Broken or risky:
 Next:
 - After v0.3.0 (first release with images): `gh auth refresh -s read:packages`, `docker login ghcr.io`, then create the deploy clone `C:\deploy\cctv`, copy `.env` into it, run `watch.py --enroll` and register the scheduled task (README, CI/CD).
 - Turn on Docker Desktop "Start Docker Desktop when you sign in" (owner).
-- Absorb Kafka-WebApp (GIV-AI/Kafka-WebApp at `4578453`), drop the broken `.gitmodules` entry, and add it to CI, releases and the watcher.
+- Kafka-WebApp: first release in its own repository, then a compose service on the host (port 9095; 9090 is the API).
 - Datasets: add `DATASET_STORE_*` to `.env`, start the store, then on a machine with the Google Drive remote `dvc pull -r face-recognition-dataset-gdrive` and `dvc push -r minio`.
 - Actions budget (account Billing page, manual). Allow Actions to create PRs only when `release.yml` lands.
 - Map the producer-consumer runtime files to explicit mounts, replacing its whole-repo `.` mount.

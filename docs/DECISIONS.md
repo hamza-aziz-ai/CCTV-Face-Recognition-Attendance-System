@@ -262,3 +262,12 @@ Why: These are the latest stable releases. Compatibility was checked before chan
 Trade-off: Two major versions moved at once (NumPy 2, OpenCV 5) and the end-to-end recognition path has no real data yet, so numeric behaviour of image code is verified only by those checks, CI smoke tests and the deployed stack starting. `@app.on_event` is deprecated and should move to lifespan handlers. Fork after gRPC setup is unchanged from before and stays a known risk.
 Revisit if: recognition results shift once real data is loaded, or a library drops `on_event`.
 
+## D-024: Kafka-WebApp as a submodule of the owner's repository
+Date: 2026-10-30   Model: Claude Opus 5.5
+Context: `.gitmodules` named `gi-hamza-eatai241/Kafka-WebApp` over SSH, but no submodule commit was ever recorded, so nothing was checked out and CI never saw it. Copies also exist at `GIV-AI/Kafka-WebApp`. The owner first chose to absorb it as a folder, to avoid pushing to the GIV-AI organisation's repository, then created `hamza-aziz-ai/Kafka-WebApp` (same commit, `4578453`) and chose a submodule pointing there.
+Options: 1) plain folder in this repository, sharing its version  2) submodule of `hamza-aziz-ai/Kafka-WebApp`
+Chosen: 2, over HTTPS so CI and the deploy clone need no SSH key. Its Dockerfile, CI and releases live in its own repository; Dependabot's `gitsubmodule` updates bump the pinned commit here through the usual CI, auto-merge and release path.
+Why: The display client has its own release cycle and also runs on Raspberry Pis, independent of this stack.
+Trade-off: Clones need `--recurse-submodules`. A change to the client takes two steps: a release there, then a pin update here. The other two copies are not kept in step.
+Revisit if: the planned merge with PTZ-Camera-Classroom-Attendance-System changes how the display client is shared.
+
