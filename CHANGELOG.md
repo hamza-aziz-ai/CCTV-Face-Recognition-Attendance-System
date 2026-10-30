@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.0 (2026-10-30)
+
+## What's Changed
+* feat!: remove client names and the INSTITUTE setting by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/35
+* ci: treat a check with a conclusion as finished by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/34
+* fix(release): free runner disk and keep CHANGELOG.md updated by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/36
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v1.4.0...v2.0.0
+
 ## v1.4.0 (2026-10-30)
 
 ## What's Changed
