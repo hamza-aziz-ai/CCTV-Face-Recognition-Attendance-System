@@ -22,6 +22,13 @@ In progress:
 - PR #1 (`ci/docker-packaging`): step 2 commits are local-verified (8 builds and smoke tests pass); waiting for the first `ci` run on GitHub.
 
 Broken or risky:
+- This machine is both the dev and the deployment server (from 2026-10-30): Windows 11, Docker Desktop, RTX 4050 Laptop 6 GB. The repo config assumes an A100 host:
+  - `standalone-services.env` pins the InsightFace and liveness GPUs to MIG slices `7:0`..`7:3`, which this GPU cannot provide.
+  - Detection and recognition batch sizes are 64 and 128, sized for an A100.
+  - InsightFace TAG `v0.9.0.0` in the repo; `v0.9.5.0` is the local image.
+  - Milvus `v2.5.1-gpu` in the repo; `v3.0.0` is the local image.
+  - Compose `/workspace/...` paths land inside the Docker Desktop VM.
+  - No TensorRT engines are built yet. The stack has not been started here.
 - `src/main.py` deletes Kafka topics at startup. Pending feedback may be lost on restart (unverified).
 - `src/automatic-vector-db-updation/milvus_updater.py` deletes old vectors, swallows insert failures and still marks the rows processed. This loses vectors silently.
 - Python 3.11 has only been verified by build, `pip check` and import smoke tests; no live pipeline run yet.
@@ -37,4 +44,4 @@ Next:
 Do not touch:
 - `STANDALONE-SERVICES/` upstream services (InsightFace-REST, Milvus, Kafka).
 - The `Kafka-WebApp` submodule (belongs to another account).
-- Production hosts: no deployment automation until the phase-two criteria in the plan are met.
+- Production hosts: no deployment automation until the phase-two criteria in the plan are met. Never run a self-hosted Actions runner on this machine: it is also the dev box.
