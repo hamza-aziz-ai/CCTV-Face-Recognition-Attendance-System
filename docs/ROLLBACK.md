@@ -2,7 +2,7 @@
 
 ## App stack
 
-Automatic: if a deploy fails, `deploy/watch.py` starts the previous release, records the failed tag and shows a Windows message. It never retries that tag on its own. The current and previous release images stay on disk.
+Automatic: if a deploy fails, the API smoke test fails, or a service is restarting 90 seconds later, `deploy/watch.py` starts the previous release, records the failed tag and shows a Windows message. It never retries that tag on its own. The current and previous release images stay on disk.
 
 By hand, to leave a release that passed its checks but behaves badly:
 

@@ -116,6 +116,15 @@ jobs:
             test ! -e .git
             test ! -e src/Camera-Configuration
           '
+      # The workers inherit live Milvus collections, so they must fork; set_start_method raises if it runs too late
+      - name: Start method
+        if: matrix.service == 'producer-consumer'
+        run: |
+          docker run --rm --entrypoint python3 -e PYTHONPATH=src ci/${{ matrix.service }}:test -c '
+          import multiprocessing as mp
+          import multiprocessing_shared_buffer
+          assert mp.get_start_method() == "fork", mp.get_start_method()
+          '
 
   # Single required status check for branch rules; fails if any job failed or was cancelled
   ci:

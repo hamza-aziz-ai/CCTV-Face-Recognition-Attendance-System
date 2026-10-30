@@ -69,7 +69,21 @@ def test():
     assert scenario({"current": None, "failed": []}, None)[2] == []
     test_site_config_survives_checkout()
     test_prune()
-    print("watch decisions ok (12 scenarios, site config kept, old images pruned)")
+    test_stable()
+    print("watch decisions ok (12 scenarios, site config kept, old images pruned, crash loops caught)")
+
+
+def test_stable():
+    """A crash-looping service fails the deploy even though the API answers."""
+    with mock.patch.multiple(watch, STABLE_SECONDS=0, run=lambda *cmd, env=None: ""):
+        watch.stable()
+    with mock.patch.multiple(watch, STABLE_SECONDS=0, run=lambda *cmd, env=None: "mfr-cctv-producer-consumer"):
+        try:
+            watch.stable()
+        except RuntimeError as e:
+            assert "mfr-cctv-producer-consumer" in str(e)
+        else:
+            raise AssertionError("crash loop not detected")
 
 
 def test_prune():
@@ -104,7 +118,7 @@ def test_site_config_survives_checkout():
     git("tag", "v2")
     (repo / "master.env").write_text("INSTITUTE=SITE\n")
     real_run = watch.run
-    with mock.patch.multiple(watch, ROOT=repo, smoke=lambda: None,
+    with mock.patch.multiple(watch, ROOT=repo, smoke=lambda: None, STABLE_SECONDS=0,
                              run=lambda *cmd, env=None: real_run(*cmd) if cmd[0] == "git" else ""):
         for tag in ("v1", "v2", "v1"):
             watch.start(tag)

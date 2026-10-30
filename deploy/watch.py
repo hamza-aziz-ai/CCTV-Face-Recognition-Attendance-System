@@ -23,6 +23,7 @@ COMPOSE = ["docker", "compose", "-f", "docker-compose-main.yml"]
 UP = COMPOSE + ["up", "-d", "--pull", "missing", "--no-build", "--wait", "--wait-timeout", "600"]
 SMOKE_URL = "http://localhost:9090/docs"
 IMAGE_PREFIX = "ghcr.io/hamza-aziz-ai/cctv-face-recognition-"
+STABLE_SECONDS = 90
 # Unattended fetches authenticate through the owner's gh login instead of an SSH key that may need a passphrase.
 GIT = ["git", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"]
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -66,6 +67,14 @@ def smoke():
     raise RuntimeError(f"smoke test failed: no HTTP 200 from {SMOKE_URL} within 5 minutes")
 
 
+def stable():
+    """Fail if a service is crash-looping: with a restart policy and no healthcheck, up --wait counts it as started."""
+    time.sleep(STABLE_SECONDS)
+    down = run(*COMPOSE, "ps", "--status", "restarting", "--status", "exited", "--format", "{{.Service}}")
+    if down:
+        raise RuntimeError(f"not stable after {STABLE_SECONDS}s: {', '.join(down.split())}")
+
+
 def start(tag):
     """Check out the tag and start the images CI built and published for it."""
     # master.env is this site's config. Older tags still track it, so a checkout would delete or overwrite it.
@@ -78,6 +87,7 @@ def start(tag):
             site.write_bytes(keep)
     run(*UP, env={"IMAGE_TAG": tag})
     smoke()
+    stable()
 
 
 def deploy(tag):
