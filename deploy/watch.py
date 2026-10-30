@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -27,6 +28,9 @@ STABLE_SECONDS = 90
 # Unattended fetches authenticate through the owner's gh login instead of an SSH key that may need a passphrase.
 GIT = ["git", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"]
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+# A PR whose checks all passed this long ago, and is still open, was missed by automerge
+STUCK_SECONDS = 15 * 60
+GREEN = {"SUCCESS", "SKIPPED", "NEUTRAL"}
 
 
 def log(msg):
@@ -53,6 +57,29 @@ def notify(msg):
 def latest_release():
     return run("gh", "release", "list", "--exclude-drafts", "--exclude-pre-releases", "--limit", "1",
                "--json", "tagName", "--jq", ".[0].tagName // empty") or None
+
+
+def stuck_prs(prs, now):
+    """Open PRs automerge should have merged: not drafts, no conflict, every check passed over STUCK_SECONDS ago."""
+    def done(check):
+        return datetime.fromisoformat(check["completedAt"].replace("Z", "+00:00")).timestamp()
+    return [pr["number"] for pr in prs
+            if not pr["isDraft"] and pr["mergeable"] != "CONFLICTING" and pr["statusCheckRollup"]
+            and all(c.get("conclusion") in GREEN for c in pr["statusCheckRollup"])
+            and now - max(done(c) for c in pr["statusCheckRollup"]) > STUCK_SECONDS]
+
+
+def nudge_automerge():
+    """Start automerge for green PRs it left open (#41 needed a manual start). A failure here never stops a deploy."""
+    try:
+        prs = json.loads(run("gh", "pr", "list", "--base", "main", "--json",
+                             "number,isDraft,mergeable,statusCheckRollup") or "[]")
+        stuck = stuck_prs(prs, time.time())
+        if stuck:
+            run("gh", "workflow", "run", "automerge.yml", "--ref", "main")
+            log(f"PRs {stuck} passed all checks over {STUCK_SECONDS // 60} min ago and are still open; started automerge")
+    except Exception as e:
+        log(f"Automerge check failed: {e}")
 
 
 def smoke():
@@ -175,6 +202,7 @@ def main():
         fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     os.close(fd)
     try:
+        nudge_automerge()
         return watch(enroll="--enroll" in sys.argv)
     finally:
         LOCK.unlink(missing_ok=True)
