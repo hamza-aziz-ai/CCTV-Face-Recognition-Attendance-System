@@ -51,6 +51,8 @@ def signal_handler(sig, frame):
 
 
 if __name__ == "__main__":
+    # Python 3.14 defaults to forkserver; the workers receive live Milvus collections, which must be inherited by fork
+    multiprocessing.set_start_method("fork")
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     # milvus_server_start_time = time.time()
