@@ -173,14 +173,16 @@ This also stops the standalone stacks: InsightFace-REST, Milvus and Kafka.
 
 - **CI** (`.github/workflows/ci.yml`) runs on every PR: lint, secret scan, compose validation, model-manifest drift check, watcher tests, and builds and smoke-tests all 8 images. The aggregate check is `ci`.
 - **Auto-merge** (`automerge.yml`): a PR into `main` is squash-merged, and its branch deleted, once `ci` and every other check passed on its latest commit.
-- **Auto-release** (`release.yml`): after a merge, the PR titles since the last tag decide the version as Conventional Commits. `feat:` gives a minor bump, `fix:`/`perf:` a patch, and `type!:` or a `BREAKING CHANGE` footer a major; anything else gives no release. CI then re-runs on the exact commit, and the tag and GitHub Release are created with `mlops/model-manifest.json` attached. **PR titles must follow this convention.**
+- **Auto-release** (`release.yml`): after a merge, the PR titles since the last tag decide the version as Conventional Commits. `feat:` gives a minor bump, `fix:`/`perf:` a patch, and `type!:` or a `BREAKING CHANGE` footer a major; anything else gives no release. CI then re-runs on the exact commit, the 7 service images are pushed to GitHub Packages as `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, and the tag and GitHub Release are created with `mlops/model-manifest.json` attached. **PR titles must follow this convention.**
 - **Auto-deploy** (`deploy/watch.py`): a poller on the deployment host deploys each new release and rolls back on failure.
 
 ### Deployment watcher setup (Windows deployment host)
 
-Run once, after the first release exists. The watcher manages only the main compose stack; start the standalone services first (`./start_standalone_services.sh`).
+Run once, after a release with images exists (v0.3.0 or later). The watcher manages only the main compose stack; start the standalone services first (`./start_standalone_services.sh`). The images are private, so Docker signs in to ghcr.io with your `gh` login, which needs the `read:packages` scope.
 
 ```powershell
+gh auth refresh -s read:packages
+gh auth token | docker login ghcr.io -u hamza-aziz-ai --password-stdin
 gh repo clone hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System C:\deploy\cctv
 Copy-Item .env C:\deploy\cctv\.env      # from the dev checkout; the clone needs the same secrets
 cd C:\deploy\cctv
@@ -191,7 +193,7 @@ schtasks /Create /TN "CCTV deploy watcher" /SC MINUTE /MO 10 /IT /F `
 
 Every 10 minutes, while you are signed in and Docker Desktop is running, the watcher does the following:
 - It reads the newest published release, skipping drafts and pre-releases. It deploys it only if the tag is on `main`, the release is not the current one, and it has not failed before.
-- It checks the tag out in the deploy clone, builds images tagged with the release, and runs `up --wait`. It records the release as current only after `http://localhost:9090/docs` answers.
+- It checks the tag out in the deploy clone, pulls that release's images (only once; a rollback reuses them), and runs `up --wait`. It records the release as current only after `http://localhost:9090/docs` answers.
 - On failure it rolls back to the last good release, marks the failed one so it is never retried, and shows a Windows message.
 - It never starts a stack you stopped.
 
