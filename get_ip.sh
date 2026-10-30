@@ -35,7 +35,12 @@ get_primary_ip() {
 }
 
 # Get the primary IP address
-IP_ADDRESS=$(get_primary_ip)
+IP_ADDRESS=$(command -v ip >/dev/null && get_primary_ip)
+
+# Windows (Git Bash) has no `ip`: take the IPv4 address of the adapter that holds the default route
+if [[ -z "$IP_ADDRESS" ]] && command -v powershell.exe >/dev/null; then
+    IP_ADDRESS=$(powershell.exe -NoProfile -Command "(Get-NetIPConfiguration | Where-Object { \$_.IPv4DefaultGateway -and \$_.NetAdapter.Status -eq 'Up' } | Select-Object -First 1).IPv4Address.IPAddress" | tr -d '\015')
+fi
 
 # echo $IP_ADDRESS
 
