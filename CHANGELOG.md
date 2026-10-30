@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.2 (2026-10-30)
+
+## What's Changed
+* Add Claude Code GitHub Workflow by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/39
+* fix: correct service dependencies and healthchecks, and add Kafbat UI by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/40
+* ci: let a finished Claude review also trigger auto-merge by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/41
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.0.1...v2.0.2
+
 ## v2.0.1 (2026-10-30)
 
 ## What's Changed
