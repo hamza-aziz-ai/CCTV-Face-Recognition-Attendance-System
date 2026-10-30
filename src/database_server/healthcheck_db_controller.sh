@@ -1,7 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
-# Check the socket health (replace with your specific socket check logic)
-nc -z -w 1 localhost 20001
-
-# Exit with status 0 if socket is healthy, non-zero otherwise
-echo $?
+# Check the socket health: exit non-zero if nothing listens on the service port
+exec python3 -c "import socket; socket.create_connection(('localhost', 20001), 1)"
