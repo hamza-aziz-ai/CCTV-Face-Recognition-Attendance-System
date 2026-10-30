@@ -15,6 +15,8 @@ Marked **seen** where it actually happened on this host, otherwise **from the co
 | DB controller | The duplicate check queries a column the table does not define (README, Known issues) | Log errors | From the code |
 | ERP | Records wait for the next minute's attempt | API log | From the code |
 | Camera unreachable | Thread logs the error, sleeps 30 s and retries; `producer-consumer` stays Up | Producer log | Seen |
+| Startup order | Services that read a database now wait for the one that creates it; the updater creates its own collection; InsightFace workers write engines atomically | `docker ps` | Fixed 2026-10-31 |
+| Kafka topic reset | Each `producer-consumer` start deletes and recreates its topics while the feedback controller may publish, so a few display messages can be lost. Attendance records are not affected | Missing display messages | Accepted |
 | Nightly updater | Swallows insert failures and still marks rows processed, so vectors are lost silently | Nothing | From the code |
 | Docker Desktop | Everything stops until someone signs in to Windows (D-018) | Displays go down | From the design |
 | Host IP change | Kafka advertises the old IP; run `set_configuration.sh` and restart Kafka | Clients cannot connect | From the design |

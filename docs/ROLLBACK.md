@@ -15,8 +15,8 @@ To stop automatic deploys: `schtasks /Change /TN "CCTV deploy watcher" /DISABLE`
 
 | Change | How to undo |
 |---|---|
-| PostgreSQL 12 to 18 (D-020) | Folder `/workspace/database/postgresql/cctv-face-recognition` in the Docker VM keeps the 12 data. Deploying a release before v1.0.0 uses it again. |
-| Milvus 2.5 to 3.0 (D-022) | Restore `/usr/local/database/milvus-2.5.1-backup` to `/usr/local/database/milvus` in the Docker VM, and revert the compose change. |
+| PostgreSQL 12 to 18 (D-020) | Not possible any more: the 12 data was deleted on 2026-10-31, after the client names were removed. |
+| Milvus 2.5 to 3.0 (D-022) | Not possible any more: the 2.5.1 test data was deleted on 2026-10-31. |
 | Kafka | Nothing to restore: topics are recreated at start. |
 | Dataset store | `stop_standalone_services.sh` keeps `DATASET_STORE_DIR`. There is no second copy of it yet. |
 
