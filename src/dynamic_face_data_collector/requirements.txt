@@ -10,5 +10,5 @@ python-multipart~=0.0.20
 msgpack~=1.1.0
 ujson~=5.10.0
 pymilvus~=2.5
-psycopg2-binary~=2.9.10
+psycopg2-binary~=2.9.13
 typing-extensions~=4.12.2
