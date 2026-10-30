@@ -15,6 +15,8 @@ permissions:
   contents: write
   pull-requests: write
   checks: read
+  # Only to start release.yml after a merge (D-014).
+  actions: write
 
 concurrency:
   group: automerge
@@ -55,8 +57,13 @@ jobs:
           }
           # A merge deletes its branch and GitHub retargets PRs stacked on it to main without re-running ci;
           # after any merge, give the retarget a moment and sweep again (bounded) so the stack drains.
+          total=0
           for _ in 1 2 3 4 5; do
             sweep
+            total=$((total + merged))
             [ "$merged" -gt 0 ] || break
             sleep 20
           done
+          # Merges made with GITHUB_TOKEN start no push workflows, but workflow_dispatch is allowed:
+          # hand over to release.yml, which decides whether the merged titles call for a version bump.
+          if [ "$total" -gt 0 ]; then gh workflow run release.yml --ref main; fi
