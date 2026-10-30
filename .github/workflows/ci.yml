@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Syntax errors and undefined names only; the codebase predates any style config
-      - run: pipx run ruff==0.17.3 check --select E9,F63,F7,F82 --target-version py311 --extend-exclude STANDALONE-SERVICES,graphify-out --output-format github .
+      - run: pipx run ruff==0.17.3 check --select E9,F63,F7,F82 --target-version py314 --extend-exclude STANDALONE-SERVICES,graphify-out --output-format github .
       # Model manifest must match the code and config it describes; unverified (null) fields only block releases
       - run: python3 -I mlops/check_manifest.py
       # Deployment watcher decisions (deploy, skip, roll back) with Docker, git and GitHub faked

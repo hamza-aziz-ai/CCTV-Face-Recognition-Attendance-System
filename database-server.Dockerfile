@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Step 1 - Select base docker image
-FROM python:3.11-slim-bookworm@sha256:94a8fee35252d06ab75856f15f12c7bae67b10e8a6da93c7fded82b2610926cd
+FROM python:3.14-slim-trixie@sha256:cd89c30eda26ee911a4611b18680086e0ea42e6f5f8cbe653d07fa7958c9cec8
 # Links the image to this repository when it is pushed to ghcr.io (it then inherits the repository's access)
 LABEL org.opencontainers.image.source=https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System
 
