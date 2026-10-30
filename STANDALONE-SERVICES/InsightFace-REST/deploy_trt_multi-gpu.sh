@@ -42,18 +42,15 @@ for i in "${MIG_GPU[@]}"; do
     port=$((START_PORT + $p));
     container_name=$name-$p;
 
-    # check if container with same name is already running
-    if [ "$(docker ps -q -f name="$container_name")" ]; then
-        echo --- Container "$container_name" is already running, stopping it;
-        docker stop "$container_name";
-        docker rm "$container_name";
-    fi
+    # Remove a previous container of the same name, running or stopped (restart policies keep stopped ones around)
+    docker rm -f "$container_name" 2>/dev/null || true
 
     echo --- Starting container "$container_name" with "$device" at port "$port";
     ((p++));
     # shellcheck disable=SC2046
     docker run -p $port:18080 \
         --gpus "$device" \
+        --restart unless-stopped \
         -d \
         -e LOG_LEVEL="$LOG_LEVEL" \
         -e USE_NVJPEG="$USING_NVJPEG" \
@@ -96,8 +93,10 @@ docker network create insightface-network
 docker network connect insightface-network "$name"-0
 docker network connect insightface-network "$name"-1
 
+docker rm -f docker-nginx-insightface 2>/dev/null || true
 # shellcheck disable=SC2046
 docker run -d \
+  --restart unless-stopped \
   --name docker-nginx-insightface \
   --network insightface-network \
   -v $(pwd)/misc/nginx_conf/conf.d:/etc/nginx/conf.d \

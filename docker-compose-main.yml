@@ -2,6 +2,7 @@ services:
   mfr-cctv-producer-consumer:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-producer-consumer:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-producer-consumer
+    restart: unless-stopped
     environment:
       CAM_USERNAME: ${CAM_USERNAME}
       CAM_PASSWORD: ${CAM_PASSWORD}
@@ -28,6 +29,7 @@ services:
   postgresql-face-recognition:
     image: postgres:12-bullseye
     container_name: cctv-face-recognition-postgresql-database
+    restart: unless-stopped
     ports:
       - "5432:5432"
     volumes:
@@ -44,6 +46,7 @@ services:
   mfr-database-controller:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-database-controller:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-database-controller
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -64,6 +67,7 @@ services:
   mfr-feedback-controller:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-feedback-controller:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-feedback-controller
+    restart: unless-stopped
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
@@ -81,6 +85,7 @@ services:
   mfr-api-service:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-api:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-api
+    restart: unless-stopped
     environment:
       API_KEY: ${API_KEY}
       POSTGRESQL_USERNAME: ${POSTGRES_USER}
@@ -102,6 +107,7 @@ services:
   dynamic-face-dataset-collector:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-dynamic-face-dataset-collector:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-dynamic-face-dataset-collector
+    restart: unless-stopped
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
@@ -121,6 +127,7 @@ services:
   automate-milvus-update:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-automate-milvus-update:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-automate-milvus-update
+    restart: unless-stopped
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
@@ -132,6 +139,7 @@ services:
   display-image-server:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-front-face-image-display:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-front-face-image-display
+    restart: unless-stopped
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./DISPLAY-FACE-DATASET:/Multi-Person-Face-Recognition/DISPLAY-FACE-DATASET
