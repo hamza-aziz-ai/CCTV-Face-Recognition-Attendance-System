@@ -18,6 +18,7 @@ Done:
 - `mlops/model-manifest.json` and `mlops/check_manifest.py` (branch `mlops/model-manifest`, stacked on PR #1). CI fails on drift; `--release` fails while 4 host-only values are null (D-012).
 - `.github/workflows/automerge.yml` (branch `ci/automerge`, stacked on #2): squash-merges PRs into main when `ci` and every other check passed on the exact head commit; it runs only from main's copy (D-013). It only takes effect once merged to main, so #1–#3 themselves are merged by hand.
 - `.github/workflows/release.yml` (branch `ci/release`, stacked on #3): automerge starts it after merging; it bumps from the merged Conventional Commit titles, re-runs `ci` on the exact commit, then tags and publishes a Release with the model manifest attached (D-014).
+- GPU host profile `STANDALONE-SERVICES/hosts/laptop-rtx4050.env` (branch `ops/laptop-gpu-profile`, stacked on #4): GPU 0 for everything, batches det 8 / rec 16. It is active once `HOST_PROFILE=laptop-rtx4050` is in `.env` (D-015).
 - Repo settings applied: squash merge only (PR title and body become the commit), automatically delete head branches. Dependabot alerts, Dependabot security updates and the read-only default workflow token were already on.
 
 In progress:
@@ -25,9 +26,8 @@ In progress:
 
 Broken or risky:
 - This machine is both the dev and the deployment server (from 2026-10-30): Windows 11, Docker Desktop, RTX 4050 Laptop 6 GB. The repo config assumes an A100 host:
-  - `standalone-services.env` pins the InsightFace and liveness GPUs to MIG slices `7:0`..`7:3`, which this GPU cannot provide.
-  - Detection and recognition batch sizes are 64 and 128, sized for an A100.
-  - InsightFace TAG `v0.9.0.0` in the repo; `v0.9.5.0` is the local image.
+  - The MIG slices and A100 batch sizes are handled by the `laptop-rtx4050` host profile (D-015), but the profile's batch sizes have not been tested on the GPU yet.
+  - InsightFace TAG `v0.9.0.0` is built by `deploy_trt_multi-gpu.sh` itself; the local `v0.9.5.0` image is unrelated.
   - Milvus `v2.5.1-gpu` in the repo; `v3.0.0` is the local image.
   - Compose `/workspace/...` paths land inside the Docker Desktop VM.
   - No TensorRT engines are built yet. The stack has not been started here.
