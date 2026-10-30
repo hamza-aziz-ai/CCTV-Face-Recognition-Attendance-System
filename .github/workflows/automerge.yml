@@ -57,6 +57,8 @@ jobs:
       - name: Merge every ready PR whose head commit passed all checks
         run: |
           set -euo pipefail
+          # Every skip prints the checks it saw, so a PR left unmerged shows why (PR #41 did not).
+          skip() { echo "#$pr: $1 on $sha; skip. Checks seen:"; sed 's/^/    /' <<<"${checks:-none}"; }
           sweep() {
             merged=0
             # Open, non-draft PRs into main from this repository (forks are never merged).
@@ -65,10 +67,10 @@ jobs:
               checks=$(gh api --paginate "repos/$GH_REPO/commits/$sha/check-runs?per_page=100" \
                 --jq '.check_runs[] | "\(if .conclusion then "completed" else .status end) \(.conclusion // "none") \(.name)"')
               # The aggregate ci check must exist and have passed; a PR with no checks is never merged.
-              if ! grep -qx 'completed success ci' <<<"$checks"; then echo "#$pr: no successful ci on $sha; skip."; continue; fi
-              if grep -qv '^completed ' <<<"$checks"; then echo "#$pr: checks still running; skip."; continue; fi
+              if ! grep -qx 'completed success ci' <<<"$checks"; then skip "no successful ci"; continue; fi
+              if grep -qv '^completed ' <<<"$checks"; then skip "checks still running"; continue; fi
               if grep -Ev '^completed (success|skipped|neutral) ' <<<"$checks" | grep -q .; then
-                echo "#$pr: a check did not pass; skip."; continue
+                skip "a check did not pass"; continue
               fi
               # --match-head-commit refuses the merge if a newer commit was pushed after these checks ran.
               if gh pr merge "$pr" --squash --delete-branch --match-head-commit "$sha"; then
