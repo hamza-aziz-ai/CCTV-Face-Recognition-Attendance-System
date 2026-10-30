@@ -109,3 +109,14 @@ jobs:
           set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
           gh release create "$TAG" --verify-tag --generate-notes --title "$TAG" mlops/model-manifest.json
+      # The release is already out, so a failure here only leaves the changelog behind. Read from main, not the
+      # checkout: a queued release may have added its entry since this commit. docs: commits never start a release.
+      - name: Add the release notes to CHANGELOG.md
+        run: |
+          set -euo pipefail
+          url="repos/$GITHUB_REPOSITORY/contents/CHANGELOG.md"
+          gh api "$url?ref=main" --jq .content | base64 -d > current.md
+          sha=$(gh api "$url?ref=main" --jq .sha)
+          notes=$(gh release view "$TAG" --json body --jq .body)
+          { echo "# Changelog"; echo; echo "## $TAG ($(date -u +%F))"; echo; echo "$notes"; tail -n +2 current.md; } > updated.md
+          gh api -X PUT "$url" -f branch=main -f sha="$sha" -f message="docs: add $TAG to the changelog" -f content="$(base64 -w0 updated.md)" > /dev/null
