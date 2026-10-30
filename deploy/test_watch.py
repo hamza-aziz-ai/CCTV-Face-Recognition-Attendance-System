@@ -68,7 +68,25 @@ def test():
     # No release published yet.
     assert scenario({"current": None, "failed": []}, None)[2] == []
     test_site_config_survives_checkout()
-    print("watch decisions ok (12 scenarios, site config kept)")
+    test_prune()
+    print("watch decisions ok (12 scenarios, site config kept, old images pruned)")
+
+
+def test_prune():
+    """Only release images of other tags go: not the kept tags, dev builds or other images."""
+    p = watch.IMAGE_PREFIX
+    listed = [f"{p}api:v1.0.0", f"{p}api:v2.0.0", f"{p}api:v0.9.0", f"{p}api:v-beta", "postgres:18.6-trixie"]
+    removed = []
+
+    def fake_run(*cmd, env=None):
+        if cmd[1] == "images":
+            return "\n".join(listed)
+        removed.extend(cmd[2:])
+        return ""
+
+    with mock.patch.multiple(watch, run=fake_run, log=lambda msg: None):
+        watch.prune({"v2.0.0", "v1.0.0"})
+    assert removed == [f"{p}api:v0.9.0"], removed
 
 
 def test_site_config_survives_checkout():

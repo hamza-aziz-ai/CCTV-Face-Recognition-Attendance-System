@@ -22,6 +22,7 @@ COMPOSE = ["docker", "compose", "-f", "docker-compose-main.yml"]
 # Release images are pulled from ghcr.io once; a rollback reuses the ones already here (tags are never moved).
 UP = COMPOSE + ["up", "-d", "--pull", "missing", "--no-build", "--wait", "--wait-timeout", "600"]
 SMOKE_URL = "http://localhost:9090/docs"
+IMAGE_PREFIX = "ghcr.io/hamza-aziz-ai/cctv-face-recognition-"
 # Unattended fetches authenticate through the owner's gh login instead of an SSH key that may need a passphrase.
 GIT = ["git", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"]
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -86,6 +87,19 @@ def deploy(tag):
     start(tag)
 
 
+def prune(keep):
+    """Delete release images of every tag not in keep; dev builds (:v-beta) stay, and a failure never fails a deploy."""
+    try:
+        images = run("docker", "images", "--format", "{{.Repository}}:{{.Tag}}").splitlines()
+        stale = [i for i in images if i.startswith(IMAGE_PREFIX) and i.rsplit(":v", 1)[-1][:1].isdigit()
+                 and i.rsplit(":", 1)[1] not in keep]
+        if stale:
+            run("docker", "rmi", *stale)
+            log(f"Removed {len(stale)} old release images")
+    except Exception as e:
+        log(f"Image cleanup failed: {e}")
+
+
 def save(state):
     STATE.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
@@ -136,6 +150,7 @@ def watch(enroll=False):
     state["current"] = tag
     save(state)
     log(f"Deployed {tag}")
+    prune({tag, prev})  # the previous release stays for a rollback
     return 0
 
 
