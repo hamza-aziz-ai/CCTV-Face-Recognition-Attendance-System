@@ -14,7 +14,7 @@ import time
 import json
 from collections import defaultdict
 from datetime import datetime
-from confluent_kafka.admin import AdminClient, NewTopic
+from confluent_kafka.admin import AdminClient, NewPartitions, NewTopic
 from confluent_kafka import Producer
 
 # Relative issue - https://www.geeksforgeeks.org/python-import-from-parent-directory/
@@ -26,8 +26,7 @@ from parameters import KAFKA_HOST, \
     KAFKA_PORT, \
     KAFKA_MESSAGE_RETENTION, \
     SEGMENT_RETENTION_TIME, \
-    CAMERA_CONFIGURATION_FILE, \
-    TOPIC_DELETION_WAIT_TIME
+    CAMERA_CONFIGURATION_FILE
 from util.generic_utilities import count_cameras, map_camera_to_kafka_topic_and_partition
 
 
@@ -47,7 +46,6 @@ kafka_topic_config = {
 }
 
 topics_list = list()
-topics_to_delete = list()
 kafka_topics = count_cameras()
 camera_to_topic_and_partition = map_camera_to_kafka_topic_and_partition()
 
@@ -56,38 +54,23 @@ for topic_name, number_of_partitions in kafka_topics.items():
         continue
     kafka_topic = NewTopic(topic=topic_name, num_partitions=number_of_partitions, replication_factor=1, config=kafka_topic_config)
     topics_list.append(kafka_topic)
-    topics_to_delete.append(topic_name)
 
 
-def create_kafka_topics():
+def ensure_kafka_topics():
     """
-    This function creates a Kafka topic with the specified number of partitions.
+    Creates the topics that are missing and adds partitions when cameras were added. Topics are never deleted, so a
+    restart loses no feedback messages and the display can keep reading. Kafka cannot remove partitions, so a topic
+    keeps any extra ones after cameras are removed; they stay unused.
     """
-    global admin_client, topics_list
-
-    try:
-        admin_client.create_topics(topics_list)
-        # print(f"Created Kafka topics: '{kafka_topics}'")
-        feedback_server_logger.info(f"Created Kafka topics: '{topics_list}'")
-    except Exception as e:
-        # print(f"Error in creating Kafka Topics due to {e}")
-        feedback_server_logger.error(f"Error in creating Kafka Topics due to '{e}'")
-
-
-def delete_kafka_topics():
-    """
-    This function deletes the Kafka topic.
-    """
-    global admin_client, topics_to_delete
-
-    try:
-        admin_client.delete_topics(topics_to_delete)
-        # print(f"Deleted Kafka topic {topics_to_delete}")
-        feedback_server_logger.warning(f'Topics: "{topics_to_delete}" scheduled for deletion.')
-        feedback_server_logger.info(f"Waiting {TOPIC_DELETION_WAIT_TIME} seconds for the topics to be deleted.")
-    except Exception as e:
-        # print(f"Error in deleting Kafka Topics due to {e}")
-        feedback_server_logger.error(f"Error in deleting Kafka Topics due to '{e}'")
+    existing = {name: len(meta.partitions) for name, meta in admin_client.list_topics(timeout=10).topics.items()}
+    missing = [t for t in topics_list if t.topic not in existing]
+    grow = [NewPartitions(t.topic, t.num_partitions) for t in topics_list
+            if t.topic in existing and existing[t.topic] < t.num_partitions]
+    for futures in ([admin_client.create_topics(missing)] if missing else []) + ([admin_client.create_partitions(grow)] if grow else []):
+        for name, future in futures.items():
+            future.result()  # raise on failure: producing to a missing topic would lose every message
+    feedback_server_logger.info(f"Kafka topics ready: created {[t.topic for t in missing]}, "
+                                f"added partitions to {[p.topic for p in grow]}")
 
 
 def create_kafka_producer(retries=3, delay=5):

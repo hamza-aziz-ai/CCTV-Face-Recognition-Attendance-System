@@ -9,12 +9,11 @@ import multiprocessing
 import threading
 import time
 from multiprocessing_shared_buffer import MULTIPROCESS_SHARED_BUFFER
-from custom_logging import multicam_server_logger, feedback_server_logger
+from custom_logging import multicam_server_logger
 from insightface_face_detection import IFRClient
 from insightface_face_recognition import batched_frame_face_recognition
 from locks import lock
 from multicam_stream_producer import cameras
-from feedback_server.feedback_message_kafka_publisher import delete_kafka_topics
 from parameters import CAMERA_CONFIGURATION_FILE, \
     LIVE_STREAM_BUFFER_SIZE, \
     LIVE_STREAM_BUFFER_PURGE_SIZE, \
@@ -197,7 +196,4 @@ def consumer_main(shared_buffer, embeddings_collection, staging_collection):
             del camera
         multicam_server_logger.warning('Camera streams released')
 
-        # Delete the Kafka Topics
-        delete_kafka_topics()
-        feedback_server_logger.warning("Deleting Kafka Topics")
         multicam_server_logger.warning("EXITING THE PROGRAM...")

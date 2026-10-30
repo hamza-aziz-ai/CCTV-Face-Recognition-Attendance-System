@@ -4,14 +4,12 @@ import time
 import sys
 
 from custom_logging import multicam_server_logger
-from feedback_server.feedback_message_kafka_publisher import \
-    delete_kafka_topics, \
-    create_kafka_topics
+from feedback_server.feedback_message_kafka_publisher import ensure_kafka_topics
 from milvus_server import create_connection, create_collection
 from multicam_stream_consumer import consumer_main
 from multicam_stream_producer import producer_main, cameras
 from multiprocessing_shared_buffer import MULTIPROCESS_SHARED_BUFFER
-from parameters import MILVUS_COLLECTION_NAME, TOPIC_DELETION_WAIT_TIME, MILVUS_STAGING_COLLECTION_NAME
+from parameters import MILVUS_COLLECTION_NAME, MILVUS_STAGING_COLLECTION_NAME
 
 
 producer_process = None
@@ -44,8 +42,6 @@ def signal_handler(sig, frame):
         cam.release()
         del cam
 
-    delete_kafka_topics()
-    multicam_server_logger.warning("Kafka topics deleted")
     multicam_server_logger.warning("EXITING THE PROGRAM...")
     sys.exit(0)
 
@@ -74,19 +70,10 @@ if __name__ == "__main__":
 
     # kafka_server_start_time = time.time()
     ####################################################################################################################
-    # ESTABLISH CONNECTION WITH KAFKA SERVER AND CREATE FRESH TOPICS
+    # ESTABLISH CONNECTION WITH KAFKA SERVER AND MAKE SURE THE TOPICS EXIST
     ####################################################################################################################
-    # Delete the existing Kafka topics
-    delete_kafka_topics()
-
-    # Wait for 10 seconds for the Kafka topics to be deleted
-    time.sleep(TOPIC_DELETION_WAIT_TIME)
-
-    # Create Kafka topic with the specified number of partitions
-    create_kafka_topics()
-
-    # Wait for 60 seconds for the Kafka topics to be created
-    time.sleep(TOPIC_DELETION_WAIT_TIME)
+    # Create missing topics and add partitions for new cameras; existing topics and their messages stay
+    ensure_kafka_topics()
     ####################################################################################################################
     # kafka_server_end_time = time.time()
     # kafka_server_total_time = kafka_server_end_time - kafka_server_start_time
