@@ -20,6 +20,8 @@ Done:
 - `.github/workflows/release.yml` (branch `ci/release`, stacked on #3): automerge starts it after merging; it bumps from the merged Conventional Commit titles, re-runs `ci` on the exact commit, then tags and publishes a Release with the model manifest attached (D-014).
 - GPU host profile `STANDALONE-SERVICES/hosts/laptop-rtx4050.env` (branch `ops/laptop-gpu-profile`, stacked on #4): GPU 0 for everything, batches det 8 / rec 16. It is active once `HOST_PROFILE=laptop-rtx4050` is in `.env` (D-015).
 - `deploy/watch.py` with `deploy/test_watch.py` (branch `ops/deploy-watcher`, stacked on #5): a pull-based deployment watcher with rollback; images are tagged per release via `IMAGE_TAG`. Setup is in the README under CI/CD (D-016). It is not installed yet: that needs PRs #1–#6 merged and a first release.
+- PRs #1–#6 merged. #2–#6 were recreated as #7–#11 after a stacked base branch was deleted: #2 closed, and an accidental push marked #3–#6 merged into a side branch. Auto-merge took #9–#11 and released v0.1.0 and v0.2.0, with no images.
+- Release images: `release.yml` pushes the 7 app images to `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>` before tagging; the watcher pulls them instead of building (D-017).
 - Repo settings applied: squash merge only (PR title and body become the commit), automatically delete head branches. Dependabot alerts, Dependabot security updates and the read-only default workflow token were already on.
 
 In progress:
@@ -36,15 +38,15 @@ Broken or risky:
 - `src/automatic-vector-db-updation/milvus_updater.py` deletes old vectors, swallows insert failures and still marks the rows processed. This loses vectors silently.
 - Python 3.11 has only been verified by build, `pip check` and import smoke tests; no live pipeline run yet.
 - Existing hosts must rebuild images before the next `up` after merging PR #1. The old `v-beta` images contain no code, and the base compose no longer mounts `./src`.
-- Dependabot reports 7 vulnerabilities (4 high, 3 moderate), not yet triaged.
+- Dependabot reports 9 vulnerabilities (5 high, 4 moderate), not yet triaged.
+- Stacked PRs and squash merges: deleting a merged base branch closes the PR stacked on it. Retarget dependents to `main` before merging, then merge `main` into each branch.
 
 Next:
-- After the first release: create the deploy clone `C:\deploy\cctv`, copy `.env` into it, run `watch.py --enroll` and register the scheduled task (README, CI/CD).
+- After v0.3.0 (first release with images): `gh auth refresh -s read:packages`, `docker login ghcr.io`, then create the deploy clone `C:\deploy\cctv`, copy `.env` into it, run `watch.py --enroll` and register the scheduled task (README, CI/CD).
 - Pull the datasets with DVC; none are present on this machine.
 - Actions budget (account Billing page, manual). Allow Actions to create PRs only when `release.yml` lands.
 - Map the producer-consumer runtime files to explicit mounts, replacing its whole-repo `.` mount.
 - Fill the 4 null manifest values from the GPU host (commands are in the manifest's `unverified` block).
-- DockerHub repo and secrets, then `release.yml` with release-please, gated on `check_manifest.py --release`.
 
 Do not touch:
 - `STANDALONE-SERVICES/` upstream services (InsightFace-REST, Milvus, Kafka).
