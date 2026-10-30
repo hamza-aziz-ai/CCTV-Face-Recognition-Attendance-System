@@ -253,3 +253,12 @@ Trade-off:
 - The ORM API must move to `MilvusClient` before pymilvus 3.1.
 Revisit if: pymilvus 3.1 is needed (port the ORM calls first), or a site holds vectors that cannot be rebuilt from images (rehearse the 2.6 step on a copy).
 
+## D-023: App images to Python 3.14 with current libraries (supersedes D-002)
+Date: 2026-10-30   Model: Claude Opus 5.5
+Context: The owner asked for the app base image to move from Python 3.11 to 3.14. The old pins (numpy 1.24, matplotlib 3.7, opencv 4.10) have no 3.14 wheels, so they move too.
+Options: 1) stay on 3.11  2) 3.14 keeping OpenCV on 4.14  3) 3.14 with OpenCV 5.0
+Chosen: 3. `python:3.14-slim-trixie`, pinned by digest, in all 8 Dockerfiles. numpy 2.5.4, opencv-python 5.0.0.93, fastapi 0.162.0 (starlette 1.10.0), uvicorn 0.54.0, pydantic 2.14.2, matplotlib 3.11.2, requests 2.34.2, msgpack 1.2.4, ujson 6.0.0, apscheduler 3.11.3, python-dotenv 1.2.4, python-multipart 0.0.32, typing-extensions 4.16.0, flask 3.1.3. `src/main.py` calls `multiprocessing.set_start_method("fork")`: 3.14 defaults to forkserver on Linux, and the workers receive live pymilvus `Collection` objects that would otherwise have to be pickled.
+Why: These are the latest stable releases. Compatibility was checked before changing code: ruff `NPY201` found nothing for NumPy 2; all 46 `cv2` names the code uses exist in OpenCV 5.0; `pip check` is clean on 3.14.10; `@app.on_event` still works.
+Trade-off: Two major versions moved at once (NumPy 2, OpenCV 5) and the end-to-end recognition path has no real data yet, so numeric behaviour of image code is verified only by those checks, CI smoke tests and the deployed stack starting. `@app.on_event` is deprecated and should move to lifespan handlers. Fork after gRPC setup is unchanged from before and stays a known risk.
+Revisit if: recognition results shift once real data is loaded, or a library drops `on_event`.
+
