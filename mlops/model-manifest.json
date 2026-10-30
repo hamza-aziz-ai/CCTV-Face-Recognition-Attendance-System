@@ -39,8 +39,8 @@
     "top_k": 5,
     "match_distance_tolerance": 0.5,
     "collections": [
-      "{INSTITUTE}_FACE_DATA_COLLECTION_FOR_COSINE",
-      "{INSTITUTE}_FACE_DATA_STAGING_COLLECTION_FOR_COSINE"
+      "FACE_DATA_COLLECTION_FOR_COSINE",
+      "FACE_DATA_STAGING_COLLECTION_FOR_COSINE"
     ],
     "embedding_snapshot": null
   },
@@ -51,8 +51,8 @@
     "liveness_enabled": false
   },
   "datasets": {
-    "FACIAL-RECOGNITION-DATASET": {"dvc_md5": "891963c84fbfdc486c3af982fb35c154.dir", "files": 10, "bytes": 2165802},
-    "DISPLAY-FACE-DATASET": {"dvc_md5": "e9cbc3bf91e6ed3dbd611b32da3ffd67.dir", "files": 1, "bytes": 220557}
+    "FACIAL-RECOGNITION-DATASET": {"dvc_md5": "3e723cbef3d78af0f2bc3f6f9e7d58f2.dir", "files": 10, "bytes": 2165802},
+    "DISPLAY-FACE-DATASET": {"dvc_md5": "80e9276468ddcb23eae6ff8bcce6044b.dir", "files": 1, "bytes": 220557}
   },
   "unverified": {
     "inference_service.image_digest": "On the GPU host: docker image inspect --format '{{.Id}}' insightface-rest:v0.9.0.0",
