@@ -186,4 +186,5 @@ Trade-off:
 - v0.1.0 and v0.2.0 have no images; the first deployable release is v0.3.0.
 - The ROI app has no compose service, so its image is built in CI but not published.
 - DockerHub stays unused.
+- Pushes run one at a time (`--parallel 1`): the first v0.3.0 release run pushed all 7 in parallel and ghcr.io answered "denied" for a random subset, twice.
 Revisit if: the free GHCR policy changes, the repo goes public (DockerHub mirror for discoverability), or a CI-to-release digest match is required (push from the CI image job instead).
