@@ -13,6 +13,8 @@ Done:
   - `master.env` untracked.
   - `.gitattributes` forces LF on `.sh`.
 - Step 3 (same branch): `.github/workflows/ci.yml` runs lint, gitleaks, compose config, 8 image builds and smoke tests, plus the aggregate `ci` check. Two dead `del` blocks removed (D-007).
+- Compose split: `docker-compose-main.yml` has no builds or `./src` mounts (code comes from the image). `docker-compose.dev.yml` restores both. `build-docker-images.sh` removed; the README builds via the dev override (D-010).
+- `.github/dependabot.yml`: weekly grouped updates for github-actions and the Docker base digest (D-011).
 - Repo settings applied: squash merge only (PR title and body become the commit), automatically delete head branches. Dependabot alerts, Dependabot security updates and the read-only default workflow token were already on.
 
 In progress:
@@ -22,12 +24,12 @@ Broken or risky:
 - `src/main.py` deletes Kafka topics at startup. Pending feedback may be lost on restart (unverified).
 - `src/automatic-vector-db-updation/milvus_updater.py` deletes old vectors, swallows insert failures and still marks the rows processed. This loses vectors silently.
 - Python 3.11 has only been verified by build, `pip check` and import smoke tests; no live pipeline run yet.
+- Existing hosts must rebuild images before the next `up` after merging PR #1. The old `v-beta` images contain no code, and the base compose no longer mounts `./src`.
 - Dependabot reports 7 vulnerabilities (4 high, 3 moderate), not yet triaged.
 
 Next:
 - Actions budget (account Billing page, manual). Allow Actions to create PRs only when `release.yml` lands.
-- `.github/dependabot.yml` for github-actions.
-- `docker-compose.dev.yml`, then remove `build-docker-images.sh` and update the README.
+- Map the producer-consumer runtime files to explicit mounts, replacing its whole-repo `.` mount.
 - Model manifest, DockerHub repo and secrets, then `release.yml` with release-please.
 
 Do not touch:

@@ -82,3 +82,21 @@ Chosen: 2, with flask~=3.1.0, numpy~=1.24.4, opencv-python~=4.10.0.84, python-do
 Why: The app imports exactly these. Every pin except flask matches the other services. Flask (Pallets project) is the only package new to the repo; 3.1 is the current stable line and supports Python 3.11.
 Trade-off: The ROI app itself has not been run end to end on these versions.
 Revisit if: the ROI UI shows Flask 3.x incompatibilities.
+
+## D-010: Split production and development compose files
+Date: 2026-10-30   Model: Claude Opus 5.5 with Codex gpt-6.1-sol (council)
+Context: `docker-compose-main.yml` built images in place and bind-mounted `./src` over them. With source now baked in (D-001), production should run exactly what was built.
+Options: 1) keep one file with build and mounts  2) base file without builds or source mounts, plus a `docker-compose.dev.yml` override  3) a separate full production file
+Chosen: 2, and remove `build-docker-images.sh`: `docker compose -f docker-compose-main.yml -f docker-compose.dev.yml build` replaces it.
+Why: There is one source of truth for services. The override only adds builds and live-code mounts, and the merged config equals the old behaviour (verified with `docker compose config`).
+Trade-off: Hosts must rebuild after pulling (the old `v-beta` images contain no code). The producer-consumer still mounts the whole repo, because its runtime file set (camera config, frames, datasets) is not yet mapped to explicit mounts.
+Revisit if: images come from the registry (step 5). Then the base file references pinned digests, and the producer-consumer gets explicit mounts.
+
+## D-011: Dependabot version updates for actions and base images only
+Date: 2026-10-30   Model: Claude Opus 5.5
+Context: Workflow actions are pinned to commit SHAs and the base image to a digest; neither updates itself. The council plan named github-actions only.
+Options: 1) github-actions only  2) github-actions + docker  3) also pip version updates
+Chosen: 2, weekly, one grouped PR per ecosystem
+Why: A base-image digest goes stale for the same reason action SHAs do, and misses OS security patches. Python vulnerabilities already arrive through Dependabot security updates. Pip version updates across 8 requirement files would be noise without tests.
+Trade-off: Up to two automated PRs a week to review and merge by hand (manual merges on the Free plan).
+Revisit if: unit tests exist (consider pip updates), or the account moves to Pro (consider auto-merge for patch updates).
