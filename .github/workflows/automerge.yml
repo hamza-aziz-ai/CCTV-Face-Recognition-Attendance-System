@@ -7,7 +7,8 @@ name: automerge
 # main, so a PR cannot rewrite the rule that merges it.
 on:
   workflow_run:
-    workflows: [ci]
+    # Whichever finishes last triggers the merge: both run on every PR, and a check still running means skip
+    workflows: [ci, Claude Code Review]
     types: [completed]
   workflow_dispatch:
 
