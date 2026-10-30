@@ -25,10 +25,17 @@ services:
       KAFKA_LISTENERS: 'PLAINTEXT://broker:29092,CONTROLLER://broker:29093,PLAINTEXT_HOST://0.0.0.0:9092'
       KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
-      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      # Topic data on a volume: a recreated broker used to lose every topic, including the internal ones that
+      # Schema Registry, Connect and ksqlDB need
+      KAFKA_LOG_DIRS: '/var/lib/kafka/data'
+      # Topics are created on purpose, with the right settings; auto-creation gave Connect and Schema Registry topics
+      # with the wrong cleanup policy, and the app topics 1 partition instead of one per camera
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
       # Replace CLUSTER_ID with a unique base64 UUID using "bin/kafka-storage.sh random-uuid"
       # See https://docs.confluent.io/kafka/operations-tools/kafka-tools.html#kafka-storage-sh
       CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    volumes:
+      - kafka-data:/var/lib/kafka/data
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "broker:29092"]
       interval: 15s
@@ -66,6 +73,8 @@ services:
     environment:
       CONNECT_BOOTSTRAP_SERVERS: 'broker:29092'
       CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      # The image's own healthcheck needs it; without it the check calls a URL with no port and never passes
+      CONNECT_REST_PORT: 8083
       CONNECT_GROUP_ID: compose-connect-group
       CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
       CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
@@ -185,3 +194,6 @@ services:
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: connect
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://connect:8083
       KAFKA_CLUSTERS_0_KSQLDBSERVER: http://ksqldb-server:8088
+
+volumes:
+  kafka-data:
