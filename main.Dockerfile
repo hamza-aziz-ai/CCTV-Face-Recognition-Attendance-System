@@ -2,6 +2,8 @@
   
 # Step 1 - Select base docker image
 FROM python:3.11-slim-bookworm@sha256:94a8fee35252d06ab75856f15f12c7bae67b10e8a6da93c7fded82b2610926cd
+# Links the image to this repository when it is pushed to ghcr.io (it then inherits the repository's access)
+LABEL org.opencontainers.image.source=https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System
 
 # Set environment variables
 ENV CAM_PORT=554
