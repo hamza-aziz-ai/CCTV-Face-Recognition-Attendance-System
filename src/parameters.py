@@ -235,8 +235,6 @@ KAFKA_HOST = IP_ADDRESS
 # Kafka port
 KAFKA_PORT = "9092"
 
-# Wait time for Kafka topics to be deleted
-TOPIC_DELETION_WAIT_TIME = 30
 
 # Display face image server port
 DISPLAY_FACE_IMAGE_SERVER_PORT = 20013

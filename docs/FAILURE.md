@@ -10,13 +10,13 @@ Marked **seen** where it actually happened on this host, otherwise **from the co
 | Milvus down | Searches fail while running | Consumer log | From the code |
 | Milvus MinIO | Crash loop when an older build opens data from a newer one | `Restarting` in `docker ps` | Seen |
 | Kafka | Displays stop updating; attendance still recorded | Display shows an error message | From the code |
-| Kafka restart | The producer deletes and recreates topics, so pending feedback is lost | Missing display messages | From the code |
+| Kafka restart | Topics and messages survive on the `kafka-data` volume (D-028) | Missing display messages | Fixed 2026-10-31 |
 | PostgreSQL | Results are not stored; retry behaviour not confirmed | DB controller log | From the code |
 | DB controller | The duplicate check queries a column the table does not define (README, Known issues) | Log errors | From the code |
 | ERP | Records wait for the next minute's attempt | API log | From the code |
 | Camera unreachable | Thread logs the error, sleeps 30 s and retries; `producer-consumer` stays Up | Producer log | Seen |
 | Startup order | Services that read a database now wait for the one that creates it; the updater creates its own collection; InsightFace workers write engines atomically | `docker ps` | Fixed 2026-10-31 |
-| Kafka topic reset | Each `producer-consumer` start deletes and recreates its topics while the feedback controller may publish, so a few display messages can be lost. Attendance records are not affected | Missing display messages | Accepted |
+| Kafka broker recreated without its data | Schema Registry and Connect crash-looped on auto-created topics with the delete policy; auto-creation is now off | `Restarting` in `docker ps` | Seen, fixed 2026-10-31 |
 | Nightly updater | Swallows insert failures and still marks rows processed, so vectors are lost silently | Nothing | From the code |
 | Docker Desktop | Everything stops until someone signs in to Windows (D-018) | Displays go down | From the design |
 | Host IP change | Kafka advertises the old IP; run `set_configuration.sh` and restart Kafka | Clients cannot connect | From the design |
