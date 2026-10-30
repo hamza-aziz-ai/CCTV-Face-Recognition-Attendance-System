@@ -99,7 +99,7 @@ To draw an ROI polygon on a live stream, run `Custom-ROI-Provisioning/crop_recta
 
 ### Parameters
 
-Runtime parameters such as batch size, thresholds, ports, staging and liveness flags live in [`src/parameters.py`](src/parameters.py). Host IP and institute are written to `master.env` and `STANDALONE-SERVICES/standalone-services.env` by `set_configuration.sh` at startup. InsightFace-REST models, batch sizes and MIG devices are set in `STANDALONE-SERVICES/standalone-services.env`.
+Runtime parameters such as batch size, thresholds, ports, staging and liveness flags live in [`src/parameters.py`](src/parameters.py). Host IP and institute are written to `master.env` (created from `master.env.example` on first run, not tracked) and `STANDALONE-SERVICES/standalone-services.env` by `set_configuration.sh` at startup. InsightFace-REST models, batch sizes and MIG devices are set in `STANDALONE-SERVICES/standalone-services.env`.
 
 ## Getting started
 
@@ -142,11 +142,13 @@ To add new data, run `dvc add FACIAL-RECOGNITION-DATASET`, commit the updated `.
 ### 4. Build and start
 
 ```bash
-./build-docker-images.sh        # build the application images
+docker compose -f docker-compose-main.yml -f docker-compose.dev.yml build   # build the application images
 ./start_complete_project.sh     # standalone stacks, then the main compose stack
 ```
 
 To start in two steps instead, run `./start_standalone_services.sh`, then `docker-compose -f docker-compose-main.yml up -d`.
+
+The images contain the application source, so rebuild them after code changes. For development, start with both files (`docker compose -f docker-compose-main.yml -f docker-compose.dev.yml up -d`): `docker-compose.dev.yml` mounts `./src` over the baked copy, so edits apply on restart without a rebuild.
 
 ### 5. Enroll faces
 

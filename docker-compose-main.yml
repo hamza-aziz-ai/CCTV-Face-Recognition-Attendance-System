@@ -1,14 +1,12 @@
 services:
   mfr-cctv-producer-consumer:
     image: cctv-face-recognition-producer-consumer:v-beta
-    build:
-      context: .
-      dockerfile: main.Dockerfile
     container_name: cctv-face-recognition-producer-consumer
     environment:
       CAM_USERNAME: ${CAM_USERNAME}
       CAM_PASSWORD: ${CAM_PASSWORD}
     volumes:
+      # ponytail: whole-repo mount until the producer-consumer runtime files (camera config, frames, datasets) are mapped to explicit mounts
       - .:/Multi-Person-Face-Recognition/
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System/:/Multi-Person-Face-Recognition/logs/
       - /workspace/CCTV-FACE-RECOGNITION-ATTENDANCE-SYSTEM/Recognition_Frames/:/Multi-Person-Face-Recognition/Recognition_Frames/
@@ -45,16 +43,12 @@ services:
 
   mfr-database-controller:
     image: cctv-face-recognition-database-controller:v-beta
-    build:
-      context: .
-      dockerfile: database-server.Dockerfile
     container_name: cctv-face-recognition-database-controller
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
-      - ./src:/Multi-Person-Face-Recognition/src
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
     ports:
       - "20001:20001"
@@ -69,13 +63,9 @@ services:
 
   mfr-feedback-controller:
     image: cctv-face-recognition-feedback-controller:v-beta
-    build:
-      context: .
-      dockerfile: feedback-server.Dockerfile
     container_name: cctv-face-recognition-feedback-controller
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
-      - ./src:/Multi-Person-Face-Recognition/src
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
     ports:
       - "20012:20012"
@@ -90,9 +80,6 @@ services:
 
   mfr-api-service:
     image: cctv-face-recognition-api:v-beta
-    build:
-      context: .
-      dockerfile: api.Dockerfile
     container_name: cctv-face-recognition-api
     environment:
       API_KEY: ${API_KEY}
@@ -100,7 +87,6 @@ services:
       POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
-      - ./src:/Multi-Person-Face-Recognition/src
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
     ports:
       - "9090:8000"
@@ -115,14 +101,10 @@ services:
 
   dynamic-face-dataset-collector:
     image: cctv-face-recognition-dynamic-face-dataset-collector:v-beta
-    build:
-      context: .
-      dockerfile: dynamic-face-dataset-collector.Dockerfile
     container_name: cctv-face-recognition-dynamic-face-dataset-collector
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
-      - ./src:/Multi-Person-Face-Recognition/src
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -138,14 +120,10 @@ services:
 
   automate-milvus-update:
     image: cctv-face-recognition-automate-milvus-update:v-beta
-    build:
-      context: .
-      dockerfile: automatic-milvus-db-update.Dockerfile
     container_name: cctv-face-recognition-automate-milvus-update
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
-      - ./src:/Multi-Person-Face-Recognition/src
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -153,14 +131,10 @@ services:
 
   display-image-server:
     image: cctv-face-recognition-front-face-image-display:v-beta
-    build:
-      context: .
-      dockerfile: display-image.Dockerfile
     container_name: cctv-face-recognition-front-face-image-display
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./DISPLAY-FACE-DATASET:/Multi-Person-Face-Recognition/DISPLAY-FACE-DATASET
-      - ./src:/Multi-Person-Face-Recognition/src
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
     ports:
       - "20013:20013"

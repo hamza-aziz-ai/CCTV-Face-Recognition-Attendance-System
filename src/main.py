@@ -46,11 +46,6 @@ def signal_handler(sig, frame):
 
     delete_kafka_topics()
     multicam_server_logger.warning("Kafka topics deleted")
-    try:
-        del MULTIPROCESS_SHARED_BUFFER
-        multicam_server_logger.warning("Deleting Shared Queue")
-    except Exception as error:
-        multicam_server_logger.warning(f"Error in Deleting Shared Queue due to error: {error}")
     multicam_server_logger.warning("EXITING THE PROGRAM...")
     sys.exit(0)
 
