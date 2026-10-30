@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.0.1 (2026-10-30)
+
+## What's Changed
+* ci: open an issue when a release fails by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/37
+* fix: remove startup races between services by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/38
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.0.0...v2.0.1
+
 ## v2.0.0 (2026-10-30)
 
 ## What's Changed
