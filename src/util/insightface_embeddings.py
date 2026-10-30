@@ -14,16 +14,12 @@ sys.path.append(parent)
 
 from parameters import INSIGHTFACE_HOST, \
     INSIGHTFACE_PORT, \
-    MILVUS_HOST, \
-    MILVUS_PORT, \
-    MILVUS_COLLECTION_NAME, \
     FACIAL_RECOGNITION_DATASET_PATH, \
     FACIAL_RECOGNITION_EMBEDDINGS_PATH, \
     FACE_LANDMARKS_PATH
 from insightface_face_detection import IFRClient
-from milvus_server import create_connection, create_collection, insert_data, delete_collection
 
-insightface_client = IFRClient(host="http://localhost", port=18081)
+insightface_client = IFRClient(host=INSIGHTFACE_HOST, port=INSIGHTFACE_PORT)
 
 
 def list_image_paths(directory: str):
@@ -88,23 +84,6 @@ def create_embeddings(image_paths: list, embedding_path: str, landmarks_path: st
 
     if store_landmarks:
         print(f"\nINFO: For verification, you can check {landmarks_path} whether embeddings are created correctly if you have opted for saving landmarks.")
-
-    # CONNECTING TO MILVUS SERVER
-    create_connection(host="localhost", port=MILVUS_PORT)
-
-    # DELETING THE ALREADY EXISTING COLLECTION
-    delete_collection("FACE_EMBEDDINGS")
-
-    # CREATING A NEW COLLECTION
-    embeddings_collection = create_collection(collection_name="FACE_EMBEDDINGS")
-
-    # INSERTING DATA TO NEWLY CREATED COLLECTION
-    # entities for milvus database
-    entities = [
-        known_face_names,
-        known_face_encodings
-    ]
-    insert_data(embeddings_collection, entities)
 
 
 if __name__ == "__main__":
