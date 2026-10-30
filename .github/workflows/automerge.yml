@@ -60,8 +60,9 @@ jobs:
             merged=0
             # Open, non-draft PRs into main from this repository (forks are never merged).
             while read -r pr sha; do
+              # A check with a conclusion is finished: GitHub has left passed checks stuck on in_progress (PR #32).
               checks=$(gh api --paginate "repos/$GH_REPO/commits/$sha/check-runs?per_page=100" \
-                --jq '.check_runs[] | "\(.status) \(.conclusion // "none") \(.name)"')
+                --jq '.check_runs[] | "\(if .conclusion then "completed" else .status end) \(.conclusion // "none") \(.name)"')
               # The aggregate ci check must exist and have passed; a PR with no checks is never merged.
               if ! grep -qx 'completed success ci' <<<"$checks"; then echo "#$pr: no successful ci on $sha; skip."; continue; fi
               if grep -qv '^completed ' <<<"$checks"; then echo "#$pr: checks still running; skip."; continue; fi
