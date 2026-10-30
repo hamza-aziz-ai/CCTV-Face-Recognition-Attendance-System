@@ -67,7 +67,14 @@ def smoke():
 
 def start(tag):
     """Check out the tag and start the images CI built and published for it."""
-    run("git", "checkout", "--force", "--detach", tag)
+    # master.env is this site's config. Older tags still track it, so a checkout would delete or overwrite it.
+    site = ROOT / "master.env"
+    keep = site.read_bytes() if site.exists() else None
+    try:
+        run("git", "checkout", "--force", "--detach", tag)
+    finally:
+        if keep is not None:
+            site.write_bytes(keep)
     run(*UP, env={"IMAGE_TAG": tag})
     smoke()
 

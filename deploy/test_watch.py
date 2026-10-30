@@ -1,5 +1,6 @@
 """Decision tests for deploy/watch.py with Docker, git and GitHub faked out. Run: python -I deploy/test_watch.py"""
 import json
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -62,7 +63,30 @@ def test():
     assert scenario({"current": None, "failed": ["v0.1.0"]}, "v0.1.1", running=False)[2] == ["v0.1.1"]
     # No release published yet.
     assert scenario({"current": None, "failed": []}, None)[2] == []
-    print("watch decisions ok (11 scenarios)")
+    test_site_config_survives_checkout()
+    print("watch decisions ok (11 scenarios, site config kept)")
+
+
+def test_site_config_survives_checkout():
+    """start() with real git: master.env is tracked at v1, untracked at v2; the host's copy survives both ways."""
+    repo = Path(tempfile.mkdtemp())
+    git = lambda *a: subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *a],  # noqa: E731
+                                    check=True, capture_output=True)
+    git("init", "-q")
+    (repo / "master.env").write_text("INSTITUTE=REPO\n")
+    git("add", "master.env")
+    git("commit", "-q", "-m", "v1")
+    git("tag", "v1")
+    git("rm", "-q", "--cached", "master.env")
+    git("commit", "-q", "-m", "v2")
+    git("tag", "v2")
+    (repo / "master.env").write_text("INSTITUTE=SITE\n")
+    real_run = watch.run
+    with mock.patch.multiple(watch, ROOT=repo, smoke=lambda: None,
+                             run=lambda *cmd, env=None: real_run(*cmd) if cmd[0] == "git" else ""):
+        for tag in ("v1", "v2", "v1"):
+            watch.start(tag)
+            assert (repo / "master.env").read_text() == "INSTITUTE=SITE\n", tag
 
 
 if __name__ == "__main__":
