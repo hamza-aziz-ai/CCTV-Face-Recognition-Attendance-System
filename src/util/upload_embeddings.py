@@ -38,45 +38,5 @@ def upload_embeddings(embeddings_file):
     insert_data(embeddings_collection, entities)
 
 if __name__ == "__main__":
-    embeddings_path = None
-
-    print()
-    print("Whose face embeddings are we uploading? (Faculties, Students or GRIL)")
-    print("Choose from the following:")
-    print("========================================================================")
-    print("1) Faculties")
-    print("2) Students")
-    print("3) GRIL")
-    print()
-    dataset_group = int(input("Enter your choice: "))
-    print()
-
-    if dataset_group == 2:
-        batch = input("Which batch face embeddings are we uploading? (For example, Enter 2021 if admission year is 2021) ")
-        enrolled_students = input("Are we uploading face embeddings of currently enrolled students? (Y for Yes / N for No) ")
-        if enrolled_students.lower() == 'y':
-            if batch in ["2021", "2022", "2023", "2024"]:
-                embeddings_path = f"{FACIAL_RECOGNITION_EMBEDDINGS_PATH}/STUDENT_EMBEDDINGS/CURRENTLY-ENROLLED-STUDENTS/BATCH_{batch}.pkl"
-            else:
-                print(f"{batch} is not present in currently enrolled batch. Please enter values in [2021, 2022, 2023, 2024]")
-                sys.exit(0)
-        elif enrolled_students.lower() == 'n':
-            confirmation = input(f"There is no point in uploading face embeddings of graduated batch {batch}. Do you wish to proceed? (Y for Yes / N for No) ")
-            if confirmation.lower() == "y":
-                embeddings_path = f"{FACIAL_RECOGNITION_EMBEDDINGS_PATH}/STUDENT_EMBEDDINGS/GRADUATED-STUDENTS/BATCH_{batch}.pkl"
-            else:
-                print("Thank you for your confirmation.")
-                sys.exit(0)
-
-    elif dataset_group == 1:
-        embeddings_path = f"{FACIAL_RECOGNITION_EMBEDDINGS_PATH}/FACULTY-STAFF-EMPLOYEE_EMBEDDINGS/Faculty-Staff-Employee.pkl"
-
-    elif dataset_group == 3:
-        embeddings_path = f"{FACIAL_RECOGNITION_EMBEDDINGS_PATH}/GRIL-MEMBERS_EMBEDDINGS/GRIL-Members.pkl"
-
-    else:
-        print("Invalid choice.")
-        sys.exit(0)
-
-    upload_embeddings(embeddings_path)
-
+    # Usage: python3 src/util/upload_embeddings.py <embeddings.pkl>
+    upload_embeddings(sys.argv[1])

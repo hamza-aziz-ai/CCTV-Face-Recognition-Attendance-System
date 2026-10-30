@@ -109,20 +109,20 @@ def test_site_config_survives_checkout():
     git = lambda *a: subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *a],  # noqa: E731
                                     check=True, capture_output=True)
     git("init", "-q")
-    (repo / "master.env").write_text("INSTITUTE=REPO\n")
+    (repo / "master.env").write_text("SETTING=REPO\n")
     git("add", "master.env")
     git("commit", "-q", "-m", "v1")
     git("tag", "v1")
     git("rm", "-q", "--cached", "master.env")
     git("commit", "-q", "-m", "v2")
     git("tag", "v2")
-    (repo / "master.env").write_text("INSTITUTE=SITE\n")
+    (repo / "master.env").write_text("SETTING=SITE\n")
     real_run = watch.run
     with mock.patch.multiple(watch, ROOT=repo, smoke=lambda: None, STABLE_SECONDS=0,
                              run=lambda *cmd, env=None: real_run(*cmd) if cmd[0] == "git" else ""):
         for tag in ("v1", "v2", "v1"):
             watch.start(tag)
-            assert (repo / "master.env").read_text() == "INSTITUTE=SITE\n", tag
+            assert (repo / "master.env").read_text() == "SETTING=SITE\n", tag
 
 
 if __name__ == "__main__":

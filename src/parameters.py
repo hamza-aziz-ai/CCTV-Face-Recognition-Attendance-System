@@ -6,13 +6,12 @@ import os
 
 
 ########################################################################################################################
-# Project Configuration for each INSTITUTE
+# Project Configuration
 ########################################################################################################################
 load_dotenv("master.env")
-INSTITUTE = os.getenv("INSTITUTE")
 IP_ADDRESS = os.getenv("IP_ADDRESS")
 
-CAMERA_CONFIGURATION_FILE = f"src/Camera-Configuration/{INSTITUTE}/camera_configuration.json"
+CAMERA_CONFIGURATION_FILE = "src/Camera-Configuration/camera_configuration.json"
 
 # Set video frame height and width
 FRAME_HEIGHT = 360  # 720 #576
@@ -24,12 +23,12 @@ FRAME_SIZE = FRAME_WIDTH * FRAME_HEIGHT
 ########################################################################################################################
 # Parameters specific to Project Paths
 ########################################################################################################################
-FACIAL_RECOGNITION_DATASET_PATH = f"FACIAL-RECOGNITION-DATASET/{INSTITUTE}"
-DYNAMIC_DATASET_PATH = f"DYNAMIC-FACIAL-RECOGNITION-DATASET/{INSTITUTE}"
+FACIAL_RECOGNITION_DATASET_PATH = "FACIAL-RECOGNITION-DATASET"
+DYNAMIC_DATASET_PATH = "DYNAMIC-FACIAL-RECOGNITION-DATASET"
 FACIAL_RECOGNITION_EMBEDDINGS_PATH = f"{FACIAL_RECOGNITION_DATASET_PATH}/FACE_EMBEDDINGS"
 DYNAMIC_DATASET_EMBEDDINGS_PATH = f"{DYNAMIC_DATASET_PATH}/FACE_EMBEDDINGS"
-DISPLAY_FACE_IMAGE_PATH = f"DISPLAY-FACE-DATASET/{INSTITUTE}"
-FACE_LANDMARKS_PATH = f"FACE-LANDMARKS/{INSTITUTE}"
+DISPLAY_FACE_IMAGE_PATH = "DISPLAY-FACE-DATASET"
+FACE_LANDMARKS_PATH = "FACE-LANDMARKS"
 LOGS_FOLDER = "logs"
 MULTICAM_SERVER_LOGGER = "multicam_server"
 DATABASE_SERVER_LOGGER = "database_server"
@@ -133,7 +132,7 @@ FACE_MATCHING_TOLERANCE = 0.5 if METRIC_TYPE == "COSINE" else 0.9    # For L2 Me
 
 # Milvus collection name
 # MILVUS_COLLECTION_NAME = "TEST_COLLECTION"
-MILVUS_COLLECTION_NAME = f"{INSTITUTE}_FACE_DATA_COLLECTION_FOR_{METRIC_TYPE}"
+MILVUS_COLLECTION_NAME = f"FACE_DATA_COLLECTION_FOR_{METRIC_TYPE}"
 ########################################################################################################################
 
 
@@ -141,7 +140,7 @@ MILVUS_COLLECTION_NAME = f"{INSTITUTE}_FACE_DATA_COLLECTION_FOR_{METRIC_TYPE}"
 # Parameters specific to dynamic facial dataset collection
 ########################################################################################################################
 # Milvus staging collection name for face recognition fallback
-MILVUS_STAGING_COLLECTION_NAME = f"{INSTITUTE}_FACE_DATA_STAGING_COLLECTION_FOR_{METRIC_TYPE}"
+MILVUS_STAGING_COLLECTION_NAME = f"FACE_DATA_STAGING_COLLECTION_FOR_{METRIC_TYPE}"
 
 # Boolean flag to indicate whether to do staging
 STAGING = True
@@ -160,7 +159,7 @@ NUMBER_OF_PICTURES = 3
 DYNAMIC_FACE_DATA_COLLECTOR_API = f"http://{IP_ADDRESS}:8000"
 
 # PostgreSQL Database Name
-POSTGRESQL_DATABASE_NAME = f"{INSTITUTE}_Face_Recognition_Database"
+POSTGRESQL_DATABASE_NAME = "Face_Recognition_Database"
 
 # Timeout if not getting response from API
 TIMEOUT = 5 * 60
@@ -191,7 +190,7 @@ POSTGRESQL_HOST = IP_ADDRESS
 POSTGRESQL_PORT = int(os.getenv("POSTGRESQL_PORT", "5432"))
 
 # PostgreSQL Database Name
-POSTGRESQL_DATABASE = f"{INSTITUTE}_CCTV_Camera_Surveillance"
+POSTGRESQL_DATABASE = "CCTV_Camera_Surveillance"
 
 # If the person is recognized by the same camera within this time threshold, the entry will not be added to the database
 SAME_CAM_TIME_ENTRY_THRESHOLD = 5    # minutes

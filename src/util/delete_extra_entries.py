@@ -5,7 +5,7 @@ from src.dynamic_face_data_collector.postgresql_database_handler import delete_f
 
 PERSON_ID = sys.argv[1]  # usage: python delete_extra_entries.py <PERSON_ID>
 CLUSTER_NAME = "cluster-1"
-BASE_PATH = "DYNAMIC-FACIAL-RECOGNITION-DATASET/ABESIT"
+BASE_PATH = "DYNAMIC-FACIAL-RECOGNITION-DATASET"
 
 # 1. Load existing metadata
 with open(f"{BASE_PATH}/{PERSON_ID}/{CLUSTER_NAME}/meta.json") as f:

@@ -48,7 +48,7 @@ DB_CONFIG = {
     'port': os.environ.get("POSTGRESQL_PORT", "5432")
 }
 
-DYNAMIC_DATASET_PATH = "DYNAMIC-FACIAL-RECOGNITION-DATASET.bak/ABESIT"
+DYNAMIC_DATASET_PATH = "DYNAMIC-FACIAL-RECOGNITION-DATASET.bak"
 
 # Mapping of camera groups to cluster names
 cluster_map: Dict[Tuple[str, str, str, str, str], str] = {

@@ -7,7 +7,7 @@ Real-time, multi-camera face recognition that turns CCTV footage at campus gates
 - **Self-improving gallery:** a collector keeps each person's best face crops per camera cluster (pupil distance, match score), and a nightly job refreshes the staging vectors.
 - **Outputs:** recognitions are stored in PostgreSQL (year/location partitioned), synced to the institution ERP every minute, exposed through a reporting API, and pushed over Kafka to on-site Raspberry Pi displays.
 
-One deployment serves one institution, selected by `INSTITUTE` (currently `ABESIT` or `GLBITM`). The ABESIT main gate runs 20 CCTV cameras (10 entry, 10 exit).
+One deployment serves one site.
 
 ## Architecture
 
@@ -27,7 +27,7 @@ flowchart LR
     UPD --> NGX
     UPD -->|"refresh staging"| MV
     API["Reporting API :9090"] --> PG
-    API -->|"every minute"| ERP["Institution ERP"]
+    API -->|"every minute"| ERP["ERP"]
 ```
 
 Frames travel from the camera threads to the recognition threads through an in-memory `multiprocessing.Queue`. Kafka carries only recognition feedback and camera status messages, never frames.
@@ -85,16 +85,15 @@ cp .env.example .env
 | `POSTGRES_USER`, `POSTGRES_PASSWORD` | PostgreSQL and every service that connects to it |
 | `API_KEY` | Reporting API (`?api_key=` query parameter) |
 | `CAM_USERNAME`, `CAM_PASSWORD` | Default camera credentials |
-| `ABESIT_HOST_IP`, `GLBITM_HOST_IP` | `set_configuration.sh`, to pick `INSTITUTE` from the host IP |
 | `DATASET_STORE_USER`, `DATASET_STORE_PASSWORD`, `DATASET_STORE_DIR` | Dataset store (MinIO DVC remote): root login and the host folder holding the data, outside the repo |
 
 ### Cameras
 
-Real camera configurations are git-ignored. Create one per institute from the template:
+The real camera configuration is git-ignored. Create it from the template:
 
 ```bash
-cp src/Camera-Configuration/ABESIT/camera_configuration.example.json \
-   src/Camera-Configuration/ABESIT/camera_configuration.json
+cp src/Camera-Configuration/camera_configuration.example.json \
+   src/Camera-Configuration/camera_configuration.json
 ```
 
 Each location has an ERP `api-endpoint` and a set of `cctv-cameras` grouped by point (for example `entry` and `exit`). Each camera has `ip_address`, `port`, `endpoint`, `username`, `password` and an optional ROI polygon in `masking-coordinates`. A camera whose `username` or `password` is `null` falls back to `CAM_USERNAME` / `CAM_PASSWORD`. Kafka topics are named `<location>_<point>`, with one partition per camera.
@@ -103,7 +102,7 @@ To draw an ROI polygon on a live stream, run `Custom-ROI-Provisioning/crop_recta
 
 ### Parameters
 
-Runtime parameters such as batch size, thresholds, ports, staging and liveness flags live in [`src/parameters.py`](src/parameters.py). Host IP and institute are written to `master.env` (created from `master.env.example` on first run, not tracked) and `STANDALONE-SERVICES/standalone-services.env` by `set_configuration.sh` at startup. InsightFace-REST models, batch sizes and MIG devices are set in `STANDALONE-SERVICES/standalone-services.env`.
+Runtime parameters such as batch size, thresholds, ports, staging and liveness flags live in [`src/parameters.py`](src/parameters.py). The host IP is written to `master.env` (created from `master.env.example` on first run, not tracked) and `STANDALONE-SERVICES/standalone-services.env` by `set_configuration.sh` at startup. InsightFace-REST models, batch sizes and MIG devices are set in `STANDALONE-SERVICES/standalone-services.env`.
 
 ## Getting started
 
@@ -160,19 +159,19 @@ The images contain the application source, so rebuild them after code changes. F
 
 ### 5. Enroll faces
 
-Put each person's photos in `FACIAL-RECOGNITION-DATASET/<INSTITUTE>/<person_id>/`: `front.jpg`, `chin_up.jpg`, `chin_down.jpg`, `left_30.jpg` and `right_30.jpg`, plus the same five with `_glasses` for someone who wears spectacles. Get each person's written consent first: these are biometric data.
+Put each person's photos in `FACIAL-RECOGNITION-DATASET/<person_id>/`: `front.jpg`, `chin_up.jpg`, `chin_down.jpg`, `left_30.jpg` and `right_30.jpg`, plus the same five with `_glasses` for someone who wears spectacles. Get each person's written consent first: these are biometric data.
 
 ```bash
-python3 src/util/enrol_person.py FACIAL-RECOGNITION-DATASET/<INSTITUTE>/<person_id>
+python3 src/util/enrol_person.py FACIAL-RECOGNITION-DATASET/<person_id>
 ```
 
 Nothing is enrolled unless every photo passes: the full set is present, each has exactly one face with confidence of at least 0.7 and pupils at least 28 px apart, each matches the person's other photos, and none matches someone already enrolled.
 
-Whole groups can still go through the interactive scripts:
+Whole groups can still go through these scripts, without the photo checks:
 
 ```bash
-python3 src/util/insightface_embeddings.py   # build an embeddings pickle for a group or batch
-python3 src/util/upload_embeddings.py        # upload a pickle to the primary collection
+python3 src/util/insightface_embeddings.py <folder> <embeddings.pkl>   # build an embeddings pickle for a group
+python3 src/util/upload_embeddings.py <embeddings.pkl>                  # upload a pickle to the primary collection
 ```
 
 When `upload_embeddings.py` asks whether to delete the existing collection, **Y replaces the whole primary collection** with the selected pickle and N appends to it.
@@ -235,14 +234,14 @@ A background job posts the current day's unacknowledged recognitions to the ERP 
 
 | Store | Contents |
 |---|---|
-| PostgreSQL `<INSTITUTE>_CCTV_Camera_Surveillance` | `recognition_results`, partitioned by year and location, with the annotated frame |
-| PostgreSQL `<INSTITUTE>_Face_Recognition_Database` | `person_summary` and `face_images` from the face collector |
-| Milvus `<INSTITUTE>_FACE_DATA_COLLECTION_FOR_COSINE` | Enrolled embeddings (512-d) |
-| Milvus `<INSTITUTE>_FACE_DATA_STAGING_COLLECTION_FOR_COSINE` | CCTV-captured embeddings |
+| PostgreSQL `CCTV_Camera_Surveillance` | `recognition_results`, partitioned by year and location, with the annotated frame |
+| PostgreSQL `Face_Recognition_Database` | `person_summary` and `face_images` from the face collector |
+| Milvus `FACE_DATA_COLLECTION_FOR_COSINE` | Enrolled embeddings (512-d) |
+| Milvus `FACE_DATA_STAGING_COLLECTION_FOR_COSINE` | CCTV-captured embeddings |
 | `DYNAMIC-FACIAL-RECOGNITION-DATASET/` | Collected face crops and `meta.json` per person and cluster |
 | `logs/<year>/<month>/<logger>/` | Per-service logs, rotated at midnight, 31 kept |
 
-The system stores biometric data (face images and embeddings) in several places. Apply your institution's access, retention and deletion policy to all of them.
+The system stores biometric data (face images and embeddings) in several places. Apply your organisation's access, retention and deletion policy to all of them.
 
 ## Project structure
 
@@ -262,7 +261,7 @@ The system stores biometric data (face images and embeddings) in several places.
 │   ├── dynamic_face_data_collector/     # face crop collector
 │   ├── automatic-vector-db-updation/    # nightly staging updater
 │   ├── fetch_face_image_server/         # portraits for the displays
-│   ├── Camera-Configuration/            # per-institute camera config templates
+│   ├── Camera-Configuration/            # camera config template
 │   └── util/                            # enrollment, dataset and development scripts
 ├── STANDALONE-SERVICES/                 # InsightFace-REST, Milvus, Kafka, face liveness
 ├── Custom-ROI-Provisioning/             # ROI drawing tool (crop_rectangle.py)
@@ -285,7 +284,7 @@ How the system works, why it looks this way and where it breaks: [architecture](
 
 - The duplicate check in `src/database_server/postgresql_database.py` queries a `recognition_timestamp` column that the table does not define, and puts a `%s` placeholder inside a quoted interval. Recognition inserts fail unless the live table was migrated by hand.
 - The nightly updater replaces all of a person's staging vectors with only that night's new crops.
-- Face clusters are defined only for the ABESIT main-gate cameras, so the face collector rejects crops from other cameras.
+- Face clusters are defined only for the main-gate cameras, so the face collector rejects crops from other cameras.
 - Most internal services have no authentication: see [docs/THREAT.md](docs/THREAT.md).
 
 ## Authors

@@ -11,7 +11,7 @@ try:
 except Exception as e:
     print(f"Connection Failed due to {e}")
 
-collection = Collection("ABESIT_FACE_DATA_STAGING_COLLECTION_FOR_COSINE")  # Get an existing collection.
+collection = Collection("FACE_DATA_STAGING_COLLECTION_FOR_COSINE")  # Get an existing collection.
 
 person_id = sys.argv[1]  # usage: python test_milvus.py <PERSON_ID>
 
@@ -44,5 +44,5 @@ print("Live entities (num_entities):", collection.num_entities)
 
 # 7) Use MilvusClient to fetch row_count
 client = MilvusClient(uri=f"http://{MILVUS_HOST}:19530")
-stats = client.get_collection_stats(collection_name="ABESIT_FACE_DATA_STAGING_COLLECTION_FOR_COSINE")
+stats = client.get_collection_stats(collection_name="FACE_DATA_STAGING_COLLECTION_FOR_COSINE")
 print("Server row_count:", stats["row_count"])

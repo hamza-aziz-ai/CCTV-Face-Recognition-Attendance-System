@@ -24,3 +24,4 @@ Mark each item verified, unverified or wrong. Clear or consciously accept the un
 - Should the app move off pickle before or after the datasets are migrated?
 - Is InsightFace 0.9.5 on TensorRT 11 still wanted? See [features/insightface-0.9.5-trt11.md](features/insightface-0.9.5-trt11.md).
 - Retention period for frames and face data?
+- How to serve several clients: one central service or dedicated deployments? The code currently serves one site.

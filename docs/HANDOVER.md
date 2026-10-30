@@ -55,7 +55,7 @@ Next:
 - After v0.3.0 (first release with images): `gh auth refresh -s read:packages`, `docker login ghcr.io`, then create the deploy clone `C:\deploy\cctv`, copy `.env` into it, run `watch.py --enroll` and register the scheduled task (README, CI/CD).
 - Turn on Docker Desktop "Start Docker Desktop when you sign in" (owner).
 - Raspberry Pis: the `kafka-webapp` package is private, so they cannot pull it yet (make it public in the package settings, or log them in). Not tested on a real Pi.
-- Enrol more people: copy their photos to `FACIAL-RECOGNITION-DATASET/<INSTITUTE>/<person_id>/`, run `src/util/enrol_person.py`, add `front_face.jpg` to `DISPLAY-FACE-DATASET`, then `dvc add` and `dvc push`, and update the manifest.
+- Enrol more people: copy their photos to `FACIAL-RECOGNITION-DATASET/<person_id>/`, run `src/util/enrol_person.py`, add `front_face.jpg` to `DISPLAY-FACE-DATASET`, then `dvc add` and `dvc push`, and update the manifest.
 - Map the producer-consumer runtime files to explicit mounts, replacing its whole-repo `.` mount.
 - Fill the 4 null manifest values from the GPU host (commands are in the manifest's `unverified` block).
 

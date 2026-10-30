@@ -67,7 +67,7 @@ def correct_orientation(image_path):
     return True, "Already Correct"
 
 if __name__ == "__main__":
-    dataset_path = "FACIAL_RECOGNITION_DATASET/FACULTY-STAFF-EMPLOYEE_DATASET"
+    dataset_path = "FACIAL-RECOGNITION-DATASET"
     report = {
         "directories": [],
         "summary": {
@@ -123,12 +123,12 @@ if __name__ == "__main__":
         report["directories"].append(directory_info)
 
     # Save JSON report
-    json_report_path = os.path.join(dataset_path, "faculty-staff-employee.json")
+    json_report_path = os.path.join(dataset_path, "dataset-report.json")
     with open(json_report_path, "w") as json_file:
         json.dump(report, json_file, indent=4)
 
     # Save Excel report
-    excel_report_path = os.path.join(dataset_path, "faculty-staff-employee.xlsx")
+    excel_report_path = os.path.join(dataset_path, "dataset-report.xlsx")
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Dataset Report"
