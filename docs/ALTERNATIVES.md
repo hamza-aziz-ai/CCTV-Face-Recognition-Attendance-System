@@ -14,5 +14,5 @@ The options behind each major choice are recorded in full in [DECISIONS.md](DECI
 | Milvus official compose (D-022) | Staying on 2.6; keeping our old compose | The combination Milvus tests | pymilvus 3.1 is needed |
 | OpenCV 5 and Python 3.14 (D-023) | Staying on 3.11; OpenCV 4.14 | Owner asked for latest stable | Results shift on real data |
 | Submodule for Kafka-WebApp (D-024) | Plain folder | Own release cycle; also runs on Pis | The PTZ merge changes sharing |
-| Milvus for vectors | Not recorded: predates these docs | Owner to fill in | — |
+| Milvus for vectors | FAISS (a library: no server, persistence or multi-client access); pgvector (runs inside Postgres, no GPU); Weaviate (CPU search); Qdrant (GPU for index builds only, since v1.13 in January 2025, after this project started) | Built for vectors, popular when chosen, and uses the GPU for search as well as index builds: we run `GPU_IVF_FLAT` | The GPU is short (6 GB here): about 55k vectors would also work on CPU HNSW. Milvus's "trillions of vectors" marketing was never the reason, and was not tested |
 | Parquet for vectors, planned | Pickle; Lance | Safe, portable, no new engine | See [features/dataset-versioning.md](features/dataset-versioning.md) |
