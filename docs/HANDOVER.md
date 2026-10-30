@@ -48,7 +48,7 @@ Broken or risky:
 Next:
 - After v0.3.0 (first release with images): `gh auth refresh -s read:packages`, `docker login ghcr.io`, then create the deploy clone `C:\deploy\cctv`, copy `.env` into it, run `watch.py --enroll` and register the scheduled task (README, CI/CD).
 - Turn on Docker Desktop "Start Docker Desktop when you sign in" (owner).
-- Kafka-WebApp: first release in its own repository, then a compose service on the host (port 9095; 9090 is the API).
+- Raspberry Pis: the `kafka-webapp` package is private, so they cannot pull it yet (make it public in the package settings, or log them in). Not tested on a real Pi.
 - Datasets: add `DATASET_STORE_*` to `.env`, start the store, then on a machine with the Google Drive remote `dvc pull -r face-recognition-dataset-gdrive` and `dvc push -r minio`.
 - Actions budget (account Billing page, manual). Allow Actions to create PRs only when `release.yml` lands.
 - Map the producer-consumer runtime files to explicit mounts, replacing its whole-repo `.` mount.

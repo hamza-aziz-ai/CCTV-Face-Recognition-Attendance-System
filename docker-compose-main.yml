@@ -163,3 +163,22 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+  # Recognition display for this host (Raspberry Pis run the same image with its default ports); versioned in the Kafka-WebApp repository
+  kafka-webapp:
+    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.1.0@sha256:48cd99ebbae1e57de7866f5bb732c89fa085dcca1aaebfa93fe3a4ace79ea418
+    container_name: cctv-face-recognition-kafka-webapp
+    restart: unless-stopped
+    env_file:
+      - path: ./master.env
+        required: false
+    environment:
+      # This host has no SSH, Redis or liveness service, so the client waits only for the services that run here
+      HOST_CHECK_PORT: 9092
+      PROJECT_SERVICES_PORT: 6385,19000,19001,19530,9092,20001,20012,20013
+    ports:
+      # 9090 is the reporting API on this host
+      - "9095:9090"
+    depends_on:
+      display-image-server:
+        condition: service_healthy

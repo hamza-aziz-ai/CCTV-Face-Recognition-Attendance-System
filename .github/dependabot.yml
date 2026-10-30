@@ -24,3 +24,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+
+  # The Kafka-WebApp image pin in docker-compose-main.yml
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
