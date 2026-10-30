@@ -36,7 +36,7 @@ def create_connection(host: str = MILVUS_HOST, port: str = MILVUS_PORT):
 def create_collection(collection_name: str = "Embeddings_Collection"):
     if utility.has_collection(collection_name):
         multicam_server_logger.info(f"Collection {collection_name} already exists.")
-        return Collection(collection_name)
+        return ensure_index(Collection(collection_name))
 
     fields = [
         FieldSchema(name="name_id", dtype=DataType.VARCHAR, is_primary=True, max_length=60, description="Unique ID of an individual"),
@@ -47,18 +47,14 @@ def create_collection(collection_name: str = "Embeddings_Collection"):
     embeddings_collection = Collection(name=collection_name, schema=schema)
     multicam_server_logger.info(f"Collection '{collection_name}' created successfully.")
 
-    return embeddings_collection
+    return ensure_index(embeddings_collection)
 
 
-# PART 3: INSERTING DATA
-def insert_data(collection: Collection, entities: list):
-    collection.insert(data=entities)
+def ensure_index(collection: Collection):
+    # load() fails with "index not found" until an index exists, so an empty collection needs one too
+    if collection.has_index():
+        return collection
 
-    collection.flush()
-
-    # print(collection_name.num_entities)
-
-    # create index
     # We are going to create an IVF_FLAT index for hello_milvus collection.
     # create_index() can only be applied to `FloatVector` and `BinaryVector` fields.
     multicam_server_logger.info(f"Start Creating index {INDEX_TYPE} for metric type {METRIC_TYPE}")
@@ -69,6 +65,16 @@ def insert_data(collection: Collection, entities: list):
     }
 
     collection.create_index("embeddings", index)
+    return collection
+
+
+# PART 3: INSERTING DATA
+def insert_data(collection: Collection, entities: list):
+    collection.insert(data=entities)
+
+    collection.flush()
+
+    # print(collection_name.num_entities)
 
     print(f"Embeddings successfully inserted and the length is {collection.num_entities}")
     multicam_server_logger.info(f"Embeddings successfully inserted and the length is {collection.num_entities}")
