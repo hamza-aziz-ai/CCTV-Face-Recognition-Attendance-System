@@ -7,7 +7,6 @@ Marked **seen** where it actually happened on this host, otherwise **from the co
 | Camera | Thread loses frames; other cameras continue | Producer log | From the code |
 | InsightFace-REST | No embeddings, so no recognition; frames keep queuing | Container unhealthy, consumer log | From the code |
 | Frame queue | Unbounded `multiprocessing.Queue`: memory grows if recognition is slower than the cameras; contents are lost on restart | Host memory | From the code |
-| Milvus empty | `load_with_retry` repeats `index not found` forever, so recognition never starts until faces are enrolled. This host is in this state today | `producer-consumer` log; the container still shows Up | Seen |
 | Milvus down | Searches fail while running | Consumer log | From the code |
 | Milvus MinIO | Crash loop when an older build opens data from a newer one | `Restarting` in `docker ps` | Seen |
 | Kafka | Displays stop updating; attendance still recorded | Display shows an error message | From the code |
@@ -15,6 +14,7 @@ Marked **seen** where it actually happened on this host, otherwise **from the co
 | PostgreSQL | Results are not stored; retry behaviour not confirmed | DB controller log | From the code |
 | DB controller | The duplicate check queries a column the table does not define (README, Known issues) | Log errors | From the code |
 | ERP | Records wait for the next minute's attempt | API log | From the code |
+| Camera unreachable | Thread logs the error, sleeps 30 s and retries; `producer-consumer` stays Up | Producer log | Seen |
 | Nightly updater | Swallows insert failures and still marks rows processed, so vectors are lost silently | Nothing | From the code |
 | Docker Desktop | Everything stops until someone signs in to Windows (D-018) | Displays go down | From the design |
 | Host IP change | Kafka advertises the old IP; run `set_configuration.sh` and restart Kafka | Clients cannot connect | From the design |

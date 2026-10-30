@@ -127,7 +127,7 @@ Create `.env` and the camera configuration as described in [Configuration](#conf
 
 ### 3. Get the datasets
 
-The face datasets are versioned with DVC and are not stored in git. The default remote `minio` is the dataset store started by `start_standalone_services.sh` (bucket `dvc`, S3 API on port 9010, D-019):
+The face datasets are versioned with DVC and are not stored in git. The default remote `minio` is the dataset store started by `start_standalone_services.sh` (bucket `dvc`, S3 API on port 9010, D-019). The datasets were restarted from scratch in October 2026 (D-026):
 
 | DVC file | Contents |
 |---|---|
@@ -145,7 +145,7 @@ dvc pull
 
 To add new data, run `dvc add FACIAL-RECOGNITION-DATASET`, commit the updated `.dvc` file, then `dvc push`.
 
-The datasets were first kept on a Google Drive remote (`face-recognition-dataset-gdrive`). To move them, on a machine that has that remote configured: `dvc pull -r face-recognition-dataset-gdrive`, then `dvc push -r minio`.
+
 
 ### 4. Build and start
 
@@ -160,7 +160,15 @@ The images contain the application source, so rebuild them after code changes. F
 
 ### 5. Enroll faces
 
-Embeddings are created from the enrollment dataset and uploaded to the primary Milvus collection with interactive scripts:
+Put each person's photos in `FACIAL-RECOGNITION-DATASET/<INSTITUTE>/<person_id>/`: `front.jpg`, `chin_up.jpg`, `chin_down.jpg`, `left_30.jpg` and `right_30.jpg`, plus the same five with `_glasses` for someone who wears spectacles. Get each person's written consent first: these are biometric data.
+
+```bash
+python3 src/util/enrol_person.py FACIAL-RECOGNITION-DATASET/<INSTITUTE>/<person_id>
+```
+
+Nothing is enrolled unless every photo passes: the full set is present, each has exactly one face with confidence of at least 0.7 and pupils at least 28 px apart, each matches the person's other photos, and none matches someone already enrolled.
+
+Whole groups can still go through the interactive scripts:
 
 ```bash
 python3 src/util/insightface_embeddings.py   # build an embeddings pickle for a group or batch

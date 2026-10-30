@@ -5,8 +5,8 @@ Read first: docs/ARCHITECTURE.md, docs/CONSTRAINTS.md, docs/DECISIONS.md. Newest
 ## Session summary: 2026-10-30, late (model: Claude Opus 5.5)
 
 Done: CI/CD end to end; the watcher deploys releases to this host; PostgreSQL 18.6, Kafka 8.4, Milvus 3.0.5, Python 3.14; Kafka-WebApp as a submodule with its own CI and releases; the guide's docs written.
-Left: datasets from Google Drive; `DATASET_STORE_*` in `.env`; InsightFace 0.9.5 (on hold, see docs/features/); Dependabot alerts; rewrite docs/DEFENSE.md in the owner's words.
-Risks: no real camera or face has gone through the system since the upgrades; most internal services have no login (docs/THREAT.md); the Raspberry Pis cannot pull the private `kafka-webapp` package yet.
+Left: enrol real people with consent; a real camera test; InsightFace 0.9.5 (on hold, see docs/features/); vector versioning (docs/features/dataset-versioning.md); Dependabot alerts.
+Risks: no real camera has gone through the system since the upgrades, and only one person is enrolled; most internal services have no login (docs/THREAT.md); the Raspberry Pis cannot pull the private `kafka-webapp` package yet.
 
 ## Latest session: 2026-10-30 (model: Claude Opus 5.5, council with Codex gpt-6.1-sol)
 
@@ -55,7 +55,7 @@ Next:
 - After v0.3.0 (first release with images): `gh auth refresh -s read:packages`, `docker login ghcr.io`, then create the deploy clone `C:\deploy\cctv`, copy `.env` into it, run `watch.py --enroll` and register the scheduled task (README, CI/CD).
 - Turn on Docker Desktop "Start Docker Desktop when you sign in" (owner).
 - Raspberry Pis: the `kafka-webapp` package is private, so they cannot pull it yet (make it public in the package settings, or log them in). Not tested on a real Pi.
-- Datasets: add `DATASET_STORE_*` to `.env`, start the store, then on a machine with the Google Drive remote `dvc pull -r face-recognition-dataset-gdrive` and `dvc push -r minio`.
+- Enrol more people: copy their photos to `FACIAL-RECOGNITION-DATASET/<INSTITUTE>/<person_id>/`, run `src/util/enrol_person.py`, add `front_face.jpg` to `DISPLAY-FACE-DATASET`, then `dvc add` and `dvc push`, and update the manifest.
 - Map the producer-consumer runtime files to explicit mounts, replacing its whole-repo `.` mount.
 - Fill the 4 null manifest values from the GPU host (commands are in the manifest's `unverified` block).
 

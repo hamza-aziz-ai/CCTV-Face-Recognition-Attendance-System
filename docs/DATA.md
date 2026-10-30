@@ -4,14 +4,14 @@ The system stores biometric data in all the places below. A deletion request has
 
 | Structure | Shape | Access | Size | Writes | Reads | Trade-off |
 |---|---|---|---|---|---|---|
-| Milvus primary collection `<INSTITUTE>_FACE_DATA_COLLECTION_FOR_COSINE` | `name_id` (VARCHAR 60, primary key), `embeddings` (512 float) | Top 5 by cosine, `GPU_IVF_FLAT`, nlist 128, nprobe 10 | One row per enrolled image: about 55k | `src/util/upload_embeddings.py` | Consumer | Fast approximate search, at the cost of GPU memory and possible misses |
+| Milvus primary collection `<INSTITUTE>_FACE_DATA_COLLECTION_FOR_COSINE` | `name_id` (VARCHAR 60, primary key), `embeddings` (512 float) | Top 5 by cosine, `GPU_IVF_FLAT`, nlist 128, nprobe 10 | One row per enrolled photo: 10 today | `src/util/enrol_person.py`, or `upload_embeddings.py` for a whole pickle | Consumer | Fast approximate search, at the cost of GPU memory and possible misses |
 | Milvus staging collection `<INSTITUTE>_FACE_DATA_STAGING_COLLECTION_FOR_COSINE` | Same | Same | Grows nightly | Nightly updater | Consumer | Adapts to current appearance, but a bad crop can poison matches |
 | `recognition_results` in `<INSTITUTE>_CCTV_Camera_Surveillance` | Person, camera, time, annotated frame | Insert per recognition; reads by date and location | Grows with frames | DB controller | Reporting API | Partitioned by year and location, so reports stay fast; frames make it large |
 | `person_summary`, `face_images` in `<INSTITUTE>_Face_Recognition_Database` | Per-person metadata and crop records | By person | Grows | Face collector | Nightly updater | Tracks which crops are processed |
 | `multiprocessing.Queue` | Frames with camera metadata | FIFO | Unbounded, in memory | Camera threads | Recognition workers | Simplest hand-off between processes; lost on restart |
 | Kafka topics `<location>_<point>` | Feedback messages, one partition per camera | Latest only | Short-lived | Feedback controller | Kafka-WebApp | Displays need only current messages, so the topics hold nothing durable |
-| `FACIAL-RECOGNITION-DATASET/` | Enrolment photos and `FACE_EMBEDDINGS/*.pkl` | Read on re-embedding | 22.5 GB, 54,809 files | Owner, DVC | Enrolment scripts | Versioned by DVC, but images and vectors share one hash |
-| `DISPLAY-FACE-DATASET/` | `<id>/front_face.jpg` | By ID | 1.6 GB, 7,889 files | Owner, DVC | Display server | Plain files are enough for lookup by ID |
+| `FACIAL-RECOGNITION-DATASET/` | `<INSTITUTE>/<person_id>/<pose>.jpg`, 5 or 10 photos each | Read on enrolment | 1 person, 2.2 MB | Owner, DVC | `enrol_person.py` | Versioned by DVC on the dataset store. Vectors are rebuilt from these photos |
+| `DISPLAY-FACE-DATASET/` | `<id>/front_face.jpg` | By ID | 1 person | Owner, DVC | Display server | Plain files are enough for lookup by ID |
 | `DYNAMIC-FACIAL-RECOGNITION-DATASET/` | Crops and `meta.json` | By person and cluster | Grows | Face collector | Nightly updater | Not in DVC |
 | Embeddings pickle | `{"names": [...], "encodings": [...]}` | Whole file | About one vector per image | Enrolment, updater | Upload script | No model or image lineage; unsafe to load from an untrusted source |
 
