@@ -142,11 +142,13 @@ To add new data, run `dvc add FACIAL-RECOGNITION-DATASET`, commit the updated `.
 ### 4. Build and start
 
 ```bash
-./build-docker-images.sh        # build the application images
+docker compose -f docker-compose-main.yml -f docker-compose.dev.yml build   # build the application images
 ./start_complete_project.sh     # standalone stacks, then the main compose stack
 ```
 
 To start in two steps instead, run `./start_standalone_services.sh`, then `docker-compose -f docker-compose-main.yml up -d`.
+
+The images contain the application source, so rebuild them after code changes. For development, start with both files (`docker compose -f docker-compose-main.yml -f docker-compose.dev.yml up -d`): `docker-compose.dev.yml` mounts `./src` over the baked copy, so edits apply on restart without a rebuild.
 
 ### 5. Enroll faces
 

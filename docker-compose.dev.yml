@@ -1,0 +1,50 @@
+# Development override: build images locally and run live source instead of the copy baked into each image.
+# Build:  docker compose -f docker-compose-main.yml -f docker-compose.dev.yml build
+# Run:    docker compose -f docker-compose-main.yml -f docker-compose.dev.yml up -d
+services:
+  mfr-cctv-producer-consumer:
+    build:
+      context: .
+      dockerfile: main.Dockerfile
+
+  mfr-database-controller:
+    build:
+      context: .
+      dockerfile: database-server.Dockerfile
+    volumes:
+      - ./src:/Multi-Person-Face-Recognition/src
+
+  mfr-feedback-controller:
+    build:
+      context: .
+      dockerfile: feedback-server.Dockerfile
+    volumes:
+      - ./src:/Multi-Person-Face-Recognition/src
+
+  mfr-api-service:
+    build:
+      context: .
+      dockerfile: api.Dockerfile
+    volumes:
+      - ./src:/Multi-Person-Face-Recognition/src
+
+  dynamic-face-dataset-collector:
+    build:
+      context: .
+      dockerfile: dynamic-face-dataset-collector.Dockerfile
+    volumes:
+      - ./src:/Multi-Person-Face-Recognition/src
+
+  automate-milvus-update:
+    build:
+      context: .
+      dockerfile: automatic-milvus-db-update.Dockerfile
+    volumes:
+      - ./src:/Multi-Person-Face-Recognition/src
+
+  display-image-server:
+    build:
+      context: .
+      dockerfile: display-image.Dockerfile
+    volumes:
+      - ./src:/Multi-Person-Face-Recognition/src
