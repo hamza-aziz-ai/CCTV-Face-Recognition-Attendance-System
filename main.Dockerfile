@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
   
 # Step 1 - Select base docker image
-FROM python:3.8-slim-buster
+FROM python:3.11-slim-bookworm@sha256:94a8fee35252d06ab75856f15f12c7bae67b10e8a6da93c7fded82b2610926cd
 
 # Set environment variables
 ENV CAM_PORT=554
@@ -25,8 +25,8 @@ RUN apt update -y && apt install ffmpeg libsm6 libxext6  -y
 COPY requirements.txt requirements.txt
 RUN pip3 install -r requirements.txt
 
-# Step 7 - Uncomment following line if we want to copy project contents to docker image
-#COPY . .
+# Step 7 - Copy project source
+COPY src/ src/
 
 # Step 8 - Give starting point of project
 CMD ["python3", "src/main.py"]

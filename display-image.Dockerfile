@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.8-slim-buster
+FROM python:3.11-slim-bookworm@sha256:94a8fee35252d06ab75856f15f12c7bae67b10e8a6da93c7fded82b2610926cd
 
 # Upgrade pip
 RUN python3 -m pip install --upgrade pip
@@ -17,8 +17,8 @@ COPY src/fetch_face_image_server/requirements.txt src/fetch_face_image_server/re
 # Install any needed packages specified in requirements.txt
 RUN python3 -m pip install -r src/fetch_face_image_server/requirements.txt
 
-# Remove requirements.txt
-RUN rm -rf src/
+# Copy project source
+COPY src/ src/
 
 # Give starting point of project
 CMD ["python3", "src/fetch_face_image_server/app.py"]

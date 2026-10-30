@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Step 1 - Select base docker image
-FROM python:3.8-slim-buster
+FROM python:3.11-slim-bookworm@sha256:94a8fee35252d06ab75856f15f12c7bae67b10e8a6da93c7fded82b2610926cd
 
 # Set environment variables
 
@@ -19,8 +19,8 @@ COPY src/database_server/requirements.txt src/database_server/requirements.txt
 # Step 3 - Install project requirements
 RUN python3 -m pip install -r src/database_server/requirements.txt
 
-# Step 4 - Remove requirements.txt
-RUN rm -rf src/
+# Step 4 - Copy project source
+COPY src/ src/
 
 # Step 5 - Give starting point of project
 CMD ["python3", "src/database_server/postgresql_server_controller.py"]
