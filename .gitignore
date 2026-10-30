@@ -181,3 +181,8 @@ dataset-folder-structure.txt
 Custom-ROI-Provisioning/input.jpg
 # Local knowledge graph (contains extracted source, incl. old secrets)
 graphify-out/
+
+# Deployment watcher state (deploy/watch.py)
+deploy/state.json
+deploy/watch.log*
+deploy/watch.lock

@@ -1,6 +1,6 @@
 services:
   mfr-cctv-producer-consumer:
-    image: cctv-face-recognition-producer-consumer:v-beta
+    image: cctv-face-recognition-producer-consumer:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-producer-consumer
     environment:
       CAM_USERNAME: ${CAM_USERNAME}
@@ -42,7 +42,7 @@ services:
       retries: 3
 
   mfr-database-controller:
-    image: cctv-face-recognition-database-controller:v-beta
+    image: cctv-face-recognition-database-controller:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-database-controller
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -62,7 +62,7 @@ services:
       retries: 3
 
   mfr-feedback-controller:
-    image: cctv-face-recognition-feedback-controller:v-beta
+    image: cctv-face-recognition-feedback-controller:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-feedback-controller
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
@@ -79,7 +79,7 @@ services:
       retries: 3
 
   mfr-api-service:
-    image: cctv-face-recognition-api:v-beta
+    image: cctv-face-recognition-api:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-api
     environment:
       API_KEY: ${API_KEY}
@@ -100,7 +100,7 @@ services:
       retries: 3
 
   dynamic-face-dataset-collector:
-    image: cctv-face-recognition-dynamic-face-dataset-collector:v-beta
+    image: cctv-face-recognition-dynamic-face-dataset-collector:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-dynamic-face-dataset-collector
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
@@ -119,7 +119,7 @@ services:
       retries: 3
 
   automate-milvus-update:
-    image: cctv-face-recognition-automate-milvus-update:v-beta
+    image: cctv-face-recognition-automate-milvus-update:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-automate-milvus-update
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
@@ -130,7 +130,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
   display-image-server:
-    image: cctv-face-recognition-front-face-image-display:v-beta
+    image: cctv-face-recognition-front-face-image-display:${IMAGE_TAG:-v-beta}
     container_name: cctv-face-recognition-front-face-image-display
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env

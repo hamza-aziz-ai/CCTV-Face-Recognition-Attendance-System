@@ -19,6 +19,7 @@ Done:
 - `.github/workflows/automerge.yml` (branch `ci/automerge`, stacked on #2): squash-merges PRs into main when `ci` and every other check passed on the exact head commit; it runs only from main's copy (D-013). It only takes effect once merged to main, so #1–#3 themselves are merged by hand.
 - `.github/workflows/release.yml` (branch `ci/release`, stacked on #3): automerge starts it after merging; it bumps from the merged Conventional Commit titles, re-runs `ci` on the exact commit, then tags and publishes a Release with the model manifest attached (D-014).
 - GPU host profile `STANDALONE-SERVICES/hosts/laptop-rtx4050.env` (branch `ops/laptop-gpu-profile`, stacked on #4): GPU 0 for everything, batches det 8 / rec 16. It is active once `HOST_PROFILE=laptop-rtx4050` is in `.env` (D-015).
+- `deploy/watch.py` with `deploy/test_watch.py` (branch `ops/deploy-watcher`, stacked on #5): a pull-based deployment watcher with rollback; images are tagged per release via `IMAGE_TAG`. Setup is in the README under CI/CD (D-016). It is not installed yet: that needs PRs #1–#6 merged and a first release.
 - Repo settings applied: squash merge only (PR title and body become the commit), automatically delete head branches. Dependabot alerts, Dependabot security updates and the read-only default workflow token were already on.
 
 In progress:
@@ -38,7 +39,8 @@ Broken or risky:
 - Dependabot reports 7 vulnerabilities (4 high, 3 moderate), not yet triaged.
 
 Next:
-- Deployment watcher on this machine: Task Scheduler runs a poller of the latest release, which deploys from a separate clone, health-checks, and rolls back to the last good tag on failure.
+- After the first release: create the deploy clone `C:\deploy\cctv`, copy `.env` into it, run `watch.py --enroll` and register the scheduled task (README, CI/CD).
+- Pull the datasets with DVC; none are present on this machine.
 - Actions budget (account Billing page, manual). Allow Actions to create PRs only when `release.yml` lands.
 - Map the producer-consumer runtime files to explicit mounts, replacing its whole-repo `.` mount.
 - Fill the 4 null manifest values from the GPU host (commands are in the manifest's `unverified` block).
