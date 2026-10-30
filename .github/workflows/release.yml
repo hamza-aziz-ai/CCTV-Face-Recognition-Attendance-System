@@ -69,8 +69,29 @@ jobs:
       contents: read
       pull-requests: read
 
-  publish:
+  # The deployable images, pushed before the tag exists so a release is never published without them (D-017).
+  # Names and tags come from docker-compose-main.yml; the dev override only adds the build sections.
+  images:
     needs: [plan, ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_TAG: ${{ needs.plan.outputs.tag }}
+      TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: |
+          set -euo pipefail
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker compose -f docker-compose-main.yml -f docker-compose.dev.yml build
+          # Compose pushes only services with a build section, so postgres is skipped
+          docker compose -f docker-compose-main.yml -f docker-compose.dev.yml push
+
+  publish:
+    needs: [plan, ci, images]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

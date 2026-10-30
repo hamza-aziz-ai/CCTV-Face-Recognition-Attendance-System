@@ -168,3 +168,22 @@ Trade-off:
 - It deploys whatever reached `main` through auto-merge, including Dependabot updates once they cause a release.
 - The datasets are not present on this host yet (DVC not pulled).
 Revisit if: a separate deployment host exists (pull registry images by digest instead of building), or a deploy loses data (add a backup step before `up`).
+
+## D-017: Publish release images to GitHub Packages (ghcr.io); the watcher pulls them (amends D-014, D-016)
+Date: 2026-10-30   Model: Claude Opus 5.5
+Context: v0.1.0 and v0.2.0 were released with no images. The owner expects each release to ship its Docker images as packages.
+Options: 1) DockerHub (needs an account token as a repo secret)  2) GitHub Container Registry with the workflow's own `GITHUB_TOKEN`  3) keep building on the deployment host
+Chosen: 2. A new `images` job in `release.yml` runs after the release CI and before tagging. It builds with both compose files and runs `docker compose push`, which pushes only services with a build section (the 7 app images, not postgres). Images are `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, named in `docker-compose-main.yml`. Every Dockerfile carries `org.opencontainers.image.source`, so each package links to this repository and inherits its private access. The watcher now runs `up --pull missing --no-build` and no longer builds.
+Why:
+- No new secret or account: `GITHUB_TOKEN` gets `packages: write` in that one job only.
+- The deployed image is the one CI built, not a rebuild on the laptop.
+- A release is never published without its images, because tagging waits for the push.
+- GHCR storage and transfer are currently free (GitHub's billing docs; GitHub promises a month's notice before that changes).
+- Tags are never moved, so `--pull missing` downloads a release once and a rollback reuses it offline.
+Trade-off:
+- The deployment host must sign in to ghcr.io once (`gh auth refresh -s read:packages`, then `docker login`); without it every deploy fails and rolls back.
+- The images are rebuilt in the release run instead of reusing the CI build. The bytes can differ from what the CI smoke test ran; same Dockerfiles, pinned base digest.
+- v0.1.0 and v0.2.0 have no images; the first deployable release is v0.3.0.
+- The ROI app has no compose service, so its image is built in CI but not published.
+- DockerHub stays unused.
+Revisit if: the free GHCR policy changes, the repo goes public (DockerHub mirror for discoverability), or a CI-to-release digest match is required (push from the CI image job instead).

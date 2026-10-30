@@ -19,9 +19,8 @@ STATE = ROOT / "deploy" / "state.json"
 LOG = ROOT / "deploy" / "watch.log"
 LOCK = ROOT / "deploy" / "watch.lock"
 COMPOSE = ["docker", "compose", "-f", "docker-compose-main.yml"]
-# The dev override only adds build sections here; containers are started from the main file alone.
-BUILD = COMPOSE + ["-f", "docker-compose.dev.yml", "build"]
-UP = COMPOSE + ["up", "-d", "--no-build", "--wait", "--wait-timeout", "600"]
+# Release images are pulled from ghcr.io once; a rollback reuses the ones already here (tags are never moved).
+UP = COMPOSE + ["up", "-d", "--pull", "missing", "--no-build", "--wait", "--wait-timeout", "600"]
 SMOKE_URL = "http://localhost:9090/docs"
 # Unattended fetches authenticate through the owner's gh login instead of an SSH key that may need a passphrase.
 GIT = ["git", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential"]
@@ -67,11 +66,9 @@ def smoke():
 
 
 def start(tag):
-    """Check out the tag and start its images, building them only if this tag was never built here."""
+    """Check out the tag and start the images CI built and published for it."""
     run("git", "checkout", "--force", "--detach", tag)
-    env = {"IMAGE_TAG": tag}
-    run(*BUILD, env=env)  # cached layers make this quick for a tag that was already built
-    run(*UP, env=env)
+    run(*UP, env={"IMAGE_TAG": tag})
     smoke()
 
 
