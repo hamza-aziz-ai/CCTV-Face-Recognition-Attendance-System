@@ -6,7 +6,7 @@
 
 # call this script to deploy the project
 
-# Load the INSTITUTE and IP_ADDRESS variable from master.env
+# Load the IP_ADDRESS variable from master.env
 . set_configuration.sh
 
 # Per-host overrides (GPU placement, batch sizes) from STANDALONE-SERVICES/hosts/, selected by HOST_PROFILE in .env

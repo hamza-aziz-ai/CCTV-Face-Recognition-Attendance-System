@@ -96,44 +96,5 @@ def process_dataset(dataset_path, output_path, margin=0.4, target_size=1024):
 
 
 if __name__ == "__main__":
-    dataset_folder = None
-
-    print()
-    print("Whose display collection are we creating? (Faculties, Students or GRIL)")
-    print("Choose from the following:")
-    print("========================================================================")
-    print("1) Faculties")
-    print("2) Students")
-    print("3) GRIL")
-    print()
-    dataset_group = int(input("Enter your choice: "))
-    print()
-
-    if dataset_group == 2:
-        batch = input("Which batch display collection are we creating? (For example, Enter 2021 if admission year is 2021) ")
-        enrolled_students = input("Are we creating display collection of currently enrolled students? (Y for Yes / N for No) ")
-        if enrolled_students.lower() == 'y':
-            if batch in ["2021", "2022", "2023", "2024"]:
-                dataset_folder = f"{FACIAL_RECOGNITION_DATASET_PATH}/STUDENT_DATASET/CURRENTLY-ENROLLED-STUDENTS/BATCH_{batch}"
-            else:
-                print(f"{batch} is not present in currently enrolled batch. Please enter values in [2021, 2022, 2023, 2024]")
-                sys.exit(0)
-        elif enrolled_students.lower() == 'n':
-            confirmation = input(f"There is no point in creating display collection of graduated batch {batch}. Do you wish to proceed? (Y for Yes / N for No) ")
-            if confirmation.lower() == "y":
-                dataset_folder = f"{FACIAL_RECOGNITION_DATASET_PATH}/STUDENT_DATASET/GRADUATED-STUDENTS/BATCH_{batch}"
-            else:
-                print("Thank you for your confirmation.")
-                sys.exit(0)
-
-    elif dataset_group == 1:
-        dataset_folder = f"{FACIAL_RECOGNITION_DATASET_PATH}/FACULTY-STAFF-EMPLOYEE_DATASET"
-
-    elif dataset_group == 3:
-        dataset_folder = f"{FACIAL_RECOGNITION_DATASET_PATH}/GRIL-MEMBERS_DATASET"
-
-    else:
-        print("Invalid choice.")
-        sys.exit(0)
-
-    process_dataset(dataset_folder, DISPLAY_FACE_IMAGE_PATH)
+    # Usage: python3 src/util/extract_and_save_face_image.py <dataset_folder>
+    process_dataset(sys.argv[1], DISPLAY_FACE_IMAGE_PATH)

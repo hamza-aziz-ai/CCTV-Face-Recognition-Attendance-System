@@ -172,7 +172,7 @@ DISPLAY-FACE-DATASET
 DYNAMIC-FACIAL-RECOGNITION-DATASET
 
 # Confidential: real camera configs (credentials, IPs, ERP endpoints). Templates: camera_configuration.example.json
-src/Camera-Configuration/*/camera_configuration.json
+src/Camera-Configuration/camera_configuration.json
 src/Camera-Configuration/*/backup.json
 # Personal / client data
 .bash_history

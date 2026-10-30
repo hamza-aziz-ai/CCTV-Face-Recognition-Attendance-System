@@ -87,60 +87,6 @@ def create_embeddings(image_paths: list, embedding_path: str, landmarks_path: st
 
 
 if __name__ == "__main__":
-    dataset_folder, embeddings_folder, face_landmarks_folder = None, None, None
-
-    print()
-    print("Whose dataset collection are we creating? (Faculties, Students or GRIL)")
-    print("Choose from the following:")
-    print("========================================================================")
-    print("1) Faculties")
-    print("2) Students")
-    print("3) GRIL")
-    print()
-    dataset_group = int(input("Enter your choice: "))
-    print()
-    save_landmarks = input("Do you want to save landmarks? (Y for yes / N for no): ")
-    save_landmarks = True if save_landmarks.lower() == "y" else False
-    print()
-
-    if dataset_group == 2:
-        batch = input("Which batch dataset collection are we creating? (For example, Enter 2021 if admission year is 2021) ")
-        enrolled_students = input("Are we creating dataset collection of currently enrolled students? (Y for Yes / N for No) ")
-        if enrolled_students.lower() == 'y':
-            if batch in ["2021", "2022", "2023", "2024"]:
-                dataset_folder = f"{FACIAL_RECOGNITION_DATASET_PATH}/STUDENT_DATASET/CURRENTLY-ENROLLED-STUDENTS/BATCH_{batch}"
-                embeddings_folder = f"{FACIAL_RECOGNITION_EMBEDDINGS_PATH}/STUDENT_EMBEDDINGS/CURRENTLY-ENROLLED-STUDENTS/BATCH_{batch}.pkl"
-                face_landmarks_folder = f"{FACE_LANDMARKS_PATH}/STUDENT-LANDMARKS/CURRENTLY-ENROLLED-STUDENTS/BATCH_{batch}"
-            else:
-                print(f"{batch} is not present in currently enrolled batch. Please enter values in [2021, 2022, 2023, 2024]")
-                sys.exit(0)
-        elif enrolled_students.lower() == 'n':
-            confirmation = input(f"There is no point in creating dataset collection of graduated batch {batch}. Do you wish to proceed? (Y for Yes / N for No) ")
-            if confirmation.lower() == "y":
-                dataset_folder = f"{FACIAL_RECOGNITION_DATASET_PATH}/STUDENT_DATASET/GRADUATED-STUDENTS/BATCH_{batch}"
-                embeddings_folder = f"{FACIAL_RECOGNITION_EMBEDDINGS_PATH}/STUDENT_EMBEDDINGS/GRADUATED-STUDENTS/BATCH_{batch}.pkl"
-                face_landmarks_folder = f"{FACE_LANDMARKS_PATH}/STUDENT-LANDMARKS/GRADUATED-STUDENTS/BATCH_{batch}"
-            else:
-                print("Thank you for your confirmation.")
-                sys.exit(0)
-
-    elif dataset_group == 1:
-        dataset_folder = f"{FACIAL_RECOGNITION_DATASET_PATH}/FACULTY-STAFF-EMPLOYEE_DATASET"
-        embeddings_folder = f"{FACIAL_RECOGNITION_EMBEDDINGS_PATH}/FACULTY-STAFF-EMPLOYEE_EMBEDDINGS/Faculty-Staff-Employee.pkl"
-        face_landmarks_folder = f"{FACE_LANDMARKS_PATH}/FACULTY-STAFF-EMPLOYEE_LANDMARKS"
-
-    elif dataset_group == 3:
-        dataset_folder = f"{FACIAL_RECOGNITION_DATASET_PATH}/GRIL-MEMBERS_DATASET"
-        embeddings_folder = f"{FACIAL_RECOGNITION_EMBEDDINGS_PATH}/GRIL-MEMBERS_EMBEDDINGS/GRIL-Members.pkl"
-        face_landmarks_folder = f"{FACE_LANDMARKS_PATH}/GRIL-MEMBERS_LANDMARKS"
-
-    else:
-        print("Invalid choice.")
-        sys.exit(0)
-
-    dataset_folder = "/home/hamza/Downloads/Hamza-Aziz/Hamza Aziz"
-    embeddings_folder = "/home/hamza/Downloads/Hamza-Aziz.pkl"
-
-    images_paths = list_image_paths(dataset_folder)
-
-    create_embeddings(images_paths, embeddings_folder, face_landmarks_folder, save_landmarks)
+    # Usage: python3 src/util/insightface_embeddings.py <dataset_folder> <embeddings.pkl> [--landmarks]
+    dataset_folder, embeddings_file = sys.argv[1:3]
+    create_embeddings(list_image_paths(dataset_folder), embeddings_file, FACE_LANDMARKS_PATH, "--landmarks" in sys.argv)
