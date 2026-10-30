@@ -101,7 +101,10 @@ services:
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
     ports:
       - "9090:8000"
+    # database-controller creates CCTV_Camera_Surveillance, which the API reads
     depends_on:
+      mfr-database-controller:
+        condition: service_healthy
       postgresql-face-recognition:
         condition: service_healthy
     healthcheck:
@@ -130,6 +133,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    # It creates Face_Recognition_Database at start
+    depends_on:
+      postgresql-face-recognition:
+        condition: service_healthy
 
   automate-milvus-update:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-automate-milvus-update:${IMAGE_TAG:-v-beta}
@@ -143,6 +150,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # Reads Face_Recognition_Database, which the collector creates
+    depends_on:
+      dynamic-face-dataset-collector:
+        condition: service_healthy
 
   display-image-server:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-front-face-image-display:${IMAGE_TAG:-v-beta}

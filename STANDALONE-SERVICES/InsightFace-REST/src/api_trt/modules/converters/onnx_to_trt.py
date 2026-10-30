@@ -1,3 +1,4 @@
+import os
 import sys
 from typing import Union
 
@@ -111,8 +112,12 @@ def convert_onnx(input_onnx: Union[str, bytes], engine_file_path: str, force_fp1
 
     assert not isinstance(engine, type(None))
 
-    with open(engine_file_path, "wb") as f:
+    # Workers sharing /models build the same engine at first start: write a private file, then swap it in, so no
+    # worker ever loads a half-written engine.
+    temp_path = f"{engine_file_path}.{os.getpid()}.tmp"
+    with open(temp_path, "wb") as f:
         if trt10:
             f.write(engine)
         else:
             f.write(engine.serialize())
+    os.replace(temp_path, engine_file_path)

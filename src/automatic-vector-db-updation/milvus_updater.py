@@ -66,7 +66,8 @@ DB_CONFIG = {
 # == Initialize InsightFace client ==
 insightface_client = IFRClient(host=INSIGHTFACE_HOST, port=INSIGHTFACE_PORT)
 create_connection(host=MILVUS_HOST, port=MILVUS_PORT)
-collection = Collection(MILVUS_STAGING_COLLECTION_NAME)
+# Creates the collection on a fresh install; opening it directly crash-looped until another service created it
+collection = create_collection(MILVUS_STAGING_COLLECTION_NAME)
 
 
 # ----------------------------------------------------------------------------
