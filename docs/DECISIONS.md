@@ -271,3 +271,12 @@ Why: The display client has its own release cycle and also runs on Raspberry Pis
 Trade-off: Clones need `--recurse-submodules`. A change to the client takes two steps: a release there, then a pin update here. The other two copies are not kept in step.
 Revisit if: the planned merge with PTZ-Camera-Classroom-Attendance-System changes how the display client is shared.
 
+## D-025: Green CI is the merge and ship gate
+Date: 2026-10-30   Model: Claude Opus 5.5
+Context: The Defend What You Ship guide asks a human to read every diff and run a pre-ship gate. Auto-merge (D-013) ships on green CI with no human review, in this repository and in Kafka-WebApp.
+Options: 1) human approval on every PR  2) human approval on `feat:` and `fix:` only  3) green CI is the gate
+Chosen: 3, the owner's decision: "As soon as the CI checks pass, I am okay."
+Why: CI/CD exists to automate this; the owner does not want a manual step in it.
+Trade-off: Anything CI does not check ships unchecked, and CI has no test of recognition itself. Anything that must hold has to become a CI check.
+Revisit if: a release that passed CI harms a real site.
+
