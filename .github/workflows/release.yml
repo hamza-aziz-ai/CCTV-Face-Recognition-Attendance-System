@@ -83,6 +83,10 @@ jobs:
       TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # All 7 images on one runner hit "No space left on device"; these preinstalled toolchains are unused here
+      - run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
       - run: |
           set -euo pipefail
           echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
