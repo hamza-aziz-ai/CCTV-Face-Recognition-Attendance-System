@@ -1,0 +1,20 @@
+# Version updates only for pinned references that otherwise go stale silently:
+# action commit SHAs in workflows and the base-image digest in the Dockerfiles.
+# Python dependency vulnerabilities arrive through Dependabot security updates (repo setting).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      base-images:
+        patterns: ["*"]
