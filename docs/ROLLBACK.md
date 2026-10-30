@@ -17,7 +17,7 @@ To stop automatic deploys: `schtasks /Change /TN "CCTV deploy watcher" /DISABLE`
 |---|---|
 | PostgreSQL 12 to 18 (D-020) | Not possible any more: the 12 data was deleted on 2026-10-31, after the client names were removed. |
 | Milvus 2.5 to 3.0 (D-022) | Not possible any more: the 2.5.1 test data was deleted on 2026-10-31. |
-| Kafka | Nothing to restore: topics are recreated at start. |
+| Kafka | Topics live in the `kafka-data` volume (D-028). To start empty, stop the Kafka stack and remove `confluent-kafka_kafka-data`; each service recreates its own topics. |
 | Dataset store | `stop_standalone_services.sh` keeps `DATASET_STORE_DIR`. There is no second copy of it yet. |
 
 ## Standalone services

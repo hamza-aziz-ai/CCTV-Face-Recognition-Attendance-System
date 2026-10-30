@@ -234,12 +234,12 @@ Revisit if: PostgreSQL 19 is released and has been stable for a minor release or
 
 ## D-021: Confluent Platform 7.8 to 8.4.0, community edition
 Date: 2026-10-30   Model: Claude Opus 5.5
-Context: The Kafka stack ran Confluent 7.8.0 images. The owner asked for the latest stable release, pointing at cp-all-in-one v8.4.0. That file has two editions: the enterprise one runs the commercial Confluent Server (`cp-server`) and Control Center next-gen, license-gated after a 30-day trial, and its Prometheus takes port 9090 (the API's port).
+Context: The Kafka stack ran Confluent 7.8.0 images. The owner asked for the latest stable release, pointing at cp-all-in-one v8.4.0. That file has two editions: the enterprise one runs the commercial Confluent Server (`cp-server`) and Control Center next-gen, which needs a license key (a free developer license covers a single broker), and its Prometheus takes port 9090 (the API's port).
 Options: 1) enterprise cp-all-in-one 8.4.0  2) community cp-all-in-one 8.4.0  3) broker only
 Chosen: 2 (owner's choice). `STANDALONE-SERVICES/Confluent-Kafka/docker-compose.yml` follows `cp-all-in-one-community/docker-compose.yml` at v8.4.0: broker `cp-kafka:8.4.0` (Apache Kafka 4.x, KRaft), Schema Registry, Connect (`kafka-connect-datagen`), ksqlDB, REST Proxy and Flink. Local changes: the broker advertises `${IP_ADDRESS}` instead of localhost, and every service restarts unless stopped. Client `confluent-kafka` 2.7.0 to 2.16.1.
 Why: Free broker with no license clock; the app only uses the broker. Our broker settings were already KRaft and carry over unchanged.
-Trade-off: No Control Center UI. Flink adds three containers the app does not use. The 7.8 `ksqldb-cli`, `ksql-datagen` and legacy Control Center have no 8.4.0 counterpart in the community file and were removed. Topic data lives in `/tmp` inside the broker, as before, and does not survive recreation (the producer recreates its topics at start).
-Revisit if: a UI is needed (Control Center next-gen needs a license), or the unused tools cost too much memory (drop to broker only).
+Trade-off: No Control Center UI. Flink adds three containers the app does not use. The 7.8 `ksqldb-cli`, `ksql-datagen` and legacy Control Center have no 8.4.0 counterpart in the community file and were removed. Topic data lived in `/tmp` inside the broker and was lost on recreation; D-028 moved it to a volume.
+Revisit if: Kafbat UI (`127.0.0.1:8085`, added 2026-10-31) falls short (Control Center next-gen needs a license key), or the unused tools cost too much memory (drop to broker only).
 
 ## D-022: Milvus 2.5.1 to 3.0.5, following the official compose file
 Date: 2026-10-30   Model: Claude Opus 5.5
@@ -303,3 +303,12 @@ Why: A tenant setting now would guess at a design the owner has not chosen. A de
 Trade-off: Breaking: a site with data must rename its Milvus collections, Postgres databases and folders, or re-enrol. The names remain in git history.
 Revisit if: the multi-client model is decided.
 
+
+## D-028: Kafka topics are kept, on a broker volume
+Date: 2026-10-31   Model: Claude Opus 5.5
+Context: Each `producer-consumer` start and stop deleted and recreated its topics, then slept 30 s. Broker data lived in `/tmp`, so recreating the broker lost every topic. Auto-creation then rebuilt Schema Registry's and Connect's topics with the delete policy (both crash-looped) and the app topics with 1 partition instead of one per camera. The display must stay real-time.
+Options: 1) keep deleting topics  2) keep topics, create only missing ones and add partitions for new cameras
+Chosen: 2. `ensure_kafka_topics()` creates missing topics and grows partitions, and waits for the result. The broker keeps its data on the `kafka-data` volume and has auto-creation off. Connect gets `CONNECT_REST_PORT` so its healthcheck passes.
+Why: Deleting topics lost messages and raced the feedback controller. Kafka-WebApp reads from the end, so old messages are never replayed; the 5 s retention removes them.
+Trade-off: Partitions cannot shrink, so removing cameras leaves unused partitions. A topic the producer does not create is refused instead of auto-created.
+Revisit if: topic settings must change (alter them with `kafka-configs`, or delete the topic once by hand).
