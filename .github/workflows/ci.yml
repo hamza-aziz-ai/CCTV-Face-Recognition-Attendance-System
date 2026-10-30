@@ -1,0 +1,116 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Reused by the release workflow so images are only published from a commit that passed these checks
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Syntax errors and undefined names only; the codebase predates any style config
+      - run: pipx run ruff==0.17.3 check --select E9,F63,F7,F82 --target-version py311 --extend-exclude STANDALONE-SERVICES,graphify-out --output-format github .
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # Personal-account repo: no GITLEAKS_LICENSE needed
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Unset credentials only produce warnings; this catches YAML and schema errors
+      - run: docker compose -f docker-compose-main.yml config --quiet
+
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: producer-consumer
+            dockerfile: main.Dockerfile
+            files: src/main.py
+          - service: database-controller
+            dockerfile: database-server.Dockerfile
+            files: src/database_server/postgresql_server_controller.py src/database_server/healthcheck_db_controller.sh
+          - service: feedback-controller
+            dockerfile: feedback-server.Dockerfile
+            files: src/feedback_server/feedback_msg_server_controller.py src/feedback_server/healthcheck_feedback_controller.sh
+          - service: api
+            dockerfile: api.Dockerfile
+            files: src/api/app.py src/api/healthcheck_api.sh
+          - service: display-image
+            dockerfile: display-image.Dockerfile
+            files: src/fetch_face_image_server/app.py src/fetch_face_image_server/healthcheck_display_image_server.sh
+          - service: dynamic-face-dataset-collector
+            dockerfile: dynamic-face-dataset-collector.Dockerfile
+            files: src/dynamic_face_data_collector/api.py src/dynamic_face_data_collector/healthcheck.sh
+          - service: automatic-milvus-db-update
+            dockerfile: automatic-milvus-db-update.Dockerfile
+            files: src/automatic-vector-db-updation/milvus_updater.py
+          - service: roi
+            dockerfile: roi.Dockerfile
+            files: Custom-ROI-Provisioning/app.py
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          tags: ci/${{ matrix.service }}:test
+          load: true
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+      # Smoke test: dependencies resolve and import, entrypoint and healthcheck shipped,
+      # site config and secrets kept out of the image (they are mounted at runtime)
+      - name: Smoke test
+        env:
+          FILES: ${{ matrix.files }}
+        run: |
+          docker run --rm --entrypoint sh -e FILES ci/${{ matrix.service }}:test -c '
+            set -e
+            pip check
+            python3 -c "import cv2, numpy"
+            for f in $FILES; do test -e "$f"; done
+            for f in src/*/healthcheck*.sh; do test ! -e "$f" || test -x "$f"; done
+            test ! -e master.env
+            test ! -e .env
+            test ! -e .git
+            test ! -e src/Camera-Configuration
+          '
+
+  # Single required status check for branch rules; fails if any job failed or was cancelled
+  ci:
+    if: always()
+    needs: [lint, secrets, compose, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
