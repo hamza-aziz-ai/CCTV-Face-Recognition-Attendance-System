@@ -76,3 +76,10 @@ cd STANDALONE-SERVICES/Milvus-Vector-Database
 echo "shutdown Milvus stack"
 docker-compose --env-file ../standalone-services.env down
 cd ../..
+
+# Dataset store (DVC remote) cleanup; its data folder (DATASET_STORE_DIR) is kept
+# shellcheck disable=SC2164
+cd STANDALONE-SERVICES/Dataset-Store
+echo "shutdown Dataset Store"
+docker-compose --env-file ../../.env down
+cd ../..

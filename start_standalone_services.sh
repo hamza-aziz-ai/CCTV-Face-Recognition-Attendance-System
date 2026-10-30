@@ -44,6 +44,15 @@ cd ../..
 
 echo
 
+# start the dataset store (DVC remote); its credentials and data folder come from .env
+echo "Starting Dataset Store (DVC remote)"
+# shellcheck disable=SC2164
+cd STANDALONE-SERVICES/Dataset-Store
+docker-compose --env-file ../../.env up -d
+cd ../..
+
+echo
+
 # start Kafka
 echo "Starting Confluent Kafka Service"
 # shellcheck disable=SC2164
