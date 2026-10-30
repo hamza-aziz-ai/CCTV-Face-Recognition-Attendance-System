@@ -45,7 +45,7 @@ DB_CONFIG = {
     'user': os.environ.get("POSTGRES_USER"),
     'password': os.environ.get("POSTGRES_PASSWORD"),
     'host': os.environ.get("POSTGRES_HOST", "localhost"),
-    'port': 5432
+    'port': os.environ.get("POSTGRESQL_PORT", "5432")
 }
 
 DYNAMIC_DATASET_PATH = "DYNAMIC-FACIAL-RECOGNITION-DATASET.bak/ABESIT"

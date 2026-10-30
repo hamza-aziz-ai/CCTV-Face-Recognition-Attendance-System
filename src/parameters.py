@@ -186,8 +186,8 @@ ENABLE_DATABASE_SERVER = True
 # PostgreSQL Host
 POSTGRESQL_HOST = IP_ADDRESS
 
-# PostgreSQL port
-POSTGRESQL_PORT = 5432
+# PostgreSQL port on the host; a host whose 5432 is taken publishes another one (POSTGRES_HOST_PORT in .env)
+POSTGRESQL_PORT = int(os.getenv("POSTGRESQL_PORT", "5432"))
 
 # PostgreSQL Database Name
 POSTGRESQL_DATABASE = f"{INSTITUTE}_CCTV_Camera_Surveillance"

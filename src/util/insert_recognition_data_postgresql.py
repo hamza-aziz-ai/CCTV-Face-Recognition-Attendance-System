@@ -13,7 +13,7 @@ DB_CONFIG = {
     'user': 'postgres',
     'password': os.environ.get("POSTGRES_PASSWORD"),
     'host': 'localhost',
-    'port': 5432
+    'port': os.environ.get("POSTGRESQL_PORT", "5432")
 }
 
 
