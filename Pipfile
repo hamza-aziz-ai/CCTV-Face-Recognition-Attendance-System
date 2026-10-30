@@ -16,4 +16,4 @@ python-dotenv = "~=1.0.1"
 [dev-packages]
 
 [requires]
-python_version = "3.12"
+python_version = "3.14"
