@@ -121,3 +121,20 @@ Why: It needs no PAT and no paid plan, and fixes the two problems that made D-00
 - Forks and drafts are skipped. After a merge it sweeps again (up to 5 times) so PRs stacked on the merged branch, which GitHub retargets to main without re-running CI, merge as well.
 Trade-off: Nothing stops a direct push to main (no branch protection on Free). CI ran against the base as it was when the PR last changed, not against the newest main. Dependabot PRs merge too once CI passes, and so reach releases without review.
 Revisit if: the account moves to Pro (switch to a ruleset requiring `ci` and native auto-merge), or a bad auto-merge reaches main.
+
+## D-014: Automatic releases from Conventional Commit PR titles, chained from auto-merge
+Date: 2026-10-30   Model: Claude Opus 5.5 (pattern from the Medical-ChatBot session)
+Context: The owner wants a release whenever merged work calls for a version bump. Merges made by auto-merge use GITHUB_TOKEN, and those start no push workflows.
+Options: 1) release-please (release PR)  2) a home-made bump from the merged titles, started by auto-merge via workflow_dispatch  3) one release per merge (Medical-ChatBot)
+Chosen: 2: `.github/workflows/release.yml`. Squash merges make each commit subject a PR title:
+- `type!:` or a `BREAKING CHANGE` footer → major
+- `feat` → minor
+- `fix` or `perf` → patch
+- anything else (docs, ci, chore, build, Dependabot's `build(deps)`) → no release
+Auto-merge starts it after merging. It re-runs the full `ci` on the exact commit, then creates the tag through the API and a GitHub Release with generated notes and `model-manifest.json` attached.
+Why: Release-please opens its release PR with GITHUB_TOKEN, which gets no CI, so that PR would need a PAT to auto-merge. Option 2 needs no PAT, no release PR and no extra config. Option 3 releases every docs or CI change.
+Trade-off:
+- PR titles must follow Conventional Commits, and nothing enforces it yet; a wrongly typed title skips or under-bumps a release.
+- No images are pushed: the deployment host is this machine, which builds from the tag. The registry push is deferred until DockerHub is configured or a separate host exists.
+- Null host-only manifest values are listed as unverified but do not block a release; drift does block.
+Revisit if: wrong bumps happen (add a PR-title check to `ci`), images must be pulled by another host (add a registry push), or the A100 host is built (make `check_manifest.py --release` blocking).

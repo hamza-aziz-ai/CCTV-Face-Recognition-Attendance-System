@@ -1,0 +1,89 @@
+name: release
+
+# Tags and publishes a GitHub Release when the commits merged since the last release call for a version bump
+# (D-014). Squash merges make each commit subject a PR title, read as a Conventional Commit:
+#   type!: or a "BREAKING CHANGE" footer -> major, feat -> minor, fix/perf -> patch, anything else -> no release.
+# automerge starts this workflow after it merges (workflow_dispatch is an event GITHUB_TOKEN may start; its
+# merges start no push workflows). It can also be run by hand, optionally forcing the bump.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump; auto reads the merged commit titles
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+
+permissions:
+  contents: read
+
+# A running release is never cancelled; a queued one plans again from the tags as they are by then.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: plan
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          last=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || true)
+          subjects=$(git log --format=%s "${last:+$last..}HEAD")
+          bodies=$(git log --format=%b "${last:+$last..}HEAD")
+          if [ "$BUMP" = auto ]; then
+            if grep -qE '^[a-z]+(\([^)]*\))?!:' <<<"$subjects" || grep -q '^BREAKING CHANGE' <<<"$bodies"; then BUMP="major"
+            elif grep -qE '^feat(\([^)]*\))?:' <<<"$subjects"; then BUMP="minor"
+            elif grep -qE '^(fix|perf)(\([^)]*\))?:' <<<"$subjects"; then BUMP="patch"
+            else
+              echo "No feat, fix, perf or breaking change since ${last:-the first commit}; nothing to release."
+              echo "tag=" >> "$GITHUB_OUTPUT"; exit 0
+            fi
+          fi
+          IFS=. read -r major minor patch <<<"${last:-v0.0.0}"; major=${major#v}
+          case "$BUMP" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          tag="v$major.$minor.$patch"
+          echo "Releasing $tag ($BUMP) at $GITHUB_SHA; previous: ${last:-none}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  # Every CI gate again on the exact commit being released (a squash merge is a new commit).
+  ci:
+    needs: plan
+    if: needs.plan.outputs.tag != ''
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      pull-requests: read
+
+  publish:
+    needs: [plan, ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Drift fails the release; host-only values still null are listed as unverified but do not block (D-014).
+      - run: python3 -I mlops/check_manifest.py
+      - name: Tag and publish
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
+          gh release create "$TAG" --verify-tag --generate-notes --title "$TAG" mlops/model-manifest.json
