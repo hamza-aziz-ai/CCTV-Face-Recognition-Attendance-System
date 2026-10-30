@@ -241,3 +241,15 @@ Why: Free broker with no license clock; the app only uses the broker. Our broker
 Trade-off: No Control Center UI. Flink adds three containers the app does not use. The 7.8 `ksqldb-cli`, `ksql-datagen` and legacy Control Center have no 8.4.0 counterpart in the community file and were removed. Topic data lives in `/tmp` inside the broker, as before, and does not survive recreation (the producer recreates its topics at start).
 Revisit if: a UI is needed (Control Center next-gen needs a license), or the unused tools cost too much memory (drop to broker only).
 
+## D-022: Milvus 2.5.1 to 3.0.5, following the official compose file
+Date: 2026-10-30   Model: Claude Opus 5.5
+Context: The owner asked for the latest stable Milvus and pointed at the official standalone compose file of the 3.0 line. The newest release is v3.0.5 (2026-10), newer than the v3.0.3 linked.
+Options: 1) stay on 2.6.x  2) 3.0.5 with our old compose  3) 3.0.5 following its official GPU compose file
+Chosen: 3. `STANDALONE-SERVICES/Milvus-Vector-Database/docker-compose.yml` follows `milvus-standalone-docker-compose-gpu.yaml` from the v3.0.5 release, images pinned by digest: `milvusdb/milvus:v3.0.5-gpu`, `quay.io/coreos/etcd:v3.5.25` and the Milvus-tested `milvusdb/minio:RELEASE.2024-12-18T13-15-44Z` (published by the Milvus project; replaces `pgsty/minio` here, the dataset store keeps `pgsty/minio`). It adds the official `milvus-volume-init` step, because 3.0 runs as the non-root user `milvus`. Local changes: GPU from `MILVUS_GPU_DEVICE`, restart unless stopped. Client `pymilvus` 2.5 to 3.0.2.
+Why: The official file is the combination Milvus tests and releases. The app's ORM calls (`Collection`, `utility`) still work in pymilvus 3.0 (deprecated, removed in 3.1).
+Trade-off:
+- Milvus does not upgrade 2.5 data to 3.0 directly. A site with data must go 2.5 -> 2.6.x (latest 2.6 tag) -> 3.0.5, one restart each, after backing up etcd and MinIO (`milvus-backup`). Or rebuild the collections from the embeddings, which the nightly updater does from the dataset.
+- On this laptop, Milvus 3.0.5 first started on the 2.5.1 data and the older Milvus-tested MinIO crash-looped on data written by the newer `pgsty/minio`. The 2.5.1 test data (64 MB) was moved to `/usr/local/database/milvus-2.5.1-backup` in the Docker VM and 3.0.5 started fresh.
+- The ORM API must move to `MilvusClient` before pymilvus 3.1.
+Revisit if: pymilvus 3.1 is needed (port the ORM calls first), or a site holds vectors that cannot be rebuilt from images (rehearse the 2.6 step on a copy).
+

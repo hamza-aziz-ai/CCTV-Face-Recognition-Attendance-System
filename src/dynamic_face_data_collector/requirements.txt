@@ -9,6 +9,6 @@ opencv-python~=4.10.0.84
 python-multipart~=0.0.20
 msgpack~=1.1.0
 ujson~=5.10.0
-pymilvus~=2.5
+pymilvus~=3.0.2
 psycopg2-binary~=2.9.13
 typing-extensions~=4.12.2
