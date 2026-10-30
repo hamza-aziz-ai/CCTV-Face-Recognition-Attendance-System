@@ -269,13 +269,16 @@ The system stores biometric data (face images and embeddings) in several places.
 
 The display client lives in the `Kafka-WebApp` submodule. See [Kafka-WebApp/README.md](Kafka-WebApp/README.md) for first-time setup and [Kafka-WebApp/Configure-Parameters-for-Raspberry.md](Kafka-WebApp/Configure-Parameters-for-Raspberry.md) for changing parameters.
 
+## Project documents
+
+How the system works, why it looks this way and where it breaks: [architecture](docs/ARCHITECTURE.md), [flow](docs/FLOW.md), [data](docs/DATA.md), [decisions](docs/DECISIONS.md), [alternatives](docs/ALTERNATIVES.md), [threats](docs/THREAT.md), [failures](docs/FAILURE.md), [rollback](docs/ROLLBACK.md), [test checklist](docs/TEST-CHECKLIST.md), [constraints](docs/CONSTRAINTS.md), [allow policy](docs/ALLOW-POLICY.md), [assumptions](docs/ASSUMPTIONS.md), [dependencies](docs/DEPENDENCIES.md), [defense brief](docs/DEFENSE.md), [handover](docs/HANDOVER.md).
+
 ## Known issues
 
 - The duplicate check in `src/database_server/postgresql_database.py` queries a `recognition_timestamp` column that the table does not define, and puts a `%s` placeholder inside a quoted interval. Recognition inserts fail unless the live table was migrated by hand.
-- The application health checks end with `echo $?`, so they always report healthy; the API check also probes the wrong port.
 - The nightly updater replaces all of a person's staging vectors with only that night's new crops.
 - Face clusters are defined only for the ABESIT main-gate cameras, so the face collector rejects crops from other cameras.
-- The images use Python 3.8 and PostgreSQL 12, both past end of life.
+- Most internal services have no authentication: see [docs/THREAT.md](docs/THREAT.md).
 
 ## Authors
 

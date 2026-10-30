@@ -1,6 +1,12 @@
 # HANDOVER
 
-Read first: docs/DECISIONS.md. Newest entry on top.
+Read first: docs/ARCHITECTURE.md, docs/CONSTRAINTS.md, docs/DECISIONS.md. Newest entry on top.
+
+## Session summary: 2026-10-30, late (model: Claude Opus 5.5)
+
+Done: CI/CD end to end; the watcher deploys releases to this host; PostgreSQL 18.6, Kafka 8.4, Milvus 3.0.5, Python 3.14; Kafka-WebApp as a submodule with its own CI and releases; the guide's docs written.
+Left: datasets from Google Drive; `DATASET_STORE_*` in `.env`; InsightFace 0.9.5 (on hold, see docs/features/); Dependabot alerts; rewrite docs/DEFENSE.md in the owner's words.
+Risks: no real camera or face has gone through the system since the upgrades; most internal services have no login (docs/THREAT.md); the Raspberry Pis cannot pull the private `kafka-webapp` package yet.
 
 ## Latest session: 2026-10-30 (model: Claude Opus 5.5, council with Codex gpt-6.1-sol)
 
@@ -29,7 +35,7 @@ Done:
 - Repo settings applied: squash merge only (PR title and body become the commit), automatically delete head branches. Dependabot alerts, Dependabot security updates and the read-only default workflow token were already on.
 
 In progress:
-- PR #1 (`ci/docker-packaging`): step 2 commits are local-verified (8 builds and smoke tests pass); waiting for the first `ci` run on GitHub.
+- Nothing running. InsightFace 0.9.5 on TensorRT 11 is on hold: docs/features/insightface-0.9.5-trt11.md.
 
 Broken or risky:
 - This machine is both the dev and the deployment server (from 2026-10-30): Windows 11, Docker Desktop, RTX 4050 Laptop 6 GB. The repo config assumes an A100 host:
@@ -50,11 +56,10 @@ Next:
 - Turn on Docker Desktop "Start Docker Desktop when you sign in" (owner).
 - Raspberry Pis: the `kafka-webapp` package is private, so they cannot pull it yet (make it public in the package settings, or log them in). Not tested on a real Pi.
 - Datasets: add `DATASET_STORE_*` to `.env`, start the store, then on a machine with the Google Drive remote `dvc pull -r face-recognition-dataset-gdrive` and `dvc push -r minio`.
-- Actions budget (account Billing page, manual). Allow Actions to create PRs only when `release.yml` lands.
 - Map the producer-consumer runtime files to explicit mounts, replacing its whole-repo `.` mount.
 - Fill the 4 null manifest values from the GPU host (commands are in the manifest's `unverified` block).
 
 Do not touch:
 - `STANDALONE-SERVICES/` upstream services (InsightFace-REST, Milvus, Kafka).
-- The `Kafka-WebApp` submodule (belongs to another account).
-- Production hosts: no deployment automation until the phase-two criteria in the plan are met. Never run a self-hosted Actions runner on this machine: it is also the dev box.
+- Kafka-WebApp code from this repository: change it in its own repository.
+- Never run a self-hosted Actions runner on this machine: it is also the dev box.

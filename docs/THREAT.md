@@ -1,0 +1,29 @@
+# Threat model
+
+The system holds biometric data (face images and embeddings) of real people, which falls under India's DPDP Act 2023. Gaps are listed plainly below.
+
+| Actor | Entry point | Worst realistic abuse | In place | Gap |
+|---|---|---|---|---|
+| Anyone on the LAN | `/ingest` :20001 | Forge or flood attendance records | Nothing | No auth |
+| Anyone on the LAN | `/faces` :8000 | Inject face crops that feed the staging collection, so a person can be matched as someone else | Nothing | No auth |
+| Anyone on the LAN | `/post_images` :20013, CORS `*` | Read portraits of anyone by ID | Nothing | No auth |
+| Anyone on the LAN | Milvus :19530 | Read, change or delete all embeddings | Nothing | No auth |
+| Anyone on the LAN | Milvus MinIO :9000/:9001 | Same, with default `minioadmin` login | Nothing | Default credentials |
+| Anyone on the LAN | Kafka :9092, PLAINTEXT | Fake display messages, read who was recognised | Nothing | No auth or TLS |
+| Anyone on the LAN | Postgres port | Read everything, given the password | Password from `.env` | No TLS |
+| Anyone on the LAN | InsightFace :6385 | Use the GPU, deny service | Nothing | No auth |
+| Anyone with the API key | `:9090?api_key=` | Read all attendance and frames | Key check | Key is in the URL, so it lands in logs; compared with `==`; one shared key |
+| A person at a camera | Camera | Hold up a photo to be marked present | Liveness code exists | Liveness is off (`ENABLE_FACE_LIVENESS_DETECTION = False`) |
+| Insider | Dataset store :9010 | Copy all face images | Own login, separate from Milvus | Root login used by DVC; no read-only user; no encryption at rest beyond BitLocker |
+| Compromised dependency | Images, packages | Code runs in every service | Pinned versions and digests, Dependabot, gitleaks | 9 open Dependabot alerts at last count, not triaged; `pgsty/minio` is a community fork |
+| Compromised PR or GitHub account | CI, releases | Malicious code merges and deploys itself to this host, with no human review (D-025) | CI checks; automerge runs only from `main`, skips forks, and needs every check to pass | Nothing beyond CI stops it |
+| Someone with this laptop | Disk | Everything | Windows login | `.env` is plain text in two folders |
+
+Worst first, what to close:
+
+1. Put the services on a private Docker network, and publish only 9090 and what displays need.
+2. Add a key to `/ingest`, `/faces` and `/post_images`.
+3. Change the Milvus MinIO credentials and turn on Milvus authentication.
+4. Move the API key from the query string to a header.
+5. Triage the Dependabot alerts.
+6. Add a deletion path for one person across images, Milvus and Postgres (see [DATA.md](DATA.md)).
