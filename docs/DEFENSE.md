@@ -1,36 +1,64 @@
 # DEFENSE: CCTV Face Recognition Attendance System
 
-**AI draft. The guide says this must end up in your own words: rewrite it, then delete this line.**
+## What It Does
 
-## What it does
+This system uses CCTV cameras to recognise people and automatically record their attendance. Whenever someone is identified, their details appear on a display, and their attendance is sent to the institution's ERP system.
 
-Recognises people on CCTV cameras and marks their attendance automatically. It shows each recognised person on a display and sends the records to the institution's ERP.
+The idea is to make attendance tracking easier without requiring people to manually check in.
 
-## How it works
+## How It Works
 
-Cameras -> frame queue -> GPU detection and embeddings -> vector search -> Postgres, ERP and displays. A nightly job adds fresh face crops, so matching keeps up with how people look now. Full path in [FLOW.md](FLOW.md).
+The process starts with CCTV cameras capturing video frames. These frames are added to a queue and processed on the GPU, where faces are detected and converted into embeddings. The embeddings are then searched against the stored face data to identify the person.
 
-## Key decisions and why X over Y
+Once a match is found, the attendance is recorded in PostgreSQL, sent to the ERP, and shown on the display.
 
-- Vector search instead of comparing faces one by one, because it stays fast at tens of thousands of images.
-- A second, staging collection, to recognise people whose appearance has changed, without touching enrolled data.
-- Kafka only for feedback, not frames, because frames need speed and displays need a stream.
-- The deploy host pulls releases, so nothing outside can push to it.
+There's also a nightly job that collects recent face images. This helps the system recognise people even when their appearance changes over time.
 
-More in [ALTERNATIVES.md](ALTERNATIVES.md).
+The complete workflow is documented in [FLOW.md](FLOW.md).
 
-## Data structures and why
+## Key Decisions and Why I Made Them
 
-512-number embeddings in Milvus with cosine search; attendance in Postgres, partitioned by year and location so reports stay fast. See [DATA.md](DATA.md).
+- **Vector search instead of direct face comparison:** Comparing every detected face against thousands of stored images would be too slow. Vector search makes matching much faster, even with tens of thousands of face images.
+- **A separate staging collection:** People's appearances change over time, which can affect recognition accuracy. I kept a separate collection for newer face embeddings so the system can adapt without modifying the original enrolled data.
+- **Kafka only for feedback:** I avoided sending video frames through Kafka because frame processing needs to be fast. Kafka is used for feedback messages, while displays receive a continuous stream of recognition results.
+- **Pull-based deployment:** The deployment machine pulls new releases instead of accepting incoming deployment requests. This reduces the need to expose the machine to external access.
 
-## How a malicious actor could abuse it
+I've covered the alternatives and trade-offs in [ALTERNATIVES.md](ALTERNATIVES.md).
 
-Today, anyone on the network can reach most services with no login: forge attendance, read face data, or poison matching. A printed photo can also pass, because liveness detection is off. See [THREAT.md](THREAT.md).
+## Data Structures and Why
 
-## Where it fails and how we notice
+For face recognition, I use 512-dimensional embeddings stored in Milvus. Cosine similarity is used to find the closest matching faces.
 
-GPU memory first, on this laptop. Everything stops if nobody is signed in to Windows. The nightly job can lose vectors silently. There are no alerts yet. See [FAILURE.md](FAILURE.md).
+Attendance records are stored separately in PostgreSQL. The tables are partitioned by year and location, making it easier to manage records and keep attendance reports efficient as the data grows.
 
-## What I would change with more time
+More details are available in [DATA.md](DATA.md).
 
-Lock down the network, add login to internal services, turn on liveness, add alerts and backups, and move off the laptop.
+## How Someone Could Misuse the System
+
+One of the biggest concerns with the current setup is security. Most internal services can be accessed over the network without authentication.
+
+Someone with network access could potentially create fake attendance records, access stored facial data, or insert misleading data that affects recognition accuracy.
+
+Another weakness is that liveness detection is currently disabled. This means someone could potentially fool the system using a printed photograph instead of appearing in person.
+
+These risks are discussed in [THREAT.md](THREAT.md).
+
+## Where It Can Fail and How I Detect It
+
+The biggest limitation right now is the hardware. Since the system runs on a laptop, GPU memory becomes a bottleneck when processing too many frames.
+
+The system also depends on an active Windows login session. If nobody is signed in, the services stop running.
+
+Another issue is the nightly update job. It can fail to save some face embeddings without reporting an obvious error, which may affect recognition later.
+
+There isn't a proper alerting system in place yet, so identifying these issues still requires manual checks.
+
+I've documented the failure scenarios in [FAILURE.md](FAILURE.md).
+
+## What I Would Improve With More Time
+
+My first priority would be security. I'd restrict network access, add authentication to internal services, and enable liveness detection to reduce the chances of someone spoofing attendance.
+
+I'd also add proper monitoring and alerts so failures don't go unnoticed, along with regular backups to protect the data.
+
+Finally, I'd move the system from the laptop to a dedicated server. That would remove the dependency on a Windows login session and provide a more reliable environment for running it continuously.
