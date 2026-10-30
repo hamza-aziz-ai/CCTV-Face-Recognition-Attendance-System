@@ -444,3 +444,17 @@ Chosen: 2. `ensure_kafka_topics()` creates missing topics and grows partitions, 
 Why: Deleting topics lost messages and raced the feedback controller. Kafka-WebApp reads from the end, so old messages are never replayed; the 5 s retention removes them.
 Trade-off: Partitions cannot shrink, so removing cameras leaves unused partitions. A topic the producer does not create is refused instead of auto-created.
 Revisit if: topic settings must change (alter them with `kafka-configs`, or delete the topic once by hand).
+
+## D-029: Unattended merge and release recover on their own
+Date: 2026-10-31   Model: Claude Opus 5.5
+Context: PR #41 passed all checks but stayed open: four automerge sweeps logged "no successful ci" and the cause could not be found from those logs. The release run for #40 then failed to create its tag (HTTP 403), because #41 had changed a workflow file on main while it ran. Both needed a person.
+Options:
+
+1. leave both to the owner
+2. an hourly cron sweep of automerge, and a release retry
+3. log what automerge saw; let the watcher start automerge for green PRs left open; hand a stale release run over to a release of main
+
+Chosen: 3. Automerge prints the checks it saw on every skip. Every 10 minutes the watcher starts automerge if a non-draft, non-conflicting PR passed all its checks over 15 minutes ago. When tagging fails and main has moved on, the release run starts a release of main, which holds the same commit, and stops without publishing.
+Why: A cron sweep uses Actions minutes every hour even when nothing waits; the watcher already polls GitHub. The newer main always contains the stale commit, so releasing it loses nothing.
+Trade-off: The watcher's nudge only runs while the deployment host is on. The 403 cause is inferred from timing, not documented by GitHub; if tagging fails with main unchanged, the run still fails and opens an issue.
+Revisit if: the skip log shows why #41 was missed (fix that instead), or a release fails with main unchanged.
