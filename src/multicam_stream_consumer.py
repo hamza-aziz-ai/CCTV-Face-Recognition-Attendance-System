@@ -200,9 +200,4 @@ def consumer_main(shared_buffer, embeddings_collection, staging_collection):
         # Delete the Kafka Topics
         delete_kafka_topics()
         feedback_server_logger.warning("Deleting Kafka Topics")
-        try:
-            del MULTIPROCESS_SHARED_BUFFER
-            multicam_server_logger.warning("Deleting Shared Queue")
-        except Exception as error:
-            multicam_server_logger.warning(f"Error in Deleting Shared Queue due to error: {error}")
         multicam_server_logger.warning("EXITING THE PROGRAM...")
