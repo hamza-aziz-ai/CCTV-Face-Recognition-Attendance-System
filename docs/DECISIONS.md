@@ -138,3 +138,12 @@ Trade-off:
 - No images are pushed: the deployment host is this machine, which builds from the tag. The registry push is deferred until DockerHub is configured or a separate host exists.
 - Null host-only manifest values are listed as unverified but do not block a release; drift does block.
 Revisit if: wrong bumps happen (add a PR-title check to `ci`), images must be pulled by another host (add a registry push), or the A100 host is built (make `check_manifest.py --release` blocking).
+
+## D-015: Per-host GPU profiles, starting with the RTX 4050 laptop
+Date: 2026-10-30   Model: Claude Opus 5.5
+Context: This laptop (RTX 4050, 6 GB, no MIG) is for now the dev and the deployment host. `standalone-services.env` pins InsightFace-REST, Milvus and liveness to A100 MIG slices (`7:0`..`7:4`) with A100-sized engine batches, so nothing GPU-bound can start here.
+Options: 1) edit `standalone-services.env` for the laptop  2) a gitignored local override  3) committed per-host profiles in `STANDALONE-SERVICES/hosts/`, selected by `HOST_PROFILE` in the root `.env`
+Chosen: 3: `hosts/laptop-rtx4050.env`. It places both InsightFace containers and Milvus on GPU 0 (the nginx load balancer keeps its two backends), uses one worker, and sets batches to det 8 / rec 16. `deploy_trt_multi-gpu.sh` and `start_standalone_services.sh` load the profile after the base file and fail loudly if the named profile is missing.
+Why: The A100 defaults stay intact for the real site. The profile is reviewed in git and is the same on every deploy (the watcher relies on that). Option 2 would hide the host's config from review.
+Trade-off: The batch sizes are untested guesses for 6 GB shared by two TensorRT containers plus Milvus; they must be tuned after the first bring-up. Models, detection threshold and ports are unchanged, so recognition behaviour matches the A100 config. Engine batch size does not change results, so the model manifest keeps describing the base config.
+Revisit if: the first bring-up runs out of GPU memory (drop to one InsightFace container and a single-backend nginx config), or another host type is added (add a profile).
