@@ -21,7 +21,8 @@ else
 fi
 
 
-# Update the master.env file (optional, for completeness)
+# Update the master.env file (created from the template on first run)
+[ -f master.env ] || cp master.env.example master.env
 sed -i "/^IP_ADDRESS=/c\IP_ADDRESS=$IP_ADDRESS" master.env
 sed -i "/^INSTITUTE=/c\INSTITUTE=$INSTITUTE" master.env
 

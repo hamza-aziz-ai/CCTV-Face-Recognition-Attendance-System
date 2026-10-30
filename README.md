@@ -99,7 +99,7 @@ To draw an ROI polygon on a live stream, run `Custom-ROI-Provisioning/crop_recta
 
 ### Parameters
 
-Runtime parameters such as batch size, thresholds, ports, staging and liveness flags live in [`src/parameters.py`](src/parameters.py). Host IP and institute are written to `master.env` and `STANDALONE-SERVICES/standalone-services.env` by `set_configuration.sh` at startup. InsightFace-REST models, batch sizes and MIG devices are set in `STANDALONE-SERVICES/standalone-services.env`.
+Runtime parameters such as batch size, thresholds, ports, staging and liveness flags live in [`src/parameters.py`](src/parameters.py). Host IP and institute are written to `master.env` (created from `master.env.example` on first run, not tracked) and `STANDALONE-SERVICES/standalone-services.env` by `set_configuration.sh` at startup. InsightFace-REST models, batch sizes and MIG devices are set in `STANDALONE-SERVICES/standalone-services.env`.
 
 ## Getting started
 

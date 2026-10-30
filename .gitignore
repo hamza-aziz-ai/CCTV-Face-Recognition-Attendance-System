@@ -160,6 +160,7 @@ STANDALONE-SERVICES/Milvus-Vector-Database/volumes
 
 # Confidential files
 client_secrets.json
+master.env
 .dvc/config
 
 # Large Files
