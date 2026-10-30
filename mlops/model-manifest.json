@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "inference_service": {
+    "name": "InsightFace-REST",
+    "image": "insightface-rest:v0.9.0.0",
+    "image_digest": null,
+    "base_image": "nvcr.io/nvidia/tensorrt:22.10-py3",
+    "backend": "tensorrt",
+    "fp16": true,
+    "max_size": [640, 640]
+  },
+  "detector": {
+    "name": "scrfd_10g_gnkps",
+    "input_shape": [1, 3, 640, 640],
+    "onnx_md5_expected": "1d9b64bb0e6e18d4838872c9e7efd709",
+    "engine_sha256": null,
+    "max_batch_size": 64,
+    "threshold": 0.6
+  },
+  "recognizer": {
+    "name": "w600k_r50",
+    "input_shape": [1, 3, 112, 112],
+    "onnx_md5_expected": "80248d427976241cbd1343889ed132b3",
+    "engine_sha256": null,
+    "max_batch_size": 128,
+    "embedding_dim": 512
+  },
+  "vector_store": {
+    "engine": "milvus",
+    "metric": "COSINE",
+    "index_type": "GPU_IVF_FLAT",
+    "index_params": {"nlist": 128},
+    "search_params": {"nprobe": 10},
+    "top_k": 5,
+    "match_distance_tolerance": 0.5,
+    "collections": [
+      "{INSTITUTE}_FACE_DATA_COLLECTION_FOR_COSINE",
+      "{INSTITUTE}_FACE_DATA_STAGING_COLLECTION_FOR_COSINE"
+    ],
+    "embedding_snapshot": null
+  },
+  "pipeline": {
+    "frame_size": [640, 360],
+    "batch_size": 32,
+    "pupil_distance_threshold_px": 28,
+    "liveness_enabled": false
+  },
+  "datasets": {
+    "FACIAL-RECOGNITION-DATASET": {"dvc_md5": "0f53b88bfd1bea202ca760eca9b9cebf.dir", "files": 54809, "bytes": 22540129971},
+    "DISPLAY-FACE-DATASET": {"dvc_md5": "de7741a420bc0843973cfcf64c7256b8.dir", "files": 7889, "bytes": 1575272962}
+  },
+  "unverified": {
+    "inference_service.image_digest": "On the GPU host: docker image inspect --format '{{.Id}}' insightface-rest:v0.9.0.0",
+    "detector.engine_sha256": "On the GPU host: sha256sum of the built scrfd_10g_gnkps TensorRT engine under the InsightFace-REST models volume",
+    "recognizer.engine_sha256": "On the GPU host: sha256sum of the built w600k_r50 TensorRT engine under the InsightFace-REST models volume",
+    "vector_store.embedding_snapshot": "Identity of the embeddings currently loaded into the primary collection (export or DVC revision); none exists yet"
+  }
+}
