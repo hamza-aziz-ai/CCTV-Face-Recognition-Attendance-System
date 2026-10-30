@@ -202,6 +202,7 @@ Every 10 minutes, while you are signed in and Docker Desktop is running, the wat
 - It checks the tag out in the deploy clone, pulls that release's images (only once; a rollback reuses them), and runs `up --wait`. It records the release as current only after `http://localhost:9090/docs` answers.
 - On failure it rolls back to the last good release, marks the failed one so it is never retried, and shows a Windows message.
 - It never starts a stack you stopped.
+- After a successful deploy it deletes the release images of every tag except the current and previous one.
 
 Its log is in `C:\deploy\cctv\deploy\watch.log`. To retry a failed release, run `python deploy\watch.py --enroll`. To stop watching, run `schtasks /Delete /TN "CCTV deploy watcher" /F`.
 
