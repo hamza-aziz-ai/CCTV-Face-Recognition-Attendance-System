@@ -24,6 +24,7 @@ Done:
 - Release images: `release.yml` pushes the 7 app images to `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>` before tagging; the watcher pulls them instead of building (D-017).
 - Restart policies (`unless-stopped`) on all standalone and main-stack containers; InsightFace-REST upstream recorded in the manifest; headless (no sign-in) plan written in D-018, not built.
 - Kafka-WebApp: the owner chose to absorb it into this repo (not a submodule). It must run both on this host and on Raspberry Pis (amd64 and arm64 images). Not started.
+- Standalone services running on this host (2026-10-30) via the root `./start_standalone_services.sh` with `HOST_PROFILE=laptop-rtx4050`: InsightFace-REST (2 workers on GPU 0 behind nginx :6385, TRT engines built), Milvus (MinIO now `pgsty/minio`; MinIO withdrew its free images), Kafka. Fixes: `fastrlock==0.8.3` pin, Git Bash mount paths, duplicate scripts under `STANDALONE-SERVICES/` removed. Dev checkouts made before `.gitattributes` may still hold CRLF `.sh` files: delete and `git checkout --` them.
 - Repo settings applied: squash merge only (PR title and body become the commit), automatically delete head branches. Dependabot alerts, Dependabot security updates and the read-only default workflow token were already on.
 
 In progress:
