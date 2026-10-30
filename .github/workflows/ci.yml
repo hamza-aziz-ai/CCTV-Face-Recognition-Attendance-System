@@ -26,6 +26,10 @@ jobs:
   secrets:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # The action lists a PR's commits through the API; read-only, and comments are off so it never needs write
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,6 +39,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+          GITLEAKS_ENABLE_COMMENTS: false
 
   compose:
     runs-on: ubuntu-latest
