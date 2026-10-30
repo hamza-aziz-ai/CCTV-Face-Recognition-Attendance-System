@@ -294,3 +294,12 @@ Trade-off:
 - `enrol_person.py` writes vectors straight to Milvus, so they are rebuilt from the photos rather than versioned.
 Revisit if: a real camera test shows missed matches (add overhead photos, or tune the threshold), or a person needs deleting (no deletion path yet).
 
+## D-027: One generic deployment, with no client names
+Date: 2026-10-31   Model: Claude Opus 5.5
+Context: The code named two former clients through an `INSTITUTE` setting that was built into folder, database and Milvus names, and the enrolment scripts had menus for their groups. The owner wants the project generalised, and will decide later how to serve several clients: one central service or dedicated deployments.
+Options: 1) rename `INSTITUTE` to a generic tenant setting  2) remove it, one deployment with fixed generic names
+Chosen: 2. `INSTITUTE` and its host-IP settings are gone. Names are `FACE_DATA_COLLECTION_FOR_COSINE`, `FACE_DATA_STAGING_COLLECTION_FOR_COSINE`, `Face_Recognition_Database`, `CCTV_Camera_Surveillance`, and the data folders have no client level. The camera config is `src/Camera-Configuration/camera_configuration.json`. The group menus became plain arguments.
+Why: A tenant setting now would guess at a design the owner has not chosen. A dedicated deployment needs none, and a central service needs more than a name prefix.
+Trade-off: Breaking: a site with data must rename its Milvus collections, Postgres databases and folders, or re-enrol. The names remain in git history.
+Revisit if: the multi-client model is decided.
+
