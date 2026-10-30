@@ -219,3 +219,12 @@ Trade-off:
 - The store lives on this laptop: no backup copy yet.
 Revisit if: a second machine needs the data regularly (read-only user, endpoint by hostname), or the store holds the only copy (add a replica or backup).
 
+## D-021: Confluent Platform 7.8 to 8.4.0, community edition
+Date: 2026-10-30   Model: Claude Opus 5.5
+Context: The Kafka stack ran Confluent 7.8.0 images. The owner asked for the latest stable release, pointing at cp-all-in-one v8.4.0. That file has two editions: the enterprise one runs the commercial Confluent Server (`cp-server`) and Control Center next-gen, license-gated after a 30-day trial, and its Prometheus takes port 9090 (the API's port).
+Options: 1) enterprise cp-all-in-one 8.4.0  2) community cp-all-in-one 8.4.0  3) broker only
+Chosen: 2 (owner's choice). `STANDALONE-SERVICES/Confluent-Kafka/docker-compose.yml` follows `cp-all-in-one-community/docker-compose.yml` at v8.4.0: broker `cp-kafka:8.4.0` (Apache Kafka 4.x, KRaft), Schema Registry, Connect (`kafka-connect-datagen`), ksqlDB, REST Proxy and Flink. Local changes: the broker advertises `${IP_ADDRESS}` instead of localhost, and every service restarts unless stopped. Client `confluent-kafka` 2.7.0 to 2.16.1.
+Why: Free broker with no license clock; the app only uses the broker. Our broker settings were already KRaft and carry over unchanged.
+Trade-off: No Control Center UI. Flink adds three containers the app does not use. The 7.8 `ksqldb-cli`, `ksql-datagen` and legacy Control Center have no 8.4.0 counterpart in the community file and were removed. Topic data lives in `/tmp` inside the broker, as before, and does not survive recreation (the producer recreates its topics at start).
+Revisit if: a UI is needed (Control Center next-gen needs a license), or the unused tools cost too much memory (drop to broker only).
+
