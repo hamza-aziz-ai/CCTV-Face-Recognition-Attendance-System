@@ -1,0 +1,62 @@
+name: automerge
+
+# Squash-merges every open PR into main, and deletes its branch, once every check on its latest commit
+# has passed. The account is on GitHub Free, where private repos have no rulesets or native auto-merge (D-013).
+#
+# Never triggered by pull_request: workflow_run and workflow_dispatch always run the copy of this file on
+# main, so a PR cannot rewrite the rule that merges it.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+concurrency:
+  group: automerge
+  cancel-in-progress: false
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Merge every ready PR whose head commit passed all checks
+        run: |
+          set -euo pipefail
+          sweep() {
+            merged=0
+            # Open, non-draft PRs into main from this repository (forks are never merged).
+            while read -r pr sha; do
+              checks=$(gh api --paginate "repos/$GH_REPO/commits/$sha/check-runs?per_page=100" \
+                --jq '.check_runs[] | "\(.status) \(.conclusion // "none") \(.name)"')
+              # The aggregate ci check must exist and have passed; a PR with no checks is never merged.
+              if ! grep -qx 'completed success ci' <<<"$checks"; then echo "#$pr: no successful ci on $sha; skip."; continue; fi
+              if grep -qv '^completed ' <<<"$checks"; then echo "#$pr: checks still running; skip."; continue; fi
+              if grep -Ev '^completed (success|skipped|neutral) ' <<<"$checks" | grep -q .; then
+                echo "#$pr: a check did not pass; skip."; continue
+              fi
+              # --match-head-commit refuses the merge if a newer commit was pushed after these checks ran.
+              if gh pr merge "$pr" --squash --delete-branch --match-head-commit "$sha"; then
+                echo "#$pr: merged at $sha."; merged=$((merged + 1))
+              else
+                echo "::warning::#$pr: merge refused (new commit, conflict or permissions); the next ci run retries."
+              fi
+            done < <(gh pr list --base main --state open --limit 100 \
+              --json number,headRefOid,isDraft,isCrossRepository \
+              --jq '.[] | select(.isDraft | not) | select(.isCrossRepository | not) | "\(.number) \(.headRefOid)"')
+          }
+          # A merge deletes its branch and GitHub retargets PRs stacked on it to main without re-running ci;
+          # after any merge, give the retarget a moment and sweep again (bounded) so the stack drains.
+          for _ in 1 2 3 4 5; do
+            sweep
+            [ "$merged" -gt 0 ] || break
+            sleep 20
+          done
