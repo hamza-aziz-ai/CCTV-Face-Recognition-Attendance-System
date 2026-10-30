@@ -203,3 +203,19 @@ Trade-off:
 Headless plan (option 3, not built): Docker Engine plus the NVIDIA Container Toolkit in a WSL2 Ubuntu with systemd; Docker Desktop off; a Task Scheduler task "at startup, whether signed in or not" that starts the distro and keeps it alive (`vmIdleTimeout=-1` in `.wslconfig`); the watcher moves into WSL as a systemd timer, with a notification other than `msg`. Containers then restart when dockerd starts at boot.
 Revisit if: the host must run unattended through reboots (build the headless plan), or the deployment moves to a Linux GPU server (restart policies alone are enough there).
 
+## D-019: DVC remote on a dedicated MinIO (dataset store)
+Date: 2026-10-30   Model: Claude Opus 5.5
+Context: The face datasets (FACIAL-RECOGNITION-DATASET: 22.5 GB, 54,809 files; DISPLAY-FACE-DATASET: 1.6 GB) are tracked by DVC, but the remote (Google Drive, `face-recognition-dataset-gdrive`) lived only in a git-ignored `.dvc/config`, so no other machine could pull them. The owner chose MinIO as the remote.
+Options: 1) a new bucket in Milvus's MinIO  2) a dedicated MinIO service  3) keep Google Drive
+Chosen: 2. `STANDALONE-SERVICES/Dataset-Store`: `pgsty/minio` (same pinned build as Milvus's), S3 API on 9010, console on 9011, `restart: unless-stopped`. Root login and the data folder come from `.env` (`DATASET_STORE_USER`, `DATASET_STORE_PASSWORD`, `DATASET_STORE_DIR`, all required); a one-shot container creates the `dvc` bucket. `start_standalone_services.sh` and `stop_standalone_services.sh` manage it. `.dvc/config` is tracked again with the default remote `minio` (`s3://dvc`, endpoint `http://localhost:9010`); credentials and another host's endpoint go in `.dvc/config.local` (git-ignored).
+Why:
+- Milvus's MinIO uses the default `minioadmin` login and keeps its data under the repo folder; resetting Milvus or deleting a checkout would take the datasets with it.
+- A separate login and a data folder outside the repo keep the face images (biometric personal data) apart from the vector store.
+- S3 over the LAN needs no Google account or browser login, so CI and other hosts can pull with a key.
+Trade-off:
+- DVC uses the MinIO root login; a read-only DVC user for consumers is not set up yet.
+- No encryption at rest beyond the host disk (BitLocker); MinIO server-side encryption needs a KMS.
+- The datasets are still on Google Drive only: someone with that remote must pull from it and push to `minio`.
+- The store lives on this laptop: no backup copy yet.
+Revisit if: a second machine needs the data regularly (read-only user, endpoint by hostname), or the store holds the only copy (add a replica or backup).
+

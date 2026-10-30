@@ -54,6 +54,7 @@ jobs:
       - run: |
           docker compose -f docker-compose-main.yml config --quiet
           docker compose -f docker-compose-main.yml -f docker-compose.dev.yml config --quiet
+          DATASET_STORE_USER=ci DATASET_STORE_PASSWORD=ci DATASET_STORE_DIR=/tmp/store docker compose -f STANDALONE-SERVICES/Dataset-Store/docker-compose.yml config --quiet
 
   images:
     runs-on: ubuntu-latest
