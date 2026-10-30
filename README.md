@@ -55,6 +55,8 @@ Frames travel from the camera threads to the recognition threads through an in-m
 | Nightly Milvus updater | `src/automatic-vector-db-updation/milvus_updater.py` | — |
 | Display image server | `src/fetch_face_image_server/app.py` | 20013:20013 |
 
+`kafka-webapp` (`ghcr.io/hamza-aziz-ai/kafka-webapp`, port 9095) is the recognition display for this host. It is versioned in the `Kafka-WebApp` submodule's repository.
+
 ### Standalone stacks (`STANDALONE-SERVICES/`)
 
 | Service | Image | Ports | GPU (MIG) |
