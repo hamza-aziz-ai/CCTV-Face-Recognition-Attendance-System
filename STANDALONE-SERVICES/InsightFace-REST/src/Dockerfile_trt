@@ -24,7 +24,8 @@ RUN apt-get update &&\
 COPY requirements.txt .
 RUN $PIP_INSTALL -r requirements.txt
 # GPU specific packages
-RUN $PIP_INSTALL cupy-cuda11x pynvjpeg
+# fastrlock (cupy dependency) dropped Python 3.8 wheels after 0.8.3, and this base image has Python 3.8
+RUN $PIP_INSTALL fastrlock==0.8.3 cupy-cuda11x pynvjpeg
 
 WORKDIR /app
 COPY api_trt /app/api_trt

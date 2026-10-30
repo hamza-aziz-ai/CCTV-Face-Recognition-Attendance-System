@@ -22,6 +22,10 @@ fi
 
 # DEPLOY CONTAINERS
 
+# Git Bash on Windows rewrites mount targets like ":/app" into Windows paths and Docker needs a Windows source path there; both lines are no-ops on Linux
+export MSYS_NO_PATHCONV=1
+HERE=$(pwd -W 2>/dev/null || pwd)
+
 # Create directory to store downloaded models
 mkdir -p models
 
@@ -72,8 +76,8 @@ for i in "${MIG_GPU[@]}"; do
         -e DEF_RETURN_FACE_DATA="$RETURN_FACE_DATA" \
         -e DEF_EXTRACT_EMBEDDING="$EXTRACT_EMBEDDINGS" \
         -e DEF_EXTRACT_GA="$DETECT_GENDER_AGE" \
-        -v $(pwd)/models:/models \
-        -v $(pwd)/src:/app \
+        -v "$HERE"/models:/models \
+        -v "$HERE"/src:/app \
         --health-cmd='curl -f http://localhost:18080/info || exit 1' \
         --health-interval=1m \
         --health-timeout=10s \
@@ -99,7 +103,7 @@ docker run -d \
   --restart unless-stopped \
   --name docker-nginx-insightface \
   --network insightface-network \
-  -v $(pwd)/misc/nginx_conf/conf.d:/etc/nginx/conf.d \
+  -v "$HERE"/misc/nginx_conf/conf.d:/etc/nginx/conf.d \
   -p 6385:18080 \
   --ulimit nofile=200000:200000 \
   nginx
