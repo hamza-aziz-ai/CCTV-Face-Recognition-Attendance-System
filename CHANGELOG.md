@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.0.3 (2026-10-30)
+
+## What's Changed
+* fix: keep Kafka topics across restarts and store broker data on a volume by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/43
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.0.2...v2.0.3
+
 ## v2.0.2 (2026-10-30)
 
 ## What's Changed
