@@ -26,6 +26,8 @@ jobs:
       - run: python3 -I mlops/check_manifest.py
       # Deployment watcher decisions (deploy, skip, roll back) with Docker, git and GitHub faked
       - run: python3 -I deploy/test_watch.py
+      # Enrolment photo checks (D-026)
+      - run: python3 -I src/util/enrolment_checks.py
 
   secrets:
     runs-on: ubuntu-latest

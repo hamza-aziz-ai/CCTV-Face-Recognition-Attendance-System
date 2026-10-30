@@ -280,3 +280,17 @@ Why: CI/CD exists to automate this; the owner does not want a manual step in it.
 Trade-off: Anything CI does not check ships unchecked, and CI has no test of recognition itself. Anything that must hold has to become a CI check.
 Revisit if: a release that passed CI harms a real site.
 
+## D-026: Fresh datasets, with checked enrolment from five or ten photos
+Date: 2026-10-30   Model: Claude Opus 5.5
+Context: The original datasets (22.5 GB and 1.6 GB) stayed with the owner's previous employer on a Google Drive the owner cannot reach, and no copy exists on this machine. The `.dvc` files pointed at data nobody could pull. The owner's plan is 5 photos per person (front, chin up, chin down, 30 degrees left, 30 degrees right), and 10 for someone who wears spectacles.
+Options: 1) keep the old `.dvc` pointers and wait for the data  2) restart the datasets with the owner's photo plan  3) use the interactive group scripts for everyone
+Chosen: 2. `src/util/enrol_person.py` enrols one person from `<person_id>/<pose>.jpg`, after `src/util/enrolment_checks.py` passes: the full set is present; each photo has exactly one face, confidence of at least 0.7 (`ENROLMENT_MIN_CONFIDENCE`) and pupils at least 28 px apart; each matches the person's other photos; none matches someone else already enrolled; and the ID is not enrolled yet. Any failure rejects the whole person. Sharpness is shown, not enforced. The `.dvc` files and the manifest now point at the new data; the old hashes stay in git history.
+Why: Measured on the owner's 10 photos: all 45 pairs scored 0.78 to 0.94 against a 0.5 threshold, the closest of 30 strangers scored 0.23, and all 10 were still detected and matched at 20 px between the pupils. The checks reject real failures: a missing pose, a photo of someone else (-0.07), and a photo with two faces. LFW showed why one face per photo matters: 150 photos produced 174 vectors, because the old script enrols every face.
+Trade-off:
+- Downscaled clean photos are the best case. Real CCTV is overhead, compressed and in motion, and is not tested.
+- The 0.7 confidence value is a judgement: the owner's photos scored 0.83 to 0.90.
+- Spectacles added little in this test: same-pose pairs across the two sets scored 0.86 to 0.92. They stay for glare, which this test cannot show.
+- Consent is not enforced by code.
+- `enrol_person.py` writes vectors straight to Milvus, so they are rebuilt from the photos rather than versioned.
+Revisit if: a real camera test shows missed matches (add overhead photos, or tune the threshold), or a person needs deleting (no deletion path yet).
+

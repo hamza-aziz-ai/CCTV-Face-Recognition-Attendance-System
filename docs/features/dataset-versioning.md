@@ -2,7 +2,7 @@
 
 **Goal:** know exactly which images, model and settings produced the vectors in Milvus, and be able to roll back.
 
-**Status:** the DVC remote is built (D-019). The rest is proposed, not started.
+**Status:** photos are versioned in DVC on the dataset store, and enrolment is checked (D-019, D-026). Vector versioning (steps 2 to 4 below) is proposed, not started.
 
 ## Design
 
@@ -15,10 +15,9 @@ Rejected for now: Lance (versioned tables with built-in vector search), because 
 
 ## Open
 
-- Migrate the datasets from Google Drive: `dvc pull -r face-recognition-dataset-gdrive`, then `dvc push -r minio`, on a machine with that remote.
-- Set `DATASET_STORE_*` in `.env` and start the store.
 - A deletion path for one person across images, Parquet and Milvus, plus a retention policy for DVC history.
 
 ## Log
 
 - 2026-10-30: design agreed in discussion; MinIO chosen as the remote; DVC push and pull tested on a throwaway instance.
+- 2026-10-30: the original datasets stayed with the owner's previous employer and cannot be recovered, so versioning starts fresh. `hamza_aziz` is the first real person: 10 photos pushed, then restored identically by `dvc pull`.

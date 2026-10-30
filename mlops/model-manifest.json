@@ -51,8 +51,8 @@
     "liveness_enabled": false
   },
   "datasets": {
-    "FACIAL-RECOGNITION-DATASET": {"dvc_md5": "0f53b88bfd1bea202ca760eca9b9cebf.dir", "files": 54809, "bytes": 22540129971},
-    "DISPLAY-FACE-DATASET": {"dvc_md5": "de7741a420bc0843973cfcf64c7256b8.dir", "files": 7889, "bytes": 1575272962}
+    "FACIAL-RECOGNITION-DATASET": {"dvc_md5": "891963c84fbfdc486c3af982fb35c154.dir", "files": 10, "bytes": 2165802},
+    "DISPLAY-FACE-DATASET": {"dvc_md5": "e9cbc3bf91e6ed3dbd611b32da3ffd67.dir", "files": 1, "bytes": 220557}
   },
   "unverified": {
     "inference_service.image_digest": "On the GPU host: docker image inspect --format '{{.Id}}' insightface-rest:v0.9.0.0",
