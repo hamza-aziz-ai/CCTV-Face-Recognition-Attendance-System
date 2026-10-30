@@ -53,6 +53,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
     ports:
       - "20001:20001"
@@ -71,6 +72,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
     ports:
       - "20012:20012"
@@ -94,6 +96,7 @@ services:
       POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
     ports:
       - "9090:8000"

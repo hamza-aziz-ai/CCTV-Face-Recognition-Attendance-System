@@ -119,13 +119,16 @@ def watch(enroll=False):
     except Exception as e:  # any failure, including a crash mid-deploy, ends in a rollback
         log(f"Deploy of {tag} failed: {e}")
         state["failed"].append(tag)
-        outcome = "nothing to roll back to"
-        if prev:
-            try:
+        try:
+            if prev:
                 start(prev)
                 outcome = f"rolled back to {prev}"
-            except Exception as e2:
-                outcome = f"ROLLBACK TO {prev} FAILED: {e2}"
+            else:
+                # Restart policies would keep a broken first deploy crash-looping
+                run(*COMPOSE, "stop")
+                outcome = "nothing to roll back to; stack stopped"
+        except Exception as e2:
+            outcome = f"ROLLBACK TO {prev} FAILED: {e2}" if prev else f"nothing to roll back to; STOP FAILED: {e2}"
         log(outcome)
         save(state)
         notify(f"CCTV deploy of {tag} failed; {outcome}. See deploy/watch.log in the deploy clone.")

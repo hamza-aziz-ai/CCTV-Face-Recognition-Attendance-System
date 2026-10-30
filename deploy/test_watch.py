@@ -11,11 +11,12 @@ import watch  # noqa: E402
 
 
 def scenario(state, latest, running=True, deploy_fails=False, rollback_fails=False, enroll=False):
-    """Run one poll and return (exit code, saved state, deployed tags, started-for-rollback tags, notified)."""
+    """Run one poll and return (exit code, saved state, deployed tags, started-for-rollback tags, notified, stack stops)."""
     tmp = Path(tempfile.mkdtemp())
-    calls = {"deploy": [], "start": [], "notify": []}
+    calls = {"deploy": [], "start": [], "notify": [], "stop": 0}
 
     def fake_run(*cmd, env=None):
+        calls["stop"] += cmd[-1] == "stop"
         return "abc123" if running and cmd[-2:] == ("ps", "-q") else ""
 
     def fake_deploy(tag):
@@ -35,7 +36,7 @@ def scenario(state, latest, running=True, deploy_fails=False, rollback_fails=Fal
             watch.save(state)
         code = watch.watch(enroll=enroll)
         saved = json.loads((tmp / "state.json").read_text()) if (tmp / "state.json").exists() else None
-    return code, saved, calls["deploy"], calls["start"], len(calls["notify"])
+    return code, saved, calls["deploy"], calls["start"], len(calls["notify"]), calls["stop"]
 
 
 def test():
@@ -48,8 +49,8 @@ def test():
     # Newer release: deployed and recorded.
     assert scenario({"current": "v0.1.0", "failed": []}, "v0.2.0")[1] == {"current": "v0.2.0", "failed": []}
     # Newer release fails: rolled back to the last good one, marked failed, owner notified.
-    code, saved, _, started, notified = scenario({"current": "v0.1.0", "failed": []}, "v0.2.0", deploy_fails=True)
-    assert (code, saved, started, notified) == (1, {"current": "v0.1.0", "failed": ["v0.2.0"]}, ["v0.1.0"], 1)
+    code, saved, _, started, notified, stops = scenario({"current": "v0.1.0", "failed": []}, "v0.2.0", deploy_fails=True)
+    assert (code, saved, started, notified, stops) == (1, {"current": "v0.1.0", "failed": ["v0.2.0"]}, ["v0.1.0"], 1, 0)
     # A release that failed before is never retried automatically.
     assert scenario({"current": "v0.1.0", "failed": ["v0.2.0"]}, "v0.2.0")[2] == []
     # ...but enrolling retries it on purpose.
@@ -57,14 +58,17 @@ def test():
     # Stack stopped by the owner: not started behind their back.
     assert scenario({"current": "v0.1.0", "failed": []}, "v0.2.0", running=False)[2] == []
     # Failed rollback is still recorded and notified.
-    code, saved, _, _, notified = scenario({"current": "v0.1.0", "failed": []}, "v0.2.0", deploy_fails=True, rollback_fails=True)
+    code, saved, _, _, notified, _ = scenario({"current": "v0.1.0", "failed": []}, "v0.2.0", deploy_fails=True, rollback_fails=True)
     assert (code, saved["failed"], notified) == (1, ["v0.2.0"], 1)
-    # First deploy fails with nothing to roll back to; a later release is still tried (stack was never running).
+    # First deploy fails with nothing to roll back to: the stack is stopped (no crash loop) and the owner notified.
+    code, saved, _, started, notified, stops = scenario(None, "v0.1.0", enroll=True, deploy_fails=True)
+    assert (code, saved, started, notified, stops) == (1, {"current": None, "failed": ["v0.1.0"]}, [], 1, 1)
+    # ...and a later release is still tried (stack was never running).
     assert scenario({"current": None, "failed": ["v0.1.0"]}, "v0.1.1", running=False)[2] == ["v0.1.1"]
     # No release published yet.
     assert scenario({"current": None, "failed": []}, None)[2] == []
     test_site_config_survives_checkout()
-    print("watch decisions ok (11 scenarios, site config kept)")
+    print("watch decisions ok (12 scenarios, site config kept)")
 
 
 def test_site_config_survives_checkout():
