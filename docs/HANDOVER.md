@@ -15,6 +15,7 @@ Done:
 - Step 3 (same branch): `.github/workflows/ci.yml` runs lint, gitleaks, compose config, 8 image builds and smoke tests, plus the aggregate `ci` check. Two dead `del` blocks removed (D-007).
 - Compose split: `docker-compose-main.yml` has no builds or `./src` mounts (code comes from the image). `docker-compose.dev.yml` restores both. `build-docker-images.sh` removed; the README builds via the dev override (D-010).
 - `.github/dependabot.yml`: weekly grouped updates for github-actions and the Docker base digest (D-011).
+- `mlops/model-manifest.json` and `mlops/check_manifest.py` (branch `mlops/model-manifest`, stacked on PR #1). CI fails on drift; `--release` fails while 4 host-only values are null (D-012).
 - Repo settings applied: squash merge only (PR title and body become the commit), automatically delete head branches. Dependabot alerts, Dependabot security updates and the read-only default workflow token were already on.
 
 In progress:
@@ -30,7 +31,8 @@ Broken or risky:
 Next:
 - Actions budget (account Billing page, manual). Allow Actions to create PRs only when `release.yml` lands.
 - Map the producer-consumer runtime files to explicit mounts, replacing its whole-repo `.` mount.
-- Model manifest, DockerHub repo and secrets, then `release.yml` with release-please.
+- Fill the 4 null manifest values from the GPU host (commands are in the manifest's `unverified` block).
+- DockerHub repo and secrets, then `release.yml` with release-please, gated on `check_manifest.py --release`.
 
 Do not touch:
 - `STANDALONE-SERVICES/` upstream services (InsightFace-REST, Milvus, Kafka).
