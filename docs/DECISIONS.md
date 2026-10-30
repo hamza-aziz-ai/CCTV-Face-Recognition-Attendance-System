@@ -37,6 +37,7 @@ Chosen: 2
 Why: Site-specific values stay out of git and out of images. `set_configuration.sh` copies the template when the file is missing, so fresh clones still start.
 Trade-off: Pulling this change on an existing host deletes the tracked `master.env`; the next `set_configuration.sh` run recreates it from the template and rewrites both values.
 Revisit if: more site settings move into env files (consider one documented template for all).
+Correction (2026-10-30): the original commit added the ignore rule but never ran `git rm --cached`, so `master.env` stayed tracked until v0.4.x. Tags up to then still contain it; the deployment watcher keeps the host's copy across checkouts so neither direction deletes or overwrites it.
 
 ## D-005: Keep camera configuration and datasets out of images
 Date: 2026-10-30   Model: Claude Opus 5.5 with Codex gpt-6.1-sol (council)
