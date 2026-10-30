@@ -84,13 +84,19 @@ services:
             - driver: nvidia
               capabilities: ["gpu"]
               device_ids: ["${MILVUS_GPU_DEVICE}"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 90s
     depends_on:
       milvus-volume-init:
         condition: service_completed_successfully
       etcd:
-        condition: service_started
+        condition: service_healthy
       minio:
-        condition: service_started
+        condition: service_healthy
 
 networks:
   default:

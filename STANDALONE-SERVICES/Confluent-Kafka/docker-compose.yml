@@ -29,6 +29,12 @@ services:
       # Replace CLUSTER_ID with a unique base64 UUID using "bin/kafka-storage.sh random-uuid"
       # See https://docs.confluent.io/kafka/operations-tools/kafka-tools.html#kafka-storage-sh
       CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "broker:29092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   schema-registry:
     image: confluentinc/cp-schema-registry:8.4.0
@@ -36,7 +42,8 @@ services:
     container_name: schema-registry
     restart: unless-stopped
     depends_on:
-      - broker
+      broker:
+        condition: service_healthy
     ports:
       - "8081:8081"
     environment:
@@ -50,8 +57,10 @@ services:
     container_name: connect
     restart: unless-stopped
     depends_on:
-      - broker
-      - schema-registry
+      broker:
+        condition: service_healthy
+      schema-registry:
+        condition: service_started
     ports:
       - "8083:8083"
     environment:
@@ -76,8 +85,10 @@ services:
     container_name: ksqldb-server
     restart: unless-stopped
     depends_on:
-      - broker
-      - connect
+      broker:
+        condition: service_healthy
+      connect:
+        condition: service_started
     ports:
       - "8088:8088"
     environment:
@@ -95,8 +106,10 @@ services:
   rest-proxy:
     image: confluentinc/cp-kafka-rest:8.4.0
     depends_on:
-      - broker
-      - schema-registry
+      broker:
+        condition: service_healthy
+      schema-registry:
+        condition: service_started
     ports:
       - 8082:8082
     hostname: rest-proxy
@@ -146,3 +159,29 @@ services:
       FLINK_PROPERTIES=
       jobmanager.rpc.address: flink-jobmanager
       taskmanager.numberOfTaskSlots: 10
+
+  # Web UI to browse topics and watch messages live; the community edition has no Control Center (D-028).
+  # Bound to 127.0.0.1: it has no login, and messages carry people's names and IDs.
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.5.0@sha256:7cda86a33344160309fdb65146332e4da65db81a945614f2fe32e210803f6fd1
+    hostname: kafka-ui
+    container_name: kafka-ui
+    restart: unless-stopped
+    depends_on:
+      broker:
+        condition: service_healthy
+      schema-registry:
+        condition: service_started
+      connect:
+        condition: service_started
+      ksqldb-server:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8085:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: broker:29092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: connect
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://connect:8083
+      KAFKA_CLUSTERS_0_KSQLDBSERVER: http://ksqldb-server:8088
