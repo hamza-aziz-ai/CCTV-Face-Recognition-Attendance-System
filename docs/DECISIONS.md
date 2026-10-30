@@ -109,3 +109,15 @@ Chosen: 3
 Why: MLflow needs a training/eval loop this repo does not have. Labels cannot be checked. A manifest plus `mlops/check_manifest.py` (reads `parameters.py`, `standalone-services.env`, `models.json`, `milvus_server.py` and the `.dvc` files as text) fails CI the moment the manifest and the code disagree.
 Trade-off: Host-only facts (TensorRT engine sha256, InsightFace image digest, embedding snapshot) cannot be derived in CI. They stay `null` with instructions, and `--release` fails until they are filled from the GPU host. ONNX md5 values are the ones InsightFace-REST expects; the files actually deployed are not verified.
 Revisit if: a training or evaluation loop is added (then consider a registry), or models move to a different inference service.
+
+## D-013: Workflow-based auto-merge on GitHub Free (supersedes D-008)
+Date: 2026-10-30   Model: Claude Opus 5.5 (pattern from the Medical-ChatBot and HalalLens sessions)
+Context: The owner wants every PR to merge into main by itself once all CI passes, with its branch deleted. The repo is private on GitHub Free, so there are no rulesets and no native auto-merge.
+Options: 1) upgrade to Pro and use native auto-merge  2) a label-triggered merge  3) a workflow that merges on CI success, checked against the exact head commit
+Chosen: 3: `.github/workflows/automerge.yml`, triggered by `workflow_run` of `ci` (and by hand).
+Why: It needs no PAT and no paid plan, and fixes the two problems that made D-008 reject a merge bot:
+- It checks the exact head commit: it merges only when the `ci` check succeeded and every other check on the PR's head commit succeeded, was skipped or was neutral, using `gh pr merge --match-head-commit`, so a commit pushed after CI ran is never merged unchecked.
+- A PR cannot change the rule: it never runs on `pull_request`, so the PR's own copy of the workflow never runs with a write token; `workflow_run` always runs main's copy.
+- Forks and drafts are skipped. After a merge it sweeps again (up to 5 times) so PRs stacked on the merged branch, which GitHub retargets to main without re-running CI, merge as well.
+Trade-off: Nothing stops a direct push to main (no branch protection on Free). CI ran against the base as it was when the PR last changed, not against the newest main. Dependabot PRs merge too once CI passes, and so reach releases without review.
+Revisit if: the account moves to Pro (switch to a ruleset requiring `ci` and native auto-merge), or a bad auto-merge reaches main.

@@ -16,6 +16,7 @@ Done:
 - Compose split: `docker-compose-main.yml` has no builds or `./src` mounts (code comes from the image). `docker-compose.dev.yml` restores both. `build-docker-images.sh` removed; the README builds via the dev override (D-010).
 - `.github/dependabot.yml`: weekly grouped updates for github-actions and the Docker base digest (D-011).
 - `mlops/model-manifest.json` and `mlops/check_manifest.py` (branch `mlops/model-manifest`, stacked on PR #1). CI fails on drift; `--release` fails while 4 host-only values are null (D-012).
+- `.github/workflows/automerge.yml` (branch `ci/automerge`, stacked on #2): squash-merges PRs into main when `ci` and every other check passed on the exact head commit; it runs only from main's copy (D-013). It only takes effect once merged to main, so #1–#3 themselves are merged by hand.
 - Repo settings applied: squash merge only (PR title and body become the commit), automatically delete head branches. Dependabot alerts, Dependabot security updates and the read-only default workflow token were already on.
 
 In progress:
@@ -36,6 +37,8 @@ Broken or risky:
 - Dependabot reports 7 vulnerabilities (4 high, 3 moderate), not yet triaged.
 
 Next:
+- `release.yml`: version bump from the merged PR's conventional title, then a tag and Release (chained via `workflow_run` from automerge; no PAT).
+- Deployment watcher on this machine: Task Scheduler runs a poller of the latest release, which deploys from a separate clone, health-checks, and rolls back to the last good tag on failure.
 - Actions budget (account Billing page, manual). Allow Actions to create PRs only when `release.yml` lands.
 - Map the producer-consumer runtime files to explicit mounts, replacing its whole-repo `.` mount.
 - Fill the 4 null manifest values from the GPU host (commands are in the manifest's `unverified` block).
