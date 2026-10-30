@@ -1,5 +1,5 @@
 # Core (Producer-Consumer) Requirements
-confluent-kafka~=2.7.0
+confluent-kafka~=2.16.1
 requests~=2.32.3
 numpy~=1.24.4
 msgpack~=1.1.0

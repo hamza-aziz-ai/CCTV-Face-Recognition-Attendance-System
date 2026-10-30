@@ -62,7 +62,7 @@ Frames travel from the camera threads to the recognition threads through an in-m
 | InsightFace-REST (×2) | `insightface-rest` (TensorRT) | 19000, 19001 → 18080 | 7:0, 7:1 (10 GB each) |
 | nginx load balancer | `nginx` | 6385 → 18080 | — |
 | Milvus standalone | `milvusdb/milvus:v3.0.5-gpu` (+ etcd 3.5.25, Milvus-tested MinIO) | 19530, 9091, 9000, 9001 | 7:4 (5 GB) |
-| Kafka broker (KRaft) | `confluentinc/cp-kafka:7.8.0` (+ Confluent tools) | 9092, 9101 | — |
+| Kafka broker (KRaft) | `confluentinc/cp-kafka:8.4.0` (+ Schema Registry, Connect, ksqlDB, REST Proxy, Flink: cp-all-in-one community 8.4.0) | 9092, 9101 | — |
 | Dataset store (DVC remote) | `pgsty/minio` (MinIO) | 9010 (S3 API), 9011 (console) | — |
 | Face liveness detection (disabled) | `face-liveness-detection:v-beta` + nginx | 6970, 6971, 6386 | 7:2, 7:3 (5 GB each) |
 
