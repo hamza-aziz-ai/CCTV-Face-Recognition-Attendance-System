@@ -23,6 +23,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # A cancelled job (runner hiccup or job time limit) would leave its PR stuck: automerge skips anything that did
+  # not pass, and nothing starts ci again. One retry, so a job that really hangs still fails. Real failures stay failed.
+  retry:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success' && github.event.workflow_run.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Re-run cancelled jobs once, if their commit is still the head of an open PR
+        run: |
+          set -euo pipefail
+          # A new push also cancels the old run, on purpose: that commit is no longer any PR's head.
+          heads=$(gh pr list --base main --state open --limit 100 --json headRefOid --jq '.[].headRefOid')
+          if ! grep -qxF "$HEAD_SHA" <<<"$heads"; then echo "$HEAD_SHA is not the head of an open PR; skip."; exit 0; fi
+          cancelled=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/jobs?per_page=100" --jq '[.jobs[] | select(.conclusion == "cancelled")] | length')
+          if [ "$cancelled" -eq 0 ]; then echo "No cancelled job: a real failure, not retried."; exit 0; fi
+          echo "$cancelled cancelled job(s) in run $RUN_ID; re-running the failed jobs."
+          gh run rerun "$RUN_ID" --failed
+
   automerge:
     runs-on: ubuntu-latest
     timeout-minutes: 10
