@@ -151,6 +151,7 @@ SAVE_FACE = True
 
 # Threshold value for distance between two eye landmarks to decide whether the face is large enough to save
 PUPIL_DISTANCE_THRESHOLD = 28    # px
+ENROLMENT_MIN_CONFIDENCE = 0.7    # lowest face detection confidence accepted for an enrolment photo
 
 # Maximum number of images saved per cluster per person
 NUMBER_OF_PICTURES = 3
