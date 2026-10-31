@@ -1,0 +1,63 @@
+name: insightface-image
+
+# Builds our patched InsightFace-REST (D-031) and pushes it to ghcr.io, once per source tree: the tag is the upstream
+# version plus the git tree of InsightFace-REST/src, so a change to our patches, the Dockerfile or its base image gets a
+# new tag. Deployment hosts pull this image and never build it. release.yml calls this before it publishes; a PR that
+# changes InsightFace builds it too, so the build and the runner's disk are proven before the merge.
+on:
+  workflow_call:
+    outputs:
+      image:
+        description: The image, pinned by digest
+        value: ${{ jobs.build.outputs.image }}
+  pull_request:
+    branches: [main]
+    paths:
+      - STANDALONE-SERVICES/InsightFace-REST/src/**
+      - STANDALONE-SERVICES/standalone-services.env
+      - .github/workflows/insightface-image.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.push.outputs.image }}
+    env:
+      TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Work out the image tag
+        id: ref
+        run: |
+          set -euo pipefail
+          eval "$(grep -E '^(IMAGE|TAG)=' STANDALONE-SERVICES/standalone-services.env)"
+          echo "ref=$IMAGE:$TAG-$(git rev-parse --short=12 HEAD:STANDALONE-SERVICES/InsightFace-REST/src)" >> "$GITHUB_OUTPUT"
+      - name: Build and push, unless this source tree is already published
+        id: push
+        env:
+          REF: ${{ steps.ref.outputs.ref }}
+        run: |
+          set -euo pipefail
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          if docker buildx imagetools inspect "$REF" > /dev/null 2>&1; then
+            echo "$REF is already published"
+          else
+            # The TensorRT base image is bigger than the root disk's free space: keep Docker's data on the larger /mnt
+            cfg=$( (sudo cat /etc/docker/daemon.json 2> /dev/null || echo '{}') | jq '. + {"data-root": "/mnt/docker"}')
+            echo "$cfg" | sudo tee /etc/docker/daemon.json > /dev/null
+            sudo systemctl restart docker
+            df -h / /mnt
+            docker build -t "$REF" -f STANDALONE-SERVICES/InsightFace-REST/src/Dockerfile_trt STANDALONE-SERVICES/InsightFace-REST/src
+            docker push "$REF"
+            df -h /mnt
+          fi
+          digest=$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "image=${REF%:*}@$digest" >> "$GITHUB_OUTPUT"
+          echo "$REF is ${REF%:*}@$digest"

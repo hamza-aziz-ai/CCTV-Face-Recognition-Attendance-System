@@ -29,7 +29,10 @@ HERE=$(pwd -W 2>/dev/null || pwd)
 # Create directory to store downloaded models
 mkdir -p models
 
-docker build -t "$IMAGE":"$TAG" -f src/Dockerfile_trt src/.
+# The image CI published for this source tree (insightface-image.yml). A deployment bundle sets INSIGHTFACE_IMAGE to its
+# digest; in a checkout the tag comes from git. To try uncommitted changes, docker build -t "$INSIGHTFACE_IMAGE" first.
+INSIGHTFACE_IMAGE=${INSIGHTFACE_IMAGE:-$IMAGE:$TAG-$(git rev-parse --short=12 HEAD:./src)}
+docker image inspect "$INSIGHTFACE_IMAGE" > /dev/null 2>&1 || docker pull "$INSIGHTFACE_IMAGE" || exit 1
 
 echo "Starting ${#INSIGHTFACE_GPUS[@]} containers on GPUs ${INSIGHTFACE_GPUS[*]}, $N_WORKERS worker(s) each";
 # shellcheck disable=SC2004
@@ -37,7 +40,8 @@ echo "Containers port range: $START_PORT - $(($START_PORT + ${#INSIGHTFACE_GPUS[
 
 
 p=0
-name=$IMAGE-trt
+# Fixed name: nginx (misc/nginx_conf) and stop_standalone_services.sh address the containers by it
+name=insightface-rest-trt
 
 for i in "${INSIGHTFACE_GPUS[@]}"; do
     # shellcheck disable=SC2089
@@ -77,13 +81,12 @@ for i in "${INSIGHTFACE_GPUS[@]}"; do
         -e DEF_EXTRACT_EMBEDDING="$EXTRACT_EMBEDDINGS" \
         -e DEF_EXTRACT_GA="$DETECT_GENDER_AGE" \
         -v "$HERE"/models:/models \
-        -v "$HERE"/src:/app \
         --health-cmd='curl -f http://localhost:18080/info || exit 1' \
         --health-interval=1m \
         --health-timeout=10s \
         --health-retries=3 \
         --name="$container_name" \
-        "$IMAGE":"$TAG"
+        "$INSIGHTFACE_IMAGE"
 done
 
 sleep 30

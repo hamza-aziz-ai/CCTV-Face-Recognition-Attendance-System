@@ -95,8 +95,17 @@ jobs:
           # pushes of the shared base layers into new ghcr.io packages were refused ("denied") at random.
           docker compose --parallel 1 -f docker-compose-main.yml -f docker-compose.dev.yml push
 
+  # Our InsightFace-REST image, built only when its source changed (insightface-image.yml)
+  insightface:
+    needs: plan
+    if: needs.plan.outputs.tag != ''
+    uses: ./.github/workflows/insightface-image.yml
+    permissions:
+      contents: read
+      packages: write
+
   publish:
-    needs: [plan, ci, images]
+    needs: [plan, ci, images, insightface]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -170,7 +179,7 @@ jobs:
   # Releases run unattended, and GitHub only emails whoever started a run, which here is the automerge bot.
   # An issue assigned to the owner reaches them by email and in the app, even with the deployment host off.
   notify-failure:
-    needs: [plan, ci, images, publish]
+    needs: [plan, ci, images, insightface, publish]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5

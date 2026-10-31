@@ -7,7 +7,7 @@
       "base_commit": "fb854d8029c880dc5a244595e491c1293c218bff",
       "local_changes": ["src/Dockerfile_cpu", "src/Dockerfile_trt", "src/requirements.txt", "src/if_rest/core/converters/onnx_to_trt.py", "src/if_rest/core/model_zoo/getter.py", "src/if_rest/core/utils/fast_face_align.py", "src/if_rest/core/face_model.py", "src/if_rest/core/model_zoo/detectors/retinaface.py"]
     },
-    "image": "insightface-rest:v0.9.5.0",
+    "image": "ghcr.io/hamza-aziz-ai/cctv-face-recognition-insightface-rest:v0.9.5.0",
     "image_digest": null,
     "base_image": "nvcr.io/nvidia/tensorrt:26.07-py3",
     "backend": "tensorrt",
@@ -55,7 +55,7 @@
     "DISPLAY-FACE-DATASET": {"dvc_md5": "80e9276468ddcb23eae6ff8bcce6044b.dir", "files": 1, "bytes": 220557}
   },
   "unverified": {
-    "inference_service.image_digest": "On the GPU host: docker image inspect --format '{{.Id}}' insightface-rest:v0.9.5.0",
+    "inference_service.image_digest": "Printed by the insightface-image workflow for the current InsightFace-REST/src tree (tag v0.9.5.0-<tree>)",
     "detector.engine_sha256": "On the GPU host: sha256sum of the built scrfd_10g_gnkps TensorRT engine under the InsightFace-REST models volume",
     "recognizer.engine_sha256": "On the GPU host: sha256sum of the built w600k_r50 TensorRT engine under the InsightFace-REST models volume"
   }
