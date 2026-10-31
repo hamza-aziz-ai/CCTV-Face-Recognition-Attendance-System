@@ -11,7 +11,7 @@ current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
 
-from parameters import CAMERA_CONFIGURATION_FILE, FRAME_SIZE
+from parameters import CAMERA_CONFIGURATION_FILE, FRAME_SIZE, KAFKA_TOPIC_PREFIX
 
 
 def check_for_directory(directory_path: str):
@@ -51,7 +51,7 @@ def count_cameras():
         camera_configuration_data = json.load(camera_configuration_file)
 
     return {
-        f"{location}_{point}": len(cctv_cameras) if cctv_cameras else 0
+        f"{KAFKA_TOPIC_PREFIX}{location}_{point}": len(cctv_cameras) if cctv_cameras else 0
         for location, data in camera_configuration_data.items()
         for point, cctv_cameras in data["cctv-cameras"].items()
     }
@@ -62,7 +62,7 @@ def map_camera_to_kafka_topic_and_partition():
         camera_configuration_data = json.load(camera_configuration_file)
 
     return {
-        f"{location}_{point}_{camera}": [f"{location}_{point}", int(camera.split("-")[-1]) - 1]
+        f"{location}_{point}_{camera}": [f"{KAFKA_TOPIC_PREFIX}{location}_{point}", int(camera.split("-")[-1]) - 1]
         for location, data in camera_configuration_data.items()
         for point, cctv_cameras in data["cctv-cameras"].items()
         if cctv_cameras

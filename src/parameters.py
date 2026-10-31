@@ -3,6 +3,8 @@ This module contains the default parameters used by the app
 """
 from dotenv import load_dotenv
 import os
+import re
+import sys
 
 
 ########################################################################################################################
@@ -10,6 +12,20 @@ import os
 ########################################################################################################################
 load_dotenv("master.env")
 IP_ADDRESS = os.getenv("IP_ADDRESS")
+
+# The client this stack serves (D-036). Required: without it the stack could read or write another client's data
+CLIENT_ID = os.getenv("CLIENT_ID", "")
+if not re.fullmatch(r"[a-z][a-z0-9]{2,29}", CLIENT_ID):
+    sys.exit(f"CLIENT_ID in master.env must be 3 to 30 lowercase letters or digits, starting with a letter; got {CLIENT_ID!r}")
+# The owner's site keeps the names it had before D-036
+OWNER_CLIENT_ID = "owner"
+
+
+def client_name(owner_name):
+    """This client's name for a database. IDs hold no underscore, so a prefixed name never equals another client's."""
+    return owner_name if CLIENT_ID == OWNER_CLIENT_ID else f"{CLIENT_ID}_{owner_name.lower()}"
+
+
 
 CAMERA_CONFIGURATION_FILE = "src/Camera-Configuration/camera_configuration.json"
 
@@ -123,6 +139,9 @@ MILVUS_HOST = IP_ADDRESS
 # Milvus port
 MILVUS_PORT = "19530"
 
+# Milvus database holding this client's collections; the names inside are the same for every client
+MILVUS_DATABASE = client_name("default")
+
 # Vector metric type and index type
 METRIC_TYPE = "COSINE"
 INDEX_TYPE = "GPU_IVF_FLAT"
@@ -159,7 +178,7 @@ NUMBER_OF_PICTURES = 3
 DYNAMIC_FACE_DATA_COLLECTOR_API = f"http://{IP_ADDRESS}:8000"
 
 # PostgreSQL Database Name
-POSTGRESQL_DATABASE_NAME = "Face_Recognition_Database"
+POSTGRESQL_DATABASE_NAME = client_name("Face_Recognition_Database")
 
 # Timeout if not getting response from API
 TIMEOUT = 5 * 60
@@ -190,7 +209,7 @@ POSTGRESQL_HOST = IP_ADDRESS
 POSTGRESQL_PORT = int(os.getenv("POSTGRESQL_PORT", "5432"))
 
 # PostgreSQL Database Name
-POSTGRESQL_DATABASE = "CCTV_Camera_Surveillance"
+POSTGRESQL_DATABASE = client_name("CCTV_Camera_Surveillance")
 
 # If the person is recognized by the same camera within this time threshold, the entry will not be added to the database
 SAME_CAM_TIME_ENTRY_THRESHOLD = 5    # minutes
@@ -234,6 +253,8 @@ SEGMENT_RETENTION_TIME = 5 * 1000  # 5 seconds
 KAFKA_HOST = IP_ADDRESS
 # Kafka port
 KAFKA_PORT = "9092"
+# Topics are <prefix><location>_<point>. A dot ends the prefix: IDs hold none, so one client's prefix never covers another's topics
+KAFKA_TOPIC_PREFIX = "" if CLIENT_ID == OWNER_CLIENT_ID else f"{CLIENT_ID}."
 
 
 # Display face image server port
