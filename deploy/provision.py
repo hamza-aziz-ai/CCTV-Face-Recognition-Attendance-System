@@ -2,15 +2,18 @@
 
 Per client <c>, each confined to its own data:
   PostgreSQL  role <c>_app owning <c>_cctv_camera_surveillance and <c>_face_recognition_database; nobody else connects
-  Milvus      user <c>_app with a role over database <c>_default only, enough to publish (D-030: collections, alias)
-  Kafka       SCRAM users <c>_app (write) and <c>_display (read, for displays) on topics and groups prefixed "<c>."
+  Milvus      user <c>_app with a role over database <c>_default only, enough to publish (D-030: collections, alias),
+              and an empty first version behind the alias plus the staging collection
+  Kafka       SCRAM users <c>_app (write) and <c>_display (read, for displays) on topics and groups prefixed "<c>.",
+              and the topics themselves, one per point with one partition per camera, from the site's cameras
   MinIO       bucket <c>-enrolment and access key <c>-app with a policy for that bucket only (dataset store)
 
 The client's passwords are generated once and saved to sites/<c>/.env before any service is touched, so a rerun after
 a failure reuses them and finishes the job. A principal that exists while its password is not saved is never reset
 behind the running stack's back: provisioning stops and says how to recover. Nothing secret is printed.
 
-  python provision.py CLIENT              provision (or finish provisioning) one client; safe to rerun
+  python provision.py CLIENT              provision (or finish provisioning) one client; safe to rerun, and rerun it
+                                          after changing the client's cameras (topics and partitions follow them)
   python provision.py --init-milvus-root  once per host, before Milvus authorisation is on: replace root's default password
 Options: --sites DIR, --admin-env FILE (holds MILVUS_ROOT_PASSWORD), --postgres/--kafka/--store CONTAINER, --milvus URL.
 Stdlib only, like watch.py: the services' own command-line tools run inside their containers through docker exec.
@@ -169,6 +172,51 @@ def kafka(container, env):
                      f"{client}.", "--resource-pattern-type", "prefixed"])
 
 
+def topics(camera_config, client):
+    """{topic: partitions} from the site's camera configuration: one topic per point, one partition per camera, where
+    cctv-camera-N writes to partition N-1 (src/util/generic_utilities.py), so gaps in the numbering still fit."""
+    config = json.loads(camera_config.read_text(encoding="utf-8"))
+    wanted = {}
+    for location, data in config.items():
+        for point, cameras in (data.get("cctv-cameras") or {}).items():
+            if cameras:
+                wanted[f"{client}.{location}_{point}"] = max(len(cameras), *(int(c.rsplit("-", 1)[-1]) for c in cameras))
+    return wanted
+
+
+def kafka_topics(container, wanted):
+    """Create missing topics and add partitions for new cameras; the app may only write (D-037). Never shrinks."""
+    admin = ["docker", "exec", container, "kafka-topics", "--bootstrap-server", "localhost:29092"]
+    for topic, partitions in wanted.items():
+        # Same settings the app used: displays need only the latest messages (src/parameters.py retention)
+        run(admin + ["--create", "--if-not-exists", "--topic", topic, "--partitions", str(partitions),
+                     "--config", "retention.ms=5000", "--config", "segment.ms=5000"])
+        have = re.search(r"PartitionCount:\s*(\d+)", run(admin + ["--describe", "--topic", topic]))
+        if have and int(have[1]) < partitions:
+            run(admin + ["--alter", "--topic", topic, "--partitions", str(partitions)])
+
+
+# The collections the app expects (src/parameters.py, METRIC_TYPE COSINE); the app adds the indexes at start
+PRIMARY, STAGING = "FACE_DATA_COLLECTION_FOR_COSINE", "FACE_DATA_STAGING_COLLECTION_FOR_COSINE"
+SCHEMA = {"autoId": False, "enableDynamicField": False, "fields": [
+    {"fieldName": "name_id", "dataType": "VarChar", "isPrimary": True, "elementTypeParams": {"max_length": 60}},
+    {"fieldName": "embeddings", "dataType": "FloatVector", "elementTypeParams": {"dim": 512}}]}
+
+
+def milvus_collections(url, root_token, db):
+    """A new client starts with an empty numbered version behind the alias (D-030), so the app never makes a plain
+    collection under the alias's name. An existing alias or collection is left as it is."""
+    call = lambda path, body: milvus_call(url, root_token, path, body, secret=[root_token])  # noqa: E731
+    existing = call("collections/list", {"dbName": db})
+    aliases = call("aliases/list", {"dbName": db}) or []
+    if PRIMARY not in aliases and PRIMARY not in existing:
+        if f"{PRIMARY}_v1" not in existing:
+            call("collections/create", {"dbName": db, "collectionName": f"{PRIMARY}_v1", "schema": SCHEMA})
+        call("aliases/create", {"dbName": db, "collectionName": f"{PRIMARY}_v1", "aliasName": PRIMARY})
+    if STAGING not in existing:
+        call("collections/create", {"dbName": db, "collectionName": STAGING, "schema": SCHEMA})
+
+
 def kafka_user_exists(container, user):
     out = run(["docker", "exec", container, "kafka-configs", "--bootstrap-server", "localhost:29092", "--describe",
                "--entity-type", "users", "--entity-name", user])
@@ -219,6 +267,10 @@ def provision(client, sites, admin_env, pg, kafka_container, store_container, mi
         raise Stop("the owner keeps its legacy names and moves to restricted logins at the step 3c cutover")
     token = root_token(admin_env)
     site_env = sites / client / ".env"
+    cameras = sites / client / "src/Camera-Configuration/camera_configuration.json"
+    if not cameras.is_file():
+        raise Stop(f"{cameras} is missing: its points and cameras decide the client's Kafka topics and partitions")
+    wanted_topics = topics(cameras, client)
     env = settings(client)
     # An account that exists while its password is not saved belongs to an earlier run whose password is lost;
     # resetting it would lock out the stack that uses the old one. Checked before anything is written.
@@ -237,9 +289,12 @@ def provision(client, sites, admin_env, pg, kafka_container, store_container, mi
     env = save_missing(site_env, env)  # new passwords are saved before any service is touched
     postgres(pg, env)
     milvus(milvus_url, token, env)
+    milvus_collections(milvus_url, token, f"{client}_default")
     kafka(kafka_container, env)
+    kafka_topics(kafka_container, wanted_topics)
     store(store_container, env)
-    print(f"{client}: provisioned (PostgreSQL, Milvus, Kafka, dataset store); credentials in {site_env}")
+    print(f"{client}: provisioned (PostgreSQL, Milvus, Kafka with {len(wanted_topics)} topics, dataset store); "
+          f"credentials in {site_env}")
 
 
 def init_milvus_root(admin_env, milvus_url):

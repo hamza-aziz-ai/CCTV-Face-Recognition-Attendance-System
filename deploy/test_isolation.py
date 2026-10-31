@@ -9,6 +9,8 @@ MinIO under a random isotest-* compose project, with the same authentication set
 Needs Docker; pulls about 3.5 GB of images the first time. Never touches the live services or their data.
 Run from the repo root: python3 -I deploy/test_isolation.py"""
 import hashlib
+import json
+import re
 import secrets
 import socket
 import subprocess
@@ -245,10 +247,17 @@ def check_kafka_boundary(f):
     assert p.returncode != 0 and "maingate" not in p.stdout, "anonymous client served on 9092"
 
 
-def seed_topics(f):
-    for client in ("acme", "beta", "gamma"):
-        sh("docker", "exec", f.kafka, "kafka-topics", "--bootstrap-server", "localhost:29092", "--create", "--if-not-exists",
-           "--topic", f"{client}.maingate_entry", "--partitions", "2")
+def cameras(f, client, *numbers):
+    """The site's camera configuration: provisioning makes one topic per point and a partition per camera from it."""
+    path = f.sites / client / "src/Camera-Configuration/camera_configuration.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"maingate": {"api-endpoint": "https://ERP_HOST/x", "cctv-cameras": {
+        "entry": {f"cctv-camera-{n}": {} for n in numbers}, "exit": None}}}))
+
+
+def partitions(f, topic):
+    out = sh("docker", "exec", f.kafka, "kafka-topics", "--bootstrap-server", "localhost:29092", "--describe", "--topic", topic).stdout
+    return int(re.search(r"PartitionCount:\s*(\d+)", out)[1])
 
 
 def digest(path):
@@ -264,7 +273,8 @@ def test():
         assert provision.main(["--init-milvus-root", "--admin-env", str(f.admin_env), "--milvus", f.milvus]) == 0
         assert provision.main(["--init-milvus-root", "--admin-env", str(f.admin_env), "--milvus", f.milvus]) == 0
         assert isinstance(milvus(f, {"MILVUS_APP_USER": "root", "MILVUS_APP_PASSWORD": "Milvus"}, "users/list", {}), Exception)
-        seed_topics(f)
+        for client in ("acme", "beta", "gamma"):
+            cameras(f, client, 1, 2)
         # The owner's vectors live in Milvus's default database: seed some, so refusals there are real ones
         root = {"MILVUS_APP_USER": "root", "MILVUS_APP_PASSWORD": provision.read_env(f.admin_env)["MILVUS_ROOT_PASSWORD"]}
         for path, body in (("collections/create", {"dbName": "default", "collectionName": "FACES_v1", "dimension": 8}),
@@ -274,6 +284,13 @@ def test():
         assert f.provision("owner") == 1 and f.provision("Acme") == 1  # owner waits for 3c; bad IDs refused
         for client in ("acme", "beta"):
             assert f.provision(client) == 0, client
+        # Topics and the first Milvus version come from provisioning, not from the app (D-037)
+        for client in ("acme", "beta"):
+            assert partitions(f, f"{client}.maingate_entry") == 2, client
+            alias = milvus(f, root, "aliases/describe", {"dbName": f"{client}_default", "aliasName": "FACE_DATA_COLLECTION_FOR_COSINE"})
+            assert alias["collectionName"] == "FACE_DATA_COLLECTION_FOR_COSINE_v1", (client, alias)
+            listed = milvus(f, root, "collections/list", {"dbName": f"{client}_default"})
+            assert "FACE_DATA_STAGING_COLLECTION_FOR_COSINE" in listed, (client, listed)
         before = {c: digest(f.sites / c / ".env") for c in ("acme", "beta")}
         assert f.provision("acme") == 0 and digest(f.sites / "acme/.env") == before["acme"], "rerun changed credentials"
         acme, beta = f.env("acme"), f.env("beta")
@@ -294,6 +311,9 @@ def test():
         assert f.provision("gamma") == 0 and digest(f.sites / "gamma/.env") == saved
         gamma = f.env("gamma")
         check_own(f, gamma, "gamma")
+        # A camera added at a point: rerunning provisioning adds its partition (cctv-camera-5 writes to partition 4)
+        cameras(f, "gamma", 1, 2, 5)
+        assert f.provision("gamma") == 0 and partitions(f, "gamma.maingate_entry") == 5
         # A lost password stops provisioning, on every rerun, instead of resetting the account under the running stack
         env_file = f.sites / "gamma/.env"
         env_file.write_text("".join(line + "\n" for line in env_file.read_text().splitlines() if not line.startswith("PG_APP_PASSWORD=")))
