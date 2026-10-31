@@ -533,9 +533,9 @@ Trade-off: clients still share administrators, failures and GPU capacity; separa
 Plan, five PRs, each with its tests:
 
 1. names and configuration: required `CLIENT_ID`, owner mapping, per-client databases, topics and consumer groups (missing or invalid configuration refused; identical camera or person IDs in two clients never collide)
-2. deployment layout: no fixed container names, separate compose projects, per-client data and log folders, networks, watcher state and locks, HTTPS hostnames per client behind a reverse proxy, image cleanup that keeps every client's rollback images or none on central hosts (A's stop, upgrade or rollback leaves B running with its rollback images)
+2. deployment layout: no fixed container names, separate compose projects, per-client data and log folders, networks, watcher state and locks, image cleanup that keeps every client's rollback images or none on central hosts (A's stop, upgrade or rollback leaves B running with its rollback images)
 3. provisioning and credentials: restricted logins in Postgres, Milvus, Kafka, MinIO, publisher exception (A's credentials refused on all four for B's data; publishing succeeds with client-only credentials)
-4. accounts and protected callers: logins, roles, sessions, machine tokens, protection on the API, feedback intake and Kafka-WebApp pages and WebSockets (role matrix, cross-client sessions, login bypass, CSRF, throttling, revocation)
+4. accounts and protected callers: HTTPS hostnames per client behind a reverse proxy (secure cookies need it), logins, roles, sessions, machine tokens, protection on the API, feedback intake and Kafka-WebApp pages and WebSockets (role matrix, cross-client sessions, login bypass, CSRF, throttling, revocation)
 5. tiers and recovery: tier selection, then a two-client synthetic rehearsal: snapshot, publish, restore one client without touching the other, remove a client
 
 Enrolment (8c), the live view (8b), the Android app (8d) and deletion (8e) build on these boundaries.
