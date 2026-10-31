@@ -99,11 +99,11 @@ def demo(keep=None):
     with tempfile.TemporaryDirectory() as out:
         manifest = build(out, tag, "deadbeef", digests)
         compose = (Path(out) / "docker-compose-main.yml").read_text(encoding="utf-8")
-        assert len(app_images((ROOT / "docker-compose-main.yml").read_text(encoding="utf-8"), tag)) == 7
-        assert compose.count("@sha256:") == 8, compose.count("@sha256:")  # 7 app images + Kafka-WebApp, pinned in git
+        assert len(app_images((ROOT / "docker-compose-main.yml").read_text(encoding="utf-8"), tag)) == 8
+        assert compose.count("@sha256:") == 9, compose.count("@sha256:")  # 8 app images + Kafka-WebApp, pinned in git
         assert "INSIGHTFACE_IMAGE='ghcr.io/hamza-aziz-ai/cctv-face-recognition-insightface-rest@sha256:" in \
             (Path(out) / "STANDALONE-SERVICES/standalone-services.env").read_text(encoding="utf-8")
-        assert manifest["release"] == tag and len(manifest["images"]) == 8
+        assert manifest["release"] == tag and len(manifest["images"]) == 9
         assert not [p for p in Path(out).rglob("*.py")], "no Python in the bundle"
         (Path(out) / "src/main.py").write_text("x")
         try:

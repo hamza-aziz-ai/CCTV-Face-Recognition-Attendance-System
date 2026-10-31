@@ -92,7 +92,7 @@ jobs:
             files: src/automatic-vector-db-updation/milvus_updater.py
           - service: roi
             dockerfile: roi.Dockerfile
-            files: Custom-ROI-Provisioning/app.py
+            files: Custom-ROI-Provisioning/app.py Custom-ROI-Provisioning/templates/index.html
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -131,6 +131,10 @@ jobs:
           import multiprocessing_shared_buffer
           assert mp.get_start_method() == "fork", mp.get_start_method()
           '
+      # The ROI page lists cameras, previews and saves one camera's region, and refuses bad input (D-035)
+      - name: ROI page
+        if: matrix.service == 'roi'
+        run: docker run --rm --entrypoint python3 ci/${{ matrix.service }}:test Custom-ROI-Provisioning/test_app.py
       # Face vectors saved with the dataset round-trip through Parquet, and versions are numbered right (D-030)
       - name: Face vectors
         if: matrix.service == 'producer-consumer'
