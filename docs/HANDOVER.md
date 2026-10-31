@@ -19,11 +19,15 @@ Agreed order (owner, 2026-10-31). This replaces the older "Next" lists below.
 5. Switch this host to the bundle and `site\` layout and retire the deploy clone (D-033 step 3; planned short outage).
 6. Repair the ROI provisioning service (owner: repair, not delete). It imports names that no longer exist (`IP_CAMS`, `create_mask`, `roi_coordinates`) and rewrites `src/parameters.py` at runtime; it is not deployed today.
 7. Real camera test of the whole path (owner).
-8. Multi-tenant design: client-dedicated and multi-client central deployments from one codebase, tiers enforced by pull tokens (council, decision record).
+8. Multi-tenant design: client-dedicated and multi-client central deployments from one codebase, including where each client's data lives and staff login (council, decision record). Pull tokens only gate which images a dedicated host can download; central tiers need server-side entitlements.
+   - 8b. Standard live view: camera video passed through a media server (e.g. MediaMTX) beside a per-camera "recent events" panel; no overlays.
+   - 8c. Enrolment API on synthetic data: staff login, client taken from the login, server-side photo checks (real head pose and blur), jobs in Postgres, Milvus publish only after validation.
+   - 8d. Android app `hamza-aziz-ai/Face-Dataset-Collector`: login, consent record, guided 5 or 10-pose auto-capture, review and retake, upload to 8c. Its capture screens can start now against a mock.
+   - 8e. Person deletion (photos, vectors, camera crops, old Milvus versions, stored object versions, backups, with a deletion record), plus client isolation and recovery tests.
 9. Step 4: compile the app code (Nuitka module mode, Cython fallback, `-rt` packages; plan agreed with Codex). Dedicated tier only.
 10. Merge the PTZ project in as a second app (Python 3.14, CI, no secrets in images first).
-11. DeepStream as an optional paid recognition image.
-12. Jetson Orin edge node.
+11. DeepStream as an optional paid recognition image, including the live annotated stream. It starts with a capacity spike: timestamped clips, then 1 to N streams, measuring p95 latency, frame rate, drops, GPU memory, encoder sessions and viewer fan-out. Risks: hardware decoding under WSL2 on RTX 40-series, and consumer GPUs capped at 8 encoder sessions.
+12. Jetson Orin edge node. The Orin Nano has no hardware video encoder.
 
 Any time: draft the InsightFace model licence request (owner sends); triage Dependabot alerts; delete `insightface-rest:v0.9.0.0` after a few days of real use; budget Actions minutes for the large builds in items 9 to 12.
 
