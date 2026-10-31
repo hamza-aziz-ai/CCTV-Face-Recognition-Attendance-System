@@ -61,6 +61,8 @@ jobs:
       - run: |
           python3 -I deploy/make_bundle.py demo /tmp/bundle
           docker compose -f /tmp/bundle/docker-compose-main.yml config --quiet
+      # The standalone scripts from a bundle with a separate site folder, and from the checkout, with Docker stubbed
+      - run: bash deploy/test_standalone_scripts.sh
 
   images:
     runs-on: ubuntu-latest
