@@ -8,26 +8,26 @@
 
 NETWORK_NAME="insightface-network"
 
-# check if insightface-rest-gpu-mig-trt-0 containers exists
-if [ "$(docker ps -a -q -f name=insightface-rest-gpu-mig-trt-0)" ]; then
+# check if insightface-rest-trt-0 containers exists
+if [ "$(docker ps -a -q -f name=insightface-rest-trt-0)" ]; then
     # cleanup
-    echo "insightface-rest-gpu-mig-trt-0 container exists, stop and remove it"
+    echo "insightface-rest-trt-0 container exists, stop and remove it"
     # Disconnect from network
-    docker network disconnect $NETWORK_NAME insightface-rest-gpu-mig-trt-0
-    docker stop insightface-rest-gpu-mig-trt-0
-    docker rm -f insightface-rest-gpu-mig-trt-0
+    docker network disconnect $NETWORK_NAME insightface-rest-trt-0
+    docker stop insightface-rest-trt-0
+    docker rm -f insightface-rest-trt-0
 fi
 
 echo
 
-# check if insightface-rest-gpu-mig-trt-1 containers exists
-if [ "$(docker ps -a -q -f name=insightface-rest-gpu-mig-trt-1)" ]; then
+# check if insightface-rest-trt-1 containers exists
+if [ "$(docker ps -a -q -f name=insightface-rest-trt-1)" ]; then
     # cleanup
-    echo "insightface-rest-gpu-mig-trt-1 container exists, stop and remove it"
+    echo "insightface-rest-trt-1 container exists, stop and remove it"
     # Disconnect from network
-    docker network disconnect $NETWORK_NAME insightface-rest-gpu-mig-trt-1
-    docker stop insightface-rest-gpu-mig-trt-1
-    docker rm -f insightface-rest-gpu-mig-trt-1
+    docker network disconnect $NETWORK_NAME insightface-rest-trt-1
+    docker stop insightface-rest-trt-1
+    docker rm -f insightface-rest-trt-1
 fi
 
 echo

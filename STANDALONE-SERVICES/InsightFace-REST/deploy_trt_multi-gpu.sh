@@ -31,15 +31,15 @@ mkdir -p models
 
 docker build -t "$IMAGE":"$TAG" -f src/Dockerfile_trt src/.
 
-echo "Starting $((N_GPU * NUM_WORKERS)) workers on $N_GPU GPUs ($NUM_WORKERS workers per GPU)";
+echo "Starting ${#INSIGHTFACE_GPUS[@]} containers on GPUs ${INSIGHTFACE_GPUS[*]}, $N_WORKERS worker(s) each";
 # shellcheck disable=SC2004
-echo "Containers port range: $START_PORT - $(($START_PORT + ($N_GPU) - 1))"
+echo "Containers port range: $START_PORT - $(($START_PORT + ${#INSIGHTFACE_GPUS[@]} - 1))"
 
 
 p=0
-name=$IMAGE-gpu-mig-trt
+name=$IMAGE-trt
 
-for i in "${MIG_GPU[@]}"; do
+for i in "${INSIGHTFACE_GPUS[@]}"; do
     # shellcheck disable=SC2089
     device='"device='$i'"';
     # shellcheck disable=SC2004
@@ -94,8 +94,9 @@ echo "Starting Docker NGINX Load Balancer";
 docker network create insightface-network
 
 # Connect existing containers to the network
-docker network connect insightface-network "$name"-0
-docker network connect insightface-network "$name"-1
+for ((n = 0; n < ${#INSIGHTFACE_GPUS[@]}; n++)); do
+    docker network connect insightface-network "$name-$n"
+done
 
 docker rm -f docker-nginx-insightface 2>/dev/null || true
 # shellcheck disable=SC2046

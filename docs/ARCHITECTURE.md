@@ -32,4 +32,4 @@ Outside input enters at these points. Details and gaps are in [THREAT.md](THREAT
 
 ## Hosts
 
-This laptop (RTX 4050, 6 GB, Docker Desktop) is both the dev and the deployment host. The repo's defaults describe the original A100 MIG host; `STANDALONE-SERVICES/hosts/laptop-rtx4050.env` overrides them here (D-015).
+This laptop (RTX 4050, 6 GB, Docker Desktop) is both the dev and the deployment host. The repo's defaults are generic: every GPU service on GPU 0, with batch sizes that fit 6 GB. A bigger host overrides them with a profile under `STANDALONE-SERVICES/hosts/` (D-015, D-032).
