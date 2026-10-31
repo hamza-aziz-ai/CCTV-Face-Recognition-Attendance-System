@@ -17,6 +17,7 @@ To stop automatic deploys: `schtasks /Change /TN "CCTV deploy watcher" /DISABLE`
 |---|---|
 | PostgreSQL 12 to 18 (D-020) | Not possible any more: the 12 data was deleted on 2026-10-31, after the client names were removed. |
 | Milvus 2.5 to 3.0 (D-022) | Not possible any more: the 2.5.1 test data was deleted on 2026-10-31. |
+| Face vectors (D-030) | `python3 src/util/face_vectors.py list`, then `use <n>` to serve an earlier version; the app follows without a restart. For a version no longer in Milvus, check out that dataset version (`git checkout <commit> FACIAL-RECOGNITION-DATASET.dvc && dvc checkout`) and `publish`. Before the migration, `use 0` returns to the old collection. |
 | Kafka | Topics live in the `kafka-data` volume (D-028). To start empty, stop the Kafka stack and remove `confluent-kafka_kafka-data`; each service recreates its own topics. |
 | Dataset store | `stop_standalone_services.sh` keeps `DATASET_STORE_DIR`. There is no second copy of it yet. |
 

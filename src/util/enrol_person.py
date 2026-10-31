@@ -1,4 +1,5 @@
-"""Enrols one person: checks their photos, then adds their embeddings to the primary Milvus collection (D-026).
+"""Enrols one person: checks their photos, saves their embeddings next to them, then publishes a new version of the
+primary Milvus collection with everyone's saved embeddings (D-026, D-030).
 
 Usage: python3 src/util/enrol_person.py <folder>
 The folder name is the person's ID, and it holds front.jpg, chin_up.jpg, chin_down.jpg, left_30.jpg and right_30.jpg,
@@ -18,7 +19,8 @@ sys.path.append(parent)
 
 from enrolment_checks import check_face, check_files, check_not_enrolled, check_same_person
 from insightface_face_detection import IFRClient
-from milvus_server import create_connection, create_collection, insert_data
+from face_vectors import publish, save
+from milvus_server import create_connection, create_collection
 from parameters import ENROLMENT_MIN_CONFIDENCE, FACE_MATCHING_TOLERANCE, INSIGHTFACE_HOST, INSIGHTFACE_PORT, \
     METRIC_TYPE, MILVUS_COLLECTION_NAME, MILVUS_HOST, MILVUS_PORT, PUPIL_DISTANCE_THRESHOLD
 
@@ -37,12 +39,12 @@ def best_match(collection, vector):
     return (hits[0].entity.get("name_id"), hits[0].distance) if hits else None
 
 
-def main(folder):
-    person_id = folder.name
+def vectors_for(folder):
+    """The embedding of each photo in the folder, keyed by pose, and the problems that stop enrolment."""
     photos = {photo.stem: photo for photo in sorted(folder.glob("*.jpg"))}
     problems = check_files(photos)
     if problems:
-        return problems
+        return {}, problems
 
     client = IFRClient(host=INSIGHTFACE_HOST, port=INSIGHTFACE_PORT)
     vectors = {}
@@ -54,9 +56,15 @@ def main(folder):
             vectors[stem] = faces[0]["vec"]
         print(f"{stem}: {len(faces)} face(s), sharpness {sharpness:.0f}")  # shown only: no pass mark from real data yet
     if problems:
-        return problems
+        return {}, problems
+    return vectors, check_same_person(vectors, FACE_MATCHING_TOLERANCE)
 
-    problems += check_same_person(vectors, FACE_MATCHING_TOLERANCE)
+
+def main(folder):
+    person_id = folder.name
+    vectors, problems = vectors_for(folder)
+    if not vectors:
+        return problems
 
     create_connection(host=MILVUS_HOST, port=MILVUS_PORT)
     collection = create_collection(MILVUS_COLLECTION_NAME)
@@ -68,8 +76,9 @@ def main(folder):
     if problems:
         return problems
 
-    insert_data(collection, [[person_id] * len(vectors), list(vectors.values())])
-    print(f"Enrolled {person_id} with {len(vectors)} photos.")
+    save(folder, person_id, vectors.values())
+    publish(folder.parent)
+    print(f"Enrolled {person_id} with {len(vectors)} photos. Version the dataset: dvc add {folder.parent.name} && dvc push")
     return []
 
 

@@ -96,7 +96,8 @@ if __name__ == "__main__":
             "unreadable_photos": []
         }
 
-        photos = os.listdir(sub_dir_path)
+        # Photos only: an enrolled folder also holds vectors.parquet (D-030)
+        photos = [name for name in os.listdir(sub_dir_path) if name.lower().endswith((".jpg", ".jpeg", ".png"))]
         directory_info["photo_count"] = len(photos)
         report["summary"]["total_photos"] += len(photos)
 

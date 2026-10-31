@@ -7,35 +7,25 @@ current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
 
-from parameters import MILVUS_HOST, MILVUS_PORT, MILVUS_COLLECTION_NAME, FACIAL_RECOGNITION_EMBEDDINGS_PATH
-from milvus_server import create_connection, create_collection, insert_data, delete_collection
+from face_vectors import publish, save
+from parameters import FACIAL_RECOGNITION_DATASET_PATH
+
 
 def upload_embeddings(embeddings_file):
+    """Saves a pickle's embeddings into the dataset, one vectors.parquet per person, then publishes a new version of the
+    primary collection (D-030). Only the people in the pickle are replaced; everyone else stays."""
     with open(embeddings_file, "rb") as embeddings_file:
         data = pickle.load(embeddings_file)
 
-    # data = pickle.loads(open(embeddings_file, "rb").read())
+    by_person = {}
+    for name, encoding in zip(data["names"], data["encodings"]):
+        by_person.setdefault(name, []).append(encoding)
+    for name, encodings in by_person.items():
+        folder = os.path.join(FACIAL_RECOGNITION_DATASET_PATH, name)
+        os.makedirs(folder, exist_ok=True)
+        save(folder, name, encodings)
+    publish()
 
-    known_face_encodings = data["encodings"]
-    known_face_names = data["names"]
-
-    # CONNECTING TO MILVUS SERVER
-    create_connection(host=MILVUS_HOST, port=MILVUS_PORT)
-
-    # DELETING THE ALREADY EXISTING COLLECTION
-    delete_collection(MILVUS_COLLECTION_NAME)
-
-    # CREATING A NEW COLLECTION
-    embeddings_collection = create_collection(collection_name=MILVUS_COLLECTION_NAME)
-
-    # INSERTING DATA TO NEWLY CREATED COLLECTION
-    # entities for milvus database
-    entities = [
-        known_face_names,
-        known_face_encodings
-    ]
-
-    insert_data(embeddings_collection, entities)
 
 if __name__ == "__main__":
     # Usage: python3 src/util/upload_embeddings.py <embeddings.pkl>
