@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.0.4 (2026-10-31)
+
+## What's Changed
+* fix(ci): recover stuck merges and stale releases without a person by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/44
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.0.3...v2.0.4
+
 ## v2.0.3 (2026-10-30)
 
 ## What's Changed
