@@ -121,6 +121,7 @@ def migrate(dataset=FACIAL_RECOGNITION_DATASET_PATH, alias=MILVUS_COLLECTION_NAM
             sys.exit(f"{person}: {problems}")
         save(folder, person, vectors.values())
     number = build(client, dataset, alias)
+    client.load_collection(f"{alias}_v{number}")  # before the rename, so the app is without a collection only briefly
     client.rename_collection(alias, f"{alias}_v0")  # kept as it was, for a rollback with `use 0`
     use(client, alias, number)
 
