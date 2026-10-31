@@ -2,7 +2,7 @@
 
 ## What It Does
 
-This system uses CCTV cameras to recognise people and automatically record their attendance. Whenever someone is identified, their details appear on a display, and their attendance is sent to the institution's ERP system.
+This system uses CCTV cameras to recognize people and automatically record their attendance. Whenever someone is identified, their details appear on a display, and their attendance is sent to the institution's ERP system.
 
 The idea is to make attendance tracking easier without requiring people to manually check in.
 
@@ -12,7 +12,7 @@ The process starts with CCTV cameras capturing video frames. These frames are ad
 
 Once a match is found, the attendance is recorded in PostgreSQL, sent to the ERP, and shown on the display.
 
-There's also a nightly job that collects recent face images. This helps the system recognise people even when their appearance changes over time.
+There's also a nightly job that collects recent face images. This helps the system recognize people even when their appearance changes over time.
 
 The complete workflow is documented in [FLOW.md](FLOW.md).
 

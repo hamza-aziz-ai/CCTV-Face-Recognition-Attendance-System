@@ -1,24 +1,24 @@
 # Architecture
 
-Reads frames from IP cameras, recognises faces, records attendance and shows the result on displays. The diagram is in the [README](../README.md#architecture). Execution order is in [FLOW.md](FLOW.md), stored data in [DATA.md](DATA.md).
+Reads frames from IP cameras, recognizes faces, records attendance and shows the result on displays. The diagram is in the [README](../README.md#architecture). Execution order is in [FLOW.md](FLOW.md), stored data in [DATA.md](DATA.md).
 
 ## Modules
 
-| Module | Code | Owns |
-|---|---|---|
-| Producer-consumer | `src/main.py`, `src/multicam_stream_*.py` | Camera threads, frame queue, recognition workers |
-| DB controller | `src/database_server/` | Writes recognition results to PostgreSQL |
-| Feedback controller | `src/feedback_server/` | Publishes recognition feedback to Kafka |
-| Reporting API | `src/api/` | Reports for people, cameras and locations; pushes records to the ERP every minute |
-| Display image server | `src/fetch_face_image_server/` | Turns recognised IDs into portraits for displays |
-| Face collector | `src/dynamic_face_data_collector/` | Stores face crops and metadata |
-| Nightly updater | `src/automatic-vector-db-updation/` | Moves new crops into the Milvus staging collection |
-| Kafka-WebApp | submodule, own repository | Display client, on this host and on Raspberry Pis |
-| InsightFace-REST | `STANDALONE-SERVICES/InsightFace-REST` | Face detection and embeddings on the GPU |
-| Milvus | `STANDALONE-SERVICES/Milvus-Vector-Database` | Vector search |
-| Kafka | `STANDALONE-SERVICES/Confluent-Kafka` | Feedback messages |
-| Dataset store | `STANDALONE-SERVICES/Dataset-Store` | DVC remote for the face datasets |
-| Deployment watcher | `deploy/watch.py` | Deploys new releases to this host, rolls back on failure |
+| Module               | Code                                         | Owns                                                                              |
+|----------------------|----------------------------------------------|-----------------------------------------------------------------------------------|
+| Producer-consumer    | `src/main.py`, `src/multicam_stream_*.py`    | Camera threads, frame queue, recognition workers                                  |
+| DB controller        | `src/database_server/`                       | Writes recognition results to PostgreSQL                                          |
+| Feedback controller  | `src/feedback_server/`                       | Publishes recognition feedback to Kafka                                           |
+| Reporting API        | `src/api/`                                   | Reports for people, cameras and locations; pushes records to the ERP every minute |
+| Display image server | `src/fetch_face_image_server/`               | Turns recognised IDs into portraits for displays                                  |
+| Face collector       | `src/dynamic_face_data_collector/`           | Stores face crops and metadata                                                    |
+| Nightly updater      | `src/automatic-vector-db-updation/`          | Moves new crops into the Milvus staging collection                                |
+| Kafka-WebApp         | submodule, own repository                    | Display client, on this host and on Raspberry Pis                                 |
+| InsightFace-REST     | `STANDALONE-SERVICES/InsightFace-REST`       | Face detection and embeddings on the GPU                                          |
+| Milvus               | `STANDALONE-SERVICES/Milvus-Vector-Database` | Vector search                                                                     |
+| Kafka                | `STANDALONE-SERVICES/Confluent-Kafka`        | Feedback messages                                                                 |
+| Dataset store        | `STANDALONE-SERVICES/Dataset-Store`          | DVC remote for the face datasets                                                  |
+| Deployment watcher   | `deploy/watch.py`                            | Deploys new releases to this host, rolls back on failure                          |
 
 ## Trust boundaries
 

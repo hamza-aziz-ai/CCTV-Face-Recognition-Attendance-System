@@ -8,19 +8,19 @@ Done: CI/CD end to end; the watcher deploys releases to this host; PostgreSQL 18
 Left: enrol real people with consent; a real camera test; InsightFace 0.9.5 (on hold, see docs/features/); vector versioning (docs/features/dataset-versioning.md); Dependabot alerts.
 Risks: no real camera has gone through the system since the upgrades, and only one person is enrolled; most internal services have no login (docs/THREAT.md); the Raspberry Pis cannot pull the private `kafka-webapp` package yet.
 
-## Latest session: 2026-10-30 (model: Claude Opus 5.5, council with Codex gpt-6.1-sol)
+## Latest session: 2026-10-30 (model: Claude Opus 5.5, council with Codex GPT-6.1 Sol)
 
 Done:
 - Agreed the CI/CD and MLOps plan with Codex. The order is: packaging fixes → CI → DockerHub and release-please → DVC and model manifest → deployment design.
 - Step 2 (branch `ci/docker-packaging`):
   - Images move to Python 3.11 on bookworm and bake in `src/`.
   - `.dockerignore` rewritten.
-  - Healthchecks fixed.
+  - Health checks fixed.
   - `master.env` untracked.
   - `.gitattributes` forces LF on `.sh`.
 - Step 3 (same branch): `.github/workflows/ci.yml` runs lint, gitleaks, compose config, 8 image builds and smoke tests, plus the aggregate `ci` check. Two dead `del` blocks removed (D-007).
 - Compose split: `docker-compose-main.yml` has no builds or `./src` mounts (code comes from the image). `docker-compose.dev.yml` restores both. `build-docker-images.sh` removed; the README builds via the dev override (D-010).
-- `.github/dependabot.yml`: weekly grouped updates for github-actions and the Docker base digest (D-011).
+- `.github/dependabot.yml`: weekly grouped updates for GitHub Actions and the Docker base digest (D-011).
 - `mlops/model-manifest.json` and `mlops/check_manifest.py` (branch `mlops/model-manifest`, stacked on PR #1). CI fails on drift; `--release` fails while 4 host-only values are null (D-012).
 - `.github/workflows/automerge.yml` (branch `ci/automerge`, stacked on #2): squash-merges PRs into main when `ci` and every other check passed on the exact head commit; it runs only from main's copy (D-013). It only takes effect once merged to main, so #1–#3 themselves are merged by hand.
 - `.github/workflows/release.yml` (branch `ci/release`, stacked on #3): automerge starts it after merging; it bumps from the merged Conventional Commit titles, re-runs `ci` on the exact commit, then tags and publishes a Release with the model manifest attached (D-014).
@@ -52,7 +52,7 @@ Broken or risky:
 - Stacked PRs and squash merges: deleting a merged base branch closes the PR stacked on it. Retarget dependents to `main` before merging, then merge `main` into each branch.
 
 Next:
-- After v0.3.0 (first release with images): `gh auth refresh -s read:packages`, `docker login ghcr.io`, then create the deploy clone `C:\deploy\cctv`, copy `.env` into it, run `watch.py --enroll` and register the scheduled task (README, CI/CD).
+- After v0.3.0 (first release with images): `gh auth refresh -s read:packages`, `docker login ghcr.io`, then create the deployment clone `C:\deploy\cctv`, copy `.env` into it, run `watch.py --enroll` and register the scheduled task (README, CI/CD).
 - Turn on Docker Desktop "Start Docker Desktop when you sign in" (owner).
 - Raspberry Pis: the `kafka-webapp` package is private, so they cannot pull it yet (make it public in the package settings, or log them in). Not tested on a real Pi.
 - Enrol more people: copy their photos to `FACIAL-RECOGNITION-DATASET/<person_id>/`, run `src/util/enrol_person.py` (it saves `vectors.parquet` and publishes a new Milvus version, D-030), add `front_face.jpg` to `DISPLAY-FACE-DATASET`, then `dvc add` and `dvc push`, and update the manifest.

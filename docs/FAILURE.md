@@ -1,27 +1,27 @@
 # Failure map
 
-Marked **seen** where it actually happened on this host, otherwise **from the code**, not tested. There are no dashboards. A failed release opens a GitHub issue assigned to the owner, and a failed deploy shows a Windows message from the watcher. Otherwise you find out from `docker ps`, the service logs under `logs/`, or `deploy/watch.log`.
+Marked **seen** where it actually happened on this host, otherwise **from the code**, not tested. There are no dashboards. A failed release opens a GitHub issue assigned to the owner, and a failed deployment shows a Windows message from the watcher. Otherwise, you find out from `docker ps`, the service logs under `logs/`, or `deploy/watch.log`.
 
-| Dependency | If it is down, slow or wrong | How you notice | Status |
-|---|---|---|---|
-| Camera | Thread loses frames; other cameras continue | Producer log | From the code |
-| InsightFace-REST | No embeddings, so no recognition; frames keep queuing | Container unhealthy, consumer log | From the code |
-| Frame queue | Unbounded `multiprocessing.Queue`: memory grows if recognition is slower than the cameras; contents are lost on restart | Host memory | From the code |
-| Milvus down | Searches fail while running | Consumer log | From the code |
-| Milvus MinIO | Crash loop when an older build opens data from a newer one | `Restarting` in `docker ps` | Seen |
-| Kafka | Displays stop updating; attendance still recorded | Display shows an error message | From the code |
-| Kafka restart | Topics and messages survive on the `kafka-data` volume (D-028) | Missing display messages | Fixed 2026-10-31 |
-| PostgreSQL | Results are not stored; retry behaviour not confirmed | DB controller log | From the code |
-| DB controller | The duplicate check queries a column the table does not define (README, Known issues) | Log errors | From the code |
-| ERP | Records wait for the next minute's attempt | API log | From the code |
-| Camera unreachable | Thread logs the error, sleeps 30 s and retries; `producer-consumer` stays Up | Producer log | Seen |
-| Startup order | Services that read a database now wait for the one that creates it; the updater creates its own collection; InsightFace workers write engines atomically | `docker ps` | Fixed 2026-10-31 |
-| Kafka broker recreated without its data | Schema Registry and Connect crash-looped on auto-created topics with the delete policy; auto-creation is now off | `Restarting` in `docker ps` | Seen, fixed 2026-10-31 |
-| Nightly updater | Swallows insert failures and still marks rows processed, so vectors are lost silently | Nothing | From the code |
-| Docker Desktop | Everything stops until someone signs in to Windows (D-018) | Displays go down | From the design |
-| Host IP change | Kafka advertises the old IP; run `set_configuration.sh` and restart Kafka | Clients cannot connect | From the design |
-| ghcr.io login | Deploy fails and rolls back | Watcher message | From the design |
-| GPU memory | 3.3 of 6 GB used idle; batches 8/16 are unmeasured guesses | OOM in InsightFace log | Not measured |
+| Dependency                              | If it is down, slow or wrong                                                                                                                             | How you notice                    | Status                 |
+|-----------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------|------------------------|
+| Camera                                  | Thread loses frames; other cameras continue                                                                                                              | Producer log                      | From the code          |
+| InsightFace-REST                        | No embeddings, so no recognition; frames keep queuing                                                                                                    | Container unhealthy, consumer log | From the code          |
+| Frame queue                             | Unbounded `multiprocessing.Queue`: memory grows if recognition is slower than the cameras; contents are lost on restart                                  | Host memory                       | From the code          |
+| Milvus down                             | Searches fail while running                                                                                                                              | Consumer log                      | From the code          |
+| Milvus MinIO                            | Crash loop when an older build opens data from a newer one                                                                                               | `Restarting` in `docker ps`       | Seen                   |
+| Kafka                                   | Displays stop updating; attendance still recorded                                                                                                        | Display shows an error message    | From the code          |
+| Kafka restart                           | Topics and messages survive on the `kafka-data` volume (D-028)                                                                                           | Missing display messages          | Fixed 2026-10-31       |
+| PostgreSQL                              | Results are not stored; retry behaviour not confirmed                                                                                                    | DB controller log                 | From the code          |
+| DB controller                           | The duplicate check queries a column the table does not define (README, Known issues)                                                                    | Log errors                        | From the code          |
+| ERP                                     | Records wait for the next minute's attempt                                                                                                               | API log                           | From the code          |
+| Camera unreachable                      | Thread logs the error, sleeps 30 s and retries; `producer-consumer` stays Up                                                                             | Producer log                      | Seen                   |
+| Startup order                           | Services that read a database now wait for the one that creates it; the updater creates its own collection; InsightFace workers write engines atomically | `docker ps`                       | Fixed 2026-10-31       |
+| Kafka broker recreated without its data | Schema Registry and Connect crash-looped on auto-created topics with the delete policy; auto-creation is now off                                         | `Restarting` in `docker ps`       | Seen, fixed 2026-10-31 |
+| Nightly updater                         | Swallows insert failures and still marks rows processed, so vectors are lost silently                                                                    | Nothing                           | From the code          |
+| Docker Desktop                          | Everything stops until someone signs in to Windows (D-018)                                                                                               | Displays go down                  | From the design        |
+| Host IP change                          | Kafka advertises the old IP; run `set_configuration.sh` and restart Kafka                                                                                | Clients cannot connect            | From the design        |
+| ghcr.io login                           | Deploy fails and rolls back                                                                                                                              | Watcher message                   | From the design        |
+| GPU memory                              | 3.3 of 6 GB used idle; batches 8/16 are unmeasured guesses                                                                                               | OOM in InsightFace log            | Not measured           |
 
 ## First limits to hit
 
