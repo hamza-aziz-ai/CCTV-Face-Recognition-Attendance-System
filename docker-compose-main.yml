@@ -7,8 +7,9 @@ services:
       CAM_USERNAME: ${CAM_USERNAME}
       CAM_PASSWORD: ${CAM_PASSWORD}
     volumes:
-      # ponytail: whole-repo mount until the producer-consumer runtime files (camera config, frames, datasets) are mapped to explicit mounts
-      - .:/Multi-Person-Face-Recognition/
+      # Only config and data: the code comes from the image. Enrolment scripts that need the datasets run in their own container
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
       - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System/:/Multi-Person-Face-Recognition/logs/
       - /workspace/CCTV-FACE-RECOGNITION-ATTENDANCE-SYSTEM/Recognition_Frames/:/Multi-Person-Face-Recognition/Recognition_Frames/
     depends_on:
