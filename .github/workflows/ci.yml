@@ -134,7 +134,7 @@ jobs:
       # The ROI page lists cameras, previews and saves one camera's region, and refuses bad input (D-035)
       - name: ROI page
         if: matrix.service == 'roi'
-        run: docker run --rm --entrypoint python3 ci/${{ matrix.service }}:test Custom-ROI-Provisioning/test_app.py
+        run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test Custom-ROI-Provisioning/test_app.py
       # Face vectors saved with the dataset round-trip through Parquet, and versions are numbered right (D-030)
       - name: Face vectors
         if: matrix.service == 'producer-consumer'
