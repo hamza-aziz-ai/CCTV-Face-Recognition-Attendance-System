@@ -458,3 +458,16 @@ Chosen: 3. Automerge prints the checks it saw on every skip. Every 10 minutes th
 Why: A cron sweep uses Actions minutes every hour even when nothing waits; the watcher already polls GitHub. The newer main always contains the stale commit, so releasing it loses nothing.
 Trade-off: The watcher's nudge only runs while the deployment host is on. The 403 cause is inferred from timing, not documented by GitHub; if tagging fails with main unchanged, the run still fails and opens an issue.
 Revisit if: the skip log shows why #41 was missed (fix that instead), or a release fails with main unchanged.
+
+## D-030: Face vectors saved with the photos, and Milvus served through an alias
+Date: 2026-10-31   Model: Claude Opus 5.5
+Context: Enrolment wrote vectors straight into the primary Milvus collection, so a bad update could not be undone and no dataset version said which vectors were being served. `docs/features/dataset-versioning.md` proposed Parquet files outside the dataset and a new alias name. A probe on Milvus 3.0.5 showed that rows sharing a primary key (a person's photos all share `name_id`) are all searchable, but `query` returns one row per key, so vectors cannot be exported back out of Milvus.
+Options:
+
+1. Parquet outside the dataset, named by dataset version, model and settings, behind a new alias `FACES_ACTIVE`
+2. a `vectors.parquet` in each person's folder, versioned by the existing `FACIAL-RECOGNITION-DATASET.dvc`, and numbered collections behind an alias with the name the app already uses
+
+Chosen: 2. `src/util/face_vectors.py publish` builds `FACE_DATA_COLLECTION_FOR_COSINE_v<n>` from every `vectors.parquet`, loads it, points the alias `FACE_DATA_COLLECTION_FOR_COSINE` at it and releases the previous version; the three newest versions are kept. `use <n>` points the alias back. `enrol_person.py` and `upload_embeddings.py` save the files, then publish. `migrate`, run once by the owner, takes the vectors again from the photos, renames the live collection to `_v0` and creates the alias. New dependency: `pyarrow` 26.0.
+Why: Nothing in the app changes: the consumer keeps the same name, and a running `Collection` follows an alias switch without a restart (tested). One `.dvc` file means a dataset version cannot pair photos with the wrong vectors.
+Trade-off: Every enrolment rebuilds the whole collection, which is fine for thousands of people and slow for millions. `pyarrow` makes the producer image larger. The nightly updater still writes only to the staging collection, which is not versioned. The files hold no model or settings lineage, and the manifest does not record them yet. A version drops out of Milvus after three newer ones; rebuilding it means checking out that dataset version and publishing again.
+Revisit if: enrolments get slow (append to a copy of the current version instead), or the embedding model changes (record its md5 in the files and the manifest).

@@ -165,16 +165,18 @@ Put each person's photos in `FACIAL-RECOGNITION-DATASET/<person_id>/`: `front.jp
 python3 src/util/enrol_person.py FACIAL-RECOGNITION-DATASET/<person_id>
 ```
 
+It saves the vectors to `vectors.parquet` in the person's folder and publishes a new version of the primary collection (D-030). Then version the dataset: `dvc add FACIAL-RECOGNITION-DATASET`, commit the `.dvc` file, `dvc push`. `python3 src/util/face_vectors.py use <n>` switches back to an earlier version. Run `python3 src/util/face_vectors.py migrate` once before the first enrolment on an existing install.
+
 Nothing is enrolled unless every photo passes: the full set is present, each has exactly one face with confidence of at least 0.7 and pupils at least 28 px apart, each matches the person's other photos, and none matches someone already enrolled.
 
 Whole groups can still go through these scripts, without the photo checks:
 
 ```bash
 python3 src/util/insightface_embeddings.py <folder> <embeddings.pkl>   # build an embeddings pickle for a group
-python3 src/util/upload_embeddings.py <embeddings.pkl>                  # upload a pickle to the primary collection
+python3 src/util/upload_embeddings.py <embeddings.pkl>                  # save a pickle to the dataset and publish
 ```
 
-When `upload_embeddings.py` asks whether to delete the existing collection, **Y replaces the whole primary collection** with the selected pickle and N appends to it.
+`upload_embeddings.py` replaces the vectors of the people in the pickle and keeps everyone else.
 
 ### Stop
 
