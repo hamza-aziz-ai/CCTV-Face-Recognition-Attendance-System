@@ -1,4 +1,5 @@
-FROM nvcr.io/nvidia/tensorrt:22.10-py3
+# TensorRT 26.07: CUDA 13.3.1, TensorRT 11.1, Python 3.12, Ubuntu 24.04; needs driver 610.43 or later
+FROM nvcr.io/nvidia/tensorrt:26.07-py3@sha256:b82db1abc23750ab0069abc99bbe4ea29138dbdc23ea39861199e2346638b48a
 
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
@@ -7,28 +8,25 @@ ENV TZ=Asia/Kolkata
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && apt-get update && apt-get install -y tzdata
 
-RUN python3 -m pip install --upgrade pip
 ENV PIP_INSTALL="python3 -m pip --no-cache-dir install"
 
 RUN apt-get update &&\
     apt-get install -y\
-            libgl1-mesa-glx \
+            libgl1 \
             protobuf-compiler \
             libprotoc-dev \
             libb64-0d \
             libturbojpeg \
-            python3-opencv \
             ffmpeg &&\
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN $PIP_INSTALL -r requirements.txt
-# GPU specific packages
-# fastrlock (cupy dependency) dropped Python 3.8 wheels after 0.8.3, and this base image has Python 3.8
-RUN $PIP_INSTALL fastrlock==0.8.3 cupy-cuda11x pynvjpeg
+# GPU specific packages; pynvjpeg has no wheel for this Python and builds against the installed Cython
+RUN $PIP_INSTALL cupy-cuda13x cython setuptools && $PIP_INSTALL --no-build-isolation pynvjpeg
 
 WORKDIR /app
-COPY api_trt /app/api_trt
+COPY if_rest /app/if_rest
 COPY entrypoint.sh /app/entrypoint.sh
 
 ENTRYPOINT [ "bash" ]

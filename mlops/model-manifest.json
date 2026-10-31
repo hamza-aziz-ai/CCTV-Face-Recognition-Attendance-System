@@ -4,12 +4,12 @@
     "name": "InsightFace-REST",
     "upstream": {
       "repo": "https://github.com/SthPhoenix/InsightFace-REST",
-      "base_commit": "e9b85b9bc48ab3d367358fcf2cacb01f013b30c0",
-      "local_changes": ["src/Dockerfile_cpu", "src/Dockerfile_trt", "src/requirements.txt"]
+      "base_commit": "fb854d8029c880dc5a244595e491c1293c218bff",
+      "local_changes": ["src/Dockerfile_cpu", "src/Dockerfile_trt", "src/requirements.txt", "src/if_rest/core/converters/onnx_to_trt.py", "src/if_rest/core/model_zoo/getter.py", "src/if_rest/core/utils/fast_face_align.py", "src/if_rest/core/face_model.py", "src/if_rest/core/model_zoo/detectors/retinaface.py"]
     },
-    "image": "insightface-rest:v0.9.0.0",
+    "image": "insightface-rest:v0.9.5.0",
     "image_digest": null,
-    "base_image": "nvcr.io/nvidia/tensorrt:22.10-py3",
+    "base_image": "nvcr.io/nvidia/tensorrt:26.07-py3",
     "backend": "tensorrt",
     "fp16": true,
     "max_size": [640, 640]
@@ -55,7 +55,7 @@
     "DISPLAY-FACE-DATASET": {"dvc_md5": "80e9276468ddcb23eae6ff8bcce6044b.dir", "files": 1, "bytes": 220557}
   },
   "unverified": {
-    "inference_service.image_digest": "On the GPU host: docker image inspect --format '{{.Id}}' insightface-rest:v0.9.0.0",
+    "inference_service.image_digest": "On the GPU host: docker image inspect --format '{{.Id}}' insightface-rest:v0.9.5.0",
     "detector.engine_sha256": "On the GPU host: sha256sum of the built scrfd_10g_gnkps TensorRT engine under the InsightFace-REST models volume",
     "recognizer.engine_sha256": "On the GPU host: sha256sum of the built w600k_r50 TensorRT engine under the InsightFace-REST models volume",
     "vector_store.embedding_snapshot": "Identity of the embeddings currently loaded into the primary collection (export or DVC revision); none exists yet"
