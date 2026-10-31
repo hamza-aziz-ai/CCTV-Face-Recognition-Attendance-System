@@ -8,7 +8,7 @@ What an AI tool may do on this repository. Review it when the project or its ris
 - Running tests and linters.
 - Reading logs and `docker ps`.
 - Editing on a feature branch.
-- Temporary containers with `--rm`, deleted with their images afterwards.
+- Temporary containers with `--rm`, deleted with their images afterward.
 - Pushing a feature branch and opening a PR.
 
 ## Pause and read

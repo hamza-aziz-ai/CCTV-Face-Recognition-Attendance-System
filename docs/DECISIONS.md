@@ -3,7 +3,7 @@
 One entry per meaningful decision, newest last. Each records the options considered, the choice, why, the trade-off, and when to revisit it.
 
 ## D-001: Bake application source into the Docker images
-Date: 2026-10-30   Model: Claude Opus 5.5 with Codex gpt-6.1-sol (council)
+Date: 2026-10-30   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
 Context: Most images held only dependencies; code was bind-mounted from the host at runtime, so a pushed image could not run on its own.
 Options:
 
@@ -17,7 +17,7 @@ Trade-off: Images must be rebuilt for code changes. Development keeps the bind-m
 Revisit if: images are never deployed from a registry.
 
 ## D-002: Base image python:3.11-slim-bookworm, pinned by digest
-Date: 2026-10-30   Model: Claude Opus 5.5 with Codex gpt-6.1-sol (council)
+Date: 2026-10-30   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
 Context: All images used `python:3.8-slim-buster`. Buster's apt repositories moved to archive.debian.org (deb.debian.org returns 404), so `apt update` is expected to fail. Python 3.8 reached end of life in October 2024.
 Options:
 
@@ -27,12 +27,12 @@ Options:
 
 Chosen: 2
 Why: It is a supported runtime, and every pinned requirement (numpy~=1.24.4, matplotlib~=3.7.5, uvicorn~=0.33, opencv 4.10, pymilvus 2.5) publishes 3.11 wheels. numpy 1.24 has no 3.12 wheels, which rules out option 3 without dependency bumps.
-Trade-off: Runtime behaviour on 3.11 is verified only by builds, `pip check` and import smoke tests, not by a live pipeline run.
+Trade-off: Runtime behavior on 3.11 is verified only by builds, `pip check` and import smoke tests, not by a live pipeline run.
 Revisit if: dependencies are bumped (then consider 3.12+), or a 3.11 runtime regression appears.
 
-## D-003: Healthchecks use a Python socket probe, and fail for real
+## D-003: Health checks use a Python socket probe, and fail for real
 Date: 2026-10-30   Model: Claude Opus 5.5
-Context: The healthcheck scripts ran `nc` (not present in slim images) and ended with `echo $?`, so they always exited 0. The API check probed 9090 inside the container, but the app listens on 8000 (9090 is only the host port).
+Context: The health check scripts ran `nc` (not present in slim images) and ended with `echo $?`, so they always exited 0. The API check probed 9090 inside the container, but the app listens on 8000 (9090 is only the host port).
 Options:
 
 1. install netcat in every image
@@ -44,7 +44,7 @@ Trade-off: It checks that a port accepts connections, not that the service works
 Revisit if: deployment automation needs readiness beyond the port (see the phase-two deployment criteria).
 
 ## D-004: Stop tracking master.env; ship master.env.example
-Date: 2026-10-30   Model: Claude Opus 5.5 with Codex gpt-6.1-sol (council)
+Date: 2026-10-30   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
 Context: `master.env` holds site configuration (INSTITUTE, IP_ADDRESS) and is rewritten in place by `set_configuration.sh` on every start.
 Options:
 
@@ -58,7 +58,7 @@ Revisit if: more site settings move into env files (consider one documented temp
 Correction (2026-10-30): the original commit added the ignore rule but never ran `git rm --cached`, so `master.env` stayed tracked until v0.4.x. Tags up to then still contain it; the deployment watcher keeps the host's copy across checkouts so neither direction deletes or overwrites it.
 
 ## D-005: Keep camera configuration and datasets out of images
-Date: 2026-10-30   Model: Claude Opus 5.5 with Codex gpt-6.1-sol (council)
+Date: 2026-10-30   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
 Context: `src/Camera-Configuration/` holds per-site camera details; the dataset folders are large. Both live in the build context.
 Options:
 
@@ -71,7 +71,7 @@ Trade-off: A container started without the mounts fails at import of `src/parame
 Revisit if: a single-site, self-contained image is ever required.
 
 ## D-006: CI gate without unit tests
-Date: 2026-10-30   Model: Claude Opus 5.5 with Codex gpt-6.1-sol (council)
+Date: 2026-10-30   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
 Context: The repo has no automated tests; the `src/util/test_*.py` files are manual scripts that need live services.
 Options:
 
@@ -81,7 +81,7 @@ Options:
 
 Chosen: 2
 Why: These checks catch real breakage (syntax errors, undefined names, leaked secrets, broken builds, missing files) with zero false positives today. Option 3 would flood a legacy codebase with style noise.
-Trade-off: There is no behavioural coverage, so recognition accuracy and service logic are untested.
+Trade-off: There is no behavioral coverage, so recognition accuracy and service logic are untested.
 Revisit if: unit tests are added; then add a pytest job to `ci`.
 
 ## D-007: Remove dead `del MULTIPROCESS_SHARED_BUFFER` blocks
@@ -93,12 +93,12 @@ Options:
 2. remove the blocks
 
 Chosen: 2
-Why: The process exits immediately afterwards, which frees the queue anyway. The code never worked and only produced a misleading log line.
-Trade-off: None in behaviour; the "Error in Deleting Shared Queue" log line disappears.
+Why: The process exits immediately afterward, which frees the queue anyway. The code never worked and only produced a misleading log line.
+Trade-off: None in behavior; the "Error in Deleting Shared Queue" log line disappears.
 Revisit if: never.
 
 ## D-008: GitHub Free plan: manual merges, native branch deletion
-Date: 2026-10-30   Model: Claude Opus 5.5 with Codex gpt-6.1-sol (council)
+Date: 2026-10-30   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
 Context: Branch rulesets and native auto-merge need GitHub Pro on private repos. The account is on Free.
 Options:
 
@@ -125,7 +125,7 @@ Trade-off: The ROI app itself has not been run end to end on these versions.
 Revisit if: the ROI UI shows Flask 3.x incompatibilities.
 
 ## D-010: Split production and development compose files
-Date: 2026-10-30   Model: Claude Opus 5.5 with Codex gpt-6.1-sol (council)
+Date: 2026-10-30   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
 Context: `docker-compose-main.yml` built images in place and bind-mounted `./src` over them. With source now baked in (D-001), production should run exactly what was built.
 Options:
 
@@ -134,13 +134,13 @@ Options:
 3. a separate full production file
 
 Chosen: 2, and remove `build-docker-images.sh`: `docker compose -f docker-compose-main.yml -f docker-compose.dev.yml build` replaces it.
-Why: There is one source of truth for services. The override only adds builds and live-code mounts, and the merged config equals the old behaviour (verified with `docker compose config`).
+Why: There is one source of truth for services. The override only adds builds and live-code mounts, and the merged config equals the old behavior (verified with `docker compose config`).
 Trade-off: Hosts must rebuild after pulling (the old `v-beta` images contain no code). The producer-consumer still mounts the whole repo, because its runtime file set (camera config, frames, datasets) is not yet mapped to explicit mounts.
 Revisit if: images come from the registry (step 5). Then the base file references pinned digests, and the producer-consumer gets explicit mounts.
 
 ## D-011: Dependabot version updates for actions and base images only
 Date: 2026-10-30   Model: Claude Opus 5.5
-Context: Workflow actions are pinned to commit SHAs and the base image to a digest; neither updates itself. The council plan named github-actions only.
+Context: Workflow actions are pinned to commit SHAs and the base image to a digest; neither updates itself. The council plan named GitHub Actions only.
 Options:
 
 1. github-actions only
@@ -153,8 +153,8 @@ Trade-off: Up to two automated PRs a week to review and merge by hand (manual me
 Revisit if: unit tests exist (consider pip updates), or the account moves to Pro (consider auto-merge for patch updates).
 
 ## D-012: Model manifest with a CI drift check
-Date: 2026-10-30   Model: Claude Opus 5.5 with Codex gpt-6.1-sol (council)
-Context: There is no training loop. What can change behaviour is the external models (InsightFace-REST TensorRT engines), thresholds, the Milvus index and search settings, and the datasets. None of this was recorded in one place, and the README model names were unchecked.
+Date: 2026-10-30   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
+Context: There is no training loop. What can change behavior is the external models (InsightFace-REST TensorRT engines), thresholds, the Milvus index and search settings, and the datasets. None of this was recorded in one place, and the README model names were unchecked.
 Options:
 
 1. MLflow or a model registry
@@ -198,7 +198,7 @@ Chosen: 2: `.github/workflows/release.yml`. Squash merges make each commit subje
 - `fix` or `perf` → patch
 - anything else (docs, ci, chore, build, Dependabot's `build(deps)`) → no release
 Auto-merge starts it after merging. It re-runs the full `ci` on the exact commit, then creates the tag through the API and a GitHub Release with generated notes and `model-manifest.json` attached.
-Why: Release-please opens its release PR with GITHUB_TOKEN, which gets no CI, so that PR would need a PAT to auto-merge. Option 2 needs no PAT, no release PR and no extra config. Option 3 releases every docs or CI change.
+Why: Release-please opens its release PR with GITHUB_TOKEN, which gets no CI, so that PR would need a PAT to auto-merge. Option 2 needs no PAT, no release PR and no extra config. Option 3 releases every doc or CI change.
 Trade-off:
 - PR titles must follow Conventional Commits, and nothing enforces it yet; a wrongly typed title skips or under-bumps a release.
 - No images are pushed: the deployment host is this machine, which builds from the tag. The registry push is deferred until DockerHub is configured or a separate host exists.
@@ -216,7 +216,7 @@ Options:
 
 Chosen: 3: `hosts/laptop-rtx4050.env`. It places both InsightFace containers and Milvus on GPU 0 (the nginx load balancer keeps its two backends), uses one worker, and sets batches to det 8 / rec 16. `deploy_trt_multi-gpu.sh` and `start_standalone_services.sh` load the profile after the base file and fail loudly if the named profile is missing.
 Why: The A100 defaults stay intact for the real site. The profile is reviewed in git and is the same on every deploy (the watcher relies on that). Option 2 would hide the host's config from review.
-Trade-off: The batch sizes are untested guesses for 6 GB shared by two TensorRT containers plus Milvus; they must be tuned after the first bring-up. Models, detection threshold and ports are unchanged, so recognition behaviour matches the A100 config. Engine batch size does not change results, so the model manifest keeps describing the base config.
+Trade-off: The batch sizes are untested guesses for 6 GB shared by two TensorRT containers plus Milvus; they must be tuned after the first bring-up. Models, detection threshold and ports are unchanged, so recognition behavior matches the A100 config. Engine batch size does not change results, so the model manifest keeps describing the base config.
 Revisit if: the first bring-up runs out of GPU memory (drop to one InsightFace container and a single-backend nginx config), or another host type is added (add a profile).
 
 ## D-016: Pull-based deployment watcher on the deployment host
@@ -226,7 +226,7 @@ Options:
 
 1. a self-hosted Actions runner deploying on release
 2. Watchtower
-3. a poller run by Task Scheduler from a dedicated deploy clone
+3. a poller run by Task Scheduler from a dedicated deployment clone
 
 Chosen: 3: `deploy/watch.py`, stdlib Python, every 10 minutes through `pythonw` (no console window).
 Why:
@@ -243,7 +243,7 @@ Trade-off:
 - Dev and deployed stacks share container names and ports, so only one runs at a time.
 - It deploys whatever reached `main` through auto-merge, including Dependabot updates once they cause a release.
 - The datasets are not present on this host yet (DVC not pulled).
-Revisit if: a separate deployment host exists (pull registry images by digest instead of building), or a deploy loses data (add a backup step before `up`).
+Revisit if: a separate deployment host exists (pull registry images by digest instead of building), or a deployment loses data (add a backup step before `up`).
 
 ## D-017: Publish release images to GitHub Packages (ghcr.io); the watcher pulls them (amends D-014, D-016)
 Date: 2026-10-30   Model: Claude Opus 5.5
@@ -254,7 +254,7 @@ Options:
 2. GitHub Container Registry with the workflow's own `GITHUB_TOKEN`
 3. keep building on the deployment host
 
-Chosen: 2. A new `images` job in `release.yml` runs after the release CI and before tagging. It builds with both compose files and runs `docker compose push`, which pushes only services with a build section (the 7 app images, not postgres). Images are `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, named in `docker-compose-main.yml`. Every Dockerfile carries `org.opencontainers.image.source`, so each package links to this repository and inherits its private access. The watcher now runs `up --pull missing --no-build` and no longer builds.
+Chosen: 2. A new `images` job in `release.yml` runs after the release CI and before tagging. It builds with both compose files and runs `docker compose push`, which pushes only services with a build section (the 7 app images, not Postgres). Images are `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, named in `docker-compose-main.yml`. Every Dockerfile carries `org.opencontainers.image.source`, so each package links to this repository and inherits its private access. The watcher now runs `up --pull missing --no-build` and no longer builds.
 Why:
 - No new secret or account: `GITHUB_TOKEN` gets `packages: write` in that one job only.
 - The deployed image is the one CI built, not a rebuild on the laptop.
@@ -279,7 +279,7 @@ Options:
 2. a watchdog that re-runs the start scripts
 3. Docker Engine as a service in WSL2, running without sign-in
 
-Chosen: 1 now. `restart: unless-stopped` on every Milvus, Kafka and main-stack container, and `--restart unless-stopped` on the InsightFace workers and their nginx. The InsightFace deploy script now removes an old container of the same name whether it is running or stopped, so a redeploy no longer collides with a stopped one. The manifest records the InsightFace-REST upstream: SthPhoenix/InsightFace-REST at `e9b85b9` (2024-11-02), with local changes to its two Dockerfiles and `requirements.txt` (the vendored `src/` matches no upstream commit exactly; `e9b85b9` differs in only those 3 files).
+Chosen: 1 now. `restart: unless-stopped` on every Milvus, Kafka and main-stack container, and `--restart unless-stopped` on the InsightFace workers and their nginx. The InsightFace deploy script now removes an old container of the same name whether it is running or stopped, so a redeployment no longer collides with a stopped one. The manifest records the InsightFace-REST upstream: SthPhoenix/InsightFace-REST at `e9b85b9` (2024-11-02), with local changes to its two Dockerfiles and `requirements.txt` (the vendored `src/` matches no upstream commit exactly; `e9b85b9` differs in only those 3 files).
 Why: Docker brings the containers back after a crash and whenever its daemon starts, with no extra code. `unless-stopped` keeps a deliberate `docker stop` in force, which the watcher relies on ("never start a stack the owner stopped").
 Trade-off:
 - Docker Desktop runs only while the owner is signed in to Windows ("Start Docker Desktop when you sign in" must be on).
@@ -322,7 +322,7 @@ Chosen: 2, with `psycopg2-binary` 2.9.10 to 2.9.13. The 18 images keep data in `
 Why: A pinned tag keeps every deploy identical; `latest` would jump to 19 on its release. A new folder never lets an 18 server open 12 data files, and leaves the 12 data in place for a rollback to v0.5.x.
 Trade-off: A site with existing data starts with an empty database until it is migrated. Upgrade runbook, before deploying this release on such a site:
 1. With the old stack running: `docker exec cctv-face-recognition-postgresql-database pg_dumpall -U "$POSTGRES_USER" > pg12-dump.sql`
-2. Deploy this release (the new folder is created empty and initialised).
+2. Deploy this release (the new folder is created empty and initialized).
 3. `docker exec -i cctv-face-recognition-postgresql-database psql -U "$POSTGRES_USER" -d postgres < pg12-dump.sql`
 4. Check row counts, then remove `/workspace/database/postgresql/cctv-face-recognition` once nothing needs a rollback.
 Revisit if: PostgreSQL 19 is released and has been stable for a minor release or two.
@@ -353,7 +353,7 @@ Options:
 Chosen: 3. `STANDALONE-SERVICES/Milvus-Vector-Database/docker-compose.yml` follows `milvus-standalone-docker-compose-gpu.yaml` from the v3.0.5 release, images pinned by digest: `milvusdb/milvus:v3.0.5-gpu`, `quay.io/coreos/etcd:v3.5.25` and the Milvus-tested `milvusdb/minio:RELEASE.2024-12-18T13-15-44Z` (published by the Milvus project; replaces `pgsty/minio` here, the dataset store keeps `pgsty/minio`). It adds the official `milvus-volume-init` step, because 3.0 runs as the non-root user `milvus`. Local changes: GPU from `MILVUS_GPU_DEVICE`, restart unless stopped. Client `pymilvus` 2.5 to 3.0.2.
 Why: The official file is the combination Milvus tests and releases. The app's ORM calls (`Collection`, `utility`) still work in pymilvus 3.0 (deprecated, removed in 3.1).
 Trade-off:
-- Milvus does not upgrade 2.5 data to 3.0 directly. A site with data must go 2.5 -> 2.6.x (latest 2.6 tag) -> 3.0.5, one restart each, after backing up etcd and MinIO (`milvus-backup`). Or rebuild the collections from the embeddings, which the nightly updater does from the dataset.
+- Milvus does not upgrade 2.5 data to 3.0 directly. A site with data must go 2.5 → 2.6.x (latest 2.6 tag) → 3.0.5, one restart each, after backing up etcd and MinIO (`milvus-backup`). Or rebuild the collections from the embeddings, which the nightly updater does from the dataset.
 - On this laptop, Milvus 3.0.5 first started on the 2.5.1 data and the older Milvus-tested MinIO crash-looped on data written by the newer `pgsty/minio`. The 2.5.1 test data (64 MB) was moved to `/usr/local/database/milvus-2.5.1-backup` in the Docker VM and 3.0.5 started fresh.
 - The ORM API must move to `MilvusClient` before pymilvus 3.1.
 Revisit if: pymilvus 3.1 is needed (port the ORM calls first), or a site holds vectors that cannot be rebuilt from images (rehearse the 2.6 step on a copy).
@@ -369,18 +369,18 @@ Options:
 
 Chosen: 3. `python:3.14-slim-trixie`, pinned by digest, in all 8 Dockerfiles. numpy 2.5.4, opencv-python 5.0.0.93, fastapi 0.162.0 (starlette 1.10.0), uvicorn 0.54.0, pydantic 2.14.2, matplotlib 3.11.2, requests 2.34.2, msgpack 1.2.4, ujson 6.0.0, apscheduler 3.11.3, python-dotenv 1.2.4, python-multipart 0.0.32, typing-extensions 4.16.0, flask 3.1.3. `src/main.py` calls `multiprocessing.set_start_method("fork")`: 3.14 defaults to forkserver on Linux, and the workers receive live pymilvus `Collection` objects that would otherwise have to be pickled.
 Why: These are the latest stable releases. Compatibility was checked before changing code: ruff `NPY201` found nothing for NumPy 2; all 46 `cv2` names the code uses exist in OpenCV 5.0; `pip check` is clean on 3.14.10; `@app.on_event` still works.
-Trade-off: Two major versions moved at once (NumPy 2, OpenCV 5) and the end-to-end recognition path has no real data yet, so numeric behaviour of image code is verified only by those checks, CI smoke tests and the deployed stack starting. `@app.on_event` is deprecated and should move to lifespan handlers. Fork after gRPC setup is unchanged from before and stays a known risk.
+Trade-off: Two major versions moved at once (NumPy 2, OpenCV 5) and the end-to-end recognition path has no real data yet, so numeric behavior of image code is verified only by those checks, CI smoke tests and the deployed stack starting. `@app.on_event` is deprecated and should move to lifespan handlers. Fork after gRPC setup is unchanged from before and stays a known risk.
 Revisit if: recognition results shift once real data is loaded, or a library drops `on_event`.
 
 ## D-024: Kafka-WebApp as a submodule of the owner's repository
 Date: 2026-10-30   Model: Claude Opus 5.5
-Context: `.gitmodules` named `gi-hamza-eatai241/Kafka-WebApp` over SSH, but no submodule commit was ever recorded, so nothing was checked out and CI never saw it. Copies also exist at `GIV-AI/Kafka-WebApp`. The owner first chose to absorb it as a folder, to avoid pushing to the GIV-AI organisation's repository, then created `hamza-aziz-ai/Kafka-WebApp` (same commit, `4578453`) and chose a submodule pointing there.
+Context: `.gitmodules` named `gi-hamza-eatai241/Kafka-WebApp` over SSH, but no submodule commit was ever recorded, so nothing was checked out and CI never saw it. Copies also exist at `GIV-AI/Kafka-WebApp`. The owner first chose to absorb it as a folder, to avoid pushing to the GIV-AI organization's repository, then created `hamza-aziz-ai/Kafka-WebApp` (same commit, `4578453`) and chose a submodule pointing there.
 Options:
 
 1. plain folder in this repository, sharing its version
 2. submodule of `hamza-aziz-ai/Kafka-WebApp`
 
-Chosen: 2, over HTTPS so CI and the deploy clone need no SSH key. Its Dockerfile, CI and releases live in its own repository; Dependabot's `gitsubmodule` updates bump the pinned commit here through the usual CI, auto-merge and release path.
+Chosen: 2, over HTTPS so CI and the deployment clone need no SSH key. Its Dockerfile, CI and releases live in its own repository; Dependabot's `gitsubmodule` updates bump the pinned commit here through the usual CI, auto-merge and release path.
 Why: The display client has its own release cycle and also runs on Raspberry Pis, independent of this stack.
 Trade-off: Clones need `--recurse-submodules`. A change to the client takes two steps: a release there, then a pin update here. The other two copies are not kept in step.
 Revisit if: the planned merge with PTZ-Camera-Classroom-Attendance-System changes how the display client is shared.
@@ -412,7 +412,7 @@ Chosen: 2. `src/util/enrol_person.py` enrols one person from `<person_id>/<pose>
 Why: Measured on the owner's 10 photos: all 45 pairs scored 0.78 to 0.94 against a 0.5 threshold, the closest of 30 strangers scored 0.23, and all 10 were still detected and matched at 20 px between the pupils. The checks reject real failures: a missing pose, a photo of someone else (-0.07), and a photo with two faces. LFW showed why one face per photo matters: 150 photos produced 174 vectors, because the old script enrols every face.
 Trade-off:
 - Downscaled clean photos are the best case. Real CCTV is overhead, compressed and in motion, and is not tested.
-- The 0.7 confidence value is a judgement: the owner's photos scored 0.83 to 0.90.
+- The 0.7 confidence value is a judgment: the owner's photos scored 0.83 to 0.90.
 - Spectacles added little in this test: same-pose pairs across the two sets scored 0.86 to 0.92. They stay for glare, which this test cannot show.
 - Consent is not enforced by code.
 - `enrol_person.py` writes vectors straight to Milvus, so they are rebuilt from the photos rather than versioned.
@@ -420,7 +420,7 @@ Revisit if: a real camera test shows missed matches (add overhead photos, or tun
 
 ## D-027: One generic deployment, with no client names
 Date: 2026-10-31   Model: Claude Opus 5.5
-Context: The code named two former clients through an `INSTITUTE` setting that was built into folder, database and Milvus names, and the enrolment scripts had menus for their groups. The owner wants the project generalised, and will decide later how to serve several clients: one central service or dedicated deployments.
+Context: The code named two former clients through an `INSTITUTE` setting that was built into folder, database and Milvus names, and the enrolment scripts had menus for their groups. The owner wants the project generalized, and will decide later how to serve several clients: one central service or dedicated deployments.
 Options:
 
 1. rename `INSTITUTE` to a generic tenant setting
@@ -440,7 +440,7 @@ Options:
 1. keep deleting topics
 2. keep topics, create only missing ones and add partitions for new cameras
 
-Chosen: 2. `ensure_kafka_topics()` creates missing topics and grows partitions, and waits for the result. The broker keeps its data on the `kafka-data` volume and has auto-creation off. Connect gets `CONNECT_REST_PORT` so its healthcheck passes.
+Chosen: 2. `ensure_kafka_topics()` creates missing topics and grows partitions, and waits for the result. The broker keeps its data on the `kafka-data` volume and has auto-creation off. Connect gets `CONNECT_REST_PORT` so its health check passes.
 Why: Deleting topics lost messages and raced the feedback controller. Kafka-WebApp reads from the end, so old messages are never replayed; the 5 s retention removes them.
 Trade-off: Partitions cannot shrink, so removing cameras leaves unused partitions. A topic the producer does not create is refused instead of auto-created.
 Revisit if: topic settings must change (alter them with `kafka-configs`, or delete the topic once by hand).

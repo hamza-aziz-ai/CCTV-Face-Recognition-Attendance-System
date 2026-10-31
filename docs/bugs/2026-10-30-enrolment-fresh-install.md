@@ -1,4 +1,4 @@
-# Bug: enrolment script and fresh installs blocked by Milvus setup
+# Bug: enrolment script and fresh installations blocked by Milvus setup
 
 **Symptoms**
 
