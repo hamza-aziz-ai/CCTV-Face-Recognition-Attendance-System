@@ -46,15 +46,18 @@ Frames travel from the camera threads to the recognition threads through an in-m
 | Service | Entry point | Port (host:container) |
 |---|---|---|
 | Producer-consumer | `src/main.py` | — |
-| PostgreSQL 12 | `postgres:12-bullseye` | 5432:5432 |
-| Database controller | `src/database_server/postgresql_server_controller.py` | 20001:20001 |
-| Feedback controller (Kafka publisher) | `src/feedback_server/feedback_msg_server_controller.py` | 20012:20012 |
-| Reporting API + ERP sync | `src/api/app.py` | 9090:8000 |
-| Dynamic face data collector | `src/dynamic_face_data_collector/api.py` | 8000:8000 |
+| Database controller | `src/database_server/postgresql_server_controller.py` | not published (20001 inside the stack) |
+| Feedback controller (Kafka publisher) | `src/feedback_server/feedback_msg_server_controller.py` | not published (20012 inside the stack) |
+| Reporting API + ERP sync | `src/api/app.py` | `API_PORT` (9090):8000 |
+| Dynamic face data collector | `src/dynamic_face_data_collector/api.py` | not published (8000 inside the stack) |
 | Nightly Milvus updater | `src/automatic-vector-db-updation/milvus_updater.py` | — |
-| Display image server | `src/fetch_face_image_server/app.py` | 20013:20013 |
+| Display image server | `src/fetch_face_image_server/app.py` | `DISPLAY_IMAGE_PORT` (20013):20013 |
 
-`kafka-webapp` (`ghcr.io/hamza-aziz-ai/kafka-webapp`, port 9095) is the recognition display for this host. It is versioned in the `Kafka-WebApp` submodule's repository.
+`kafka-webapp` (`ghcr.io/hamza-aziz-ai/kafka-webapp`, port `DISPLAY_PORT`, 9095) is the recognition display for this host. It is versioned in the `Kafka-WebApp` submodule's repository.
+
+Each client on a host runs this stack as its own compose project, `cctv` for the owner and `cctv-<client>` for the others (D-036). Containers have no fixed names, each project has its own network, and services reach the DB controller, feedback controller and face collector by service name, so those ports are not published. Logs and recognition frames go to `logs/` and `Recognition_Frames/` in the client's site folder. Published ports default to the values above; a second client on the same host sets its own in its site `.env`.
+
+Upgrading a host from a release that ran PostgreSQL inside this stack: the old container keeps running as an orphan of project `cctv`, and the stack keeps using it. To move it to the shared service, run `docker rm -f cctv-face-recognition-postgresql-database`, then `./start_standalone_services.sh`. The data folder is the same. Older logs stay in `/workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/` inside the Docker Desktop VM.
 
 ### Standalone stacks (`STANDALONE-SERVICES/`)
 
@@ -65,6 +68,7 @@ Frames travel from the camera threads to the recognition threads through an in-m
 | Milvus standalone | `milvusdb/milvus:v3.0.5-gpu` (+ etcd 3.5.25, Milvus-tested MinIO) | 19530, 9091, 9000, 9001 | 0 |
 | Kafka broker (KRaft) | `confluentinc/cp-kafka:8.4.0` (+ Schema Registry, Connect, ksqlDB, REST Proxy, Flink: cp-all-in-one community 8.4.0) | 9092, 9101 | — |
 | Dataset store (DVC remote) | `pgsty/minio` (MinIO) | 9010 (S3 API), 9011 (console) | — |
+| PostgreSQL 18, shared by every client stack | `postgres:18.6-trixie` | `POSTGRES_HOST_PORT` (5432) | — |
 | Face liveness detection (disabled) | `face-liveness-detection:v-beta` + nginx | 6970, 6971, 6386 | 0, 0 |
 
 Liveness detection (MiniFASNet anti-spoofing) is switched off by `ENABLE_FACE_LIVENESS_DETECTION = False` in `src/parameters.py`, and its start command is commented out.
@@ -84,6 +88,7 @@ cp .env.example .env
 | `POSTGRES_USER`, `POSTGRES_PASSWORD` | PostgreSQL and every service that connects to it |
 | `API_KEY` | Reporting API (`?api_key=` query parameter) |
 | `CAM_USERNAME`, `CAM_PASSWORD` | Default camera credentials |
+| `API_PORT`, `DISPLAY_IMAGE_PORT`, `DISPLAY_PORT` | Published ports of this client's stack (9090, 20013, 9095 if unset); only a second client on the same host needs them |
 | `DATASET_STORE_USER`, `DATASET_STORE_PASSWORD`, `DATASET_STORE_DIR` | Dataset store (MinIO DVC remote): root login and the host folder holding the data, outside the repo |
 
 ### Cameras
