@@ -50,7 +50,7 @@ def check(m, root="."):
     det, rec, vs, pipe, svc = m["detector"], m["recognizer"], m["vector_store"], m["pipeline"], m["inference_service"]
 
     expected = {
-        "inference_service.image": (svc["image"], f"insightface-rest:{e['TAG']}"),
+        "inference_service.image": (svc["image"], f"{e['IMAGE']}:{e['TAG']}"),  # CI appends -<git tree of src>
         "inference_service.fp16": (svc["fp16"], e["FP16"] == "True"),
         "inference_service.max_size": (svc["max_size"], [int(x) for x in e["MAX_SIZE"].split(",")]),
         "detector.name": (det["name"], e["DETECTION_MODEL"]),

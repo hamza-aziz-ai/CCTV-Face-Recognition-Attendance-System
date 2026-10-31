@@ -95,8 +95,50 @@ jobs:
           # pushes of the shared base layers into new ghcr.io packages were refused ("denied") at random.
           docker compose --parallel 1 -f docker-compose-main.yml -f docker-compose.dev.yml push
 
+  # Our InsightFace-REST image, built only when its source changed (insightface-image.yml)
+  insightface:
+    needs: plan
+    if: needs.plan.outputs.tag != ''
+    uses: ./.github/workflows/insightface-image.yml
+    permissions:
+      contents: read
+      packages: write
+
+  # The deployment bundle (deploy/make_bundle.py): compose files, ops scripts and templates, with every image pinned by
+  # digest. Hosts get only this and the images, never the repository (D-033). Pushed by its release tag; hosts follow
+  # :stable, which publish moves.
+  bundle:
+    needs: [plan, images, insightface]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TAG: ${{ needs.plan.outputs.tag }}
+      TOKEN: ${{ github.token }}
+      INSIGHTFACE_REF: ${{ needs.insightface.outputs.ref }}
+      INSIGHTFACE_DIGEST: ${{ needs.insightface.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: |
+          set -euo pipefail
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          {
+            for name in $(grep -oE 'ghcr\.io/hamza-aziz-ai/cctv-face-recognition-[a-z-]+:\$\{IMAGE_TAG' docker-compose-main.yml | cut -d: -f1 | sort -u); do
+              echo "$name:$TAG $(docker buildx imagetools inspect "$name:$TAG" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+            done
+            echo "$INSIGHTFACE_REF $INSIGHTFACE_DIGEST"
+          } > digests.txt
+          python3 -c 'import json; print(json.dumps(dict(line.split() for line in open("digests.txt"))))' > digests.json
+          python3 -I deploy/make_bundle.py bundle "$TAG" "$GITHUB_SHA" digests.json
+          cat bundle/release-manifest.json
+          image=ghcr.io/hamza-aziz-ai/cctv-face-recognition-deploy:$TAG
+          docker build -f deploy/bundle.Dockerfile --label org.opencontainers.image.version="$TAG" -t "$image" bundle
+          docker push "$image"
+
   publish:
-    needs: [plan, ci, images]
+    needs: [plan, ci, images, insightface, bundle]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -105,6 +147,8 @@ jobs:
       contents: write
       # Only to hand a stale run over to a release of main
       actions: write
+      # Only to move the deployment bundle's :stable tag
+      packages: write
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ needs.plan.outputs.tag }}
@@ -132,6 +176,19 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "$TAG" --verify-tag --generate-notes --title "$TAG" mlops/model-manifest.json
+      # Hosts follow :stable (D-033): it moves only once the release is published, and never back to an older release.
+      - name: Promote the deployment bundle to stable
+        if: steps.tag.outputs.tagged == 'true'
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          bundle=ghcr.io/hamza-aziz-ai/cctv-face-recognition-deploy
+          current=$(docker buildx imagetools inspect "$bundle:stable" --format '{{index .Image.Config.Labels "org.opencontainers.image.version"}}' 2> /dev/null || true)
+          if [ -n "$current" ] && [ "$(printf '%s\n' "$current" "$TAG" | sort -V | tail -n 1)" != "$TAG" ]; then
+            echo "stable is already $current, newer than $TAG: not moved"; exit 0
+          fi
+          docker buildx imagetools create -t "$bundle:stable" "$bundle:$TAG"
+          echo "stable: ${current:-none} -> $TAG"
       # The release is already out, so a failure here only leaves the changelog behind. Read from main, not the
       # checkout: a queued release may have added its entry since this commit. docs: commits never start a release.
       - name: Add the release notes to CHANGELOG.md
@@ -170,7 +227,7 @@ jobs:
   # Releases run unattended, and GitHub only emails whoever started a run, which here is the automerge bot.
   # An issue assigned to the owner reaches them by email and in the app, even with the deployment host off.
   notify-failure:
-    needs: [plan, ci, images, publish]
+    needs: [plan, ci, images, insightface, bundle, publish]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5
