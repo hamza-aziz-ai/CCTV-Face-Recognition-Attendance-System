@@ -126,7 +126,7 @@ jobs:
       - name: Start method
         if: matrix.service == 'producer-consumer'
         run: |
-          docker run --rm --entrypoint python3 -e PYTHONPATH=src ci/${{ matrix.service }}:test -c '
+          docker run --rm --entrypoint python3 -e PYTHONPATH=src -e CLIENT_ID=owner ci/${{ matrix.service }}:test -c '
           import multiprocessing as mp
           import multiprocessing_shared_buffer
           assert mp.get_start_method() == "fork", mp.get_start_method()
@@ -134,7 +134,11 @@ jobs:
       # Face vectors saved with the dataset round-trip through Parquet, and versions are numbered right (D-030)
       - name: Face vectors
         if: matrix.service == 'producer-consumer'
-        run: docker run --rm --entrypoint python3 ci/${{ matrix.service }}:test src/util/face_vectors.py demo
+        run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test src/util/face_vectors.py demo
+      # Each client's databases, topics and Milvus connection are its own; bad client IDs are refused (D-036)
+      - name: Client separation
+        if: matrix.service == 'producer-consumer'
+        run: docker run --rm --entrypoint python3 ci/${{ matrix.service }}:test src/util/client_checks.py
 
   # Single required status check for branch rules; fails if any job failed or was cancelled
   ci:
