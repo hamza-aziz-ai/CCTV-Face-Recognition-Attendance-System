@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.1.0 (2026-10-31)
+
+## What's Changed
+* fix: run Kafka-WebApp v0.1.2 so recognitions reach the display by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/45
+* feat: version face vectors with the dataset and serve Milvus through an alias by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/46
+* feat: update InsightFace-REST to 0.9.5.0 on TensorRT 11 by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/47
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.0.4...v2.1.0
+
 ## v2.0.4 (2026-10-31)
 
 ## What's Changed
