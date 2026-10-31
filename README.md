@@ -7,7 +7,7 @@ Real-time, multi-camera face recognition that turns CCTV footage at campus gates
 - **Self-improving gallery:** a collector keeps each person's best face crops per camera cluster (pupil distance, match score), and a nightly job refreshes the staging vectors.
 - **Outputs:** recognitions are stored in PostgreSQL (year/location partitioned), synced to the institution ERP every minute, exposed through a reporting API, and pushed over Kafka to on-site Raspberry Pi displays.
 
-One deployment serves one site.
+One deployment serves one or more clients, each with its own site folder and stack (D-036).
 
 ## Architecture
 
@@ -198,14 +198,14 @@ The watcher manages only the main compose stack; start the standalone services f
 
 ```powershell
 docker login ghcr.io -u <deployment account>    # paste the read:packages token when asked
-mkdir C:\deploy\cctv\site
-# Put this site's files under C:\deploy\cctv\site: .env, master.env, src\Camera-Configuration\camera_configuration.json,
+mkdir C:\deploy\cctv\sites\owner                # one folder per client, named by its CLIENT_ID (owner: your own site)
+# Put the client's files under it: .env, master.env (with CLIENT_ID=owner), src\Camera-Configuration\camera_configuration.json,
 # DISPLAY-FACE-DATASET\ and DYNAMIC-FACIAL-RECOGNITION-DATASET\ (templates are in the bundle: *.example)
 cd C:\deploy\cctv
 $c = docker create ghcr.io/hamza-aziz-ai/cctv-face-recognition-deploy:stable
 docker cp "${c}:/bundle/deploy/watch.py" watch.py; docker rm $c
 python watch.py --check                         # fetches and checks the newest bundle, deploys nothing
-python watch.py --enroll                        # deploys the newest release now and starts watching
+python watch.py --enroll owner                  # deploys the newest release to that client now and starts watching it
 schtasks /Create /TN "CCTV deploy watcher" /SC MINUTE /MO 10 /IT /F `
   /TR "\"C:\ProgramData\anaconda3\pythonw.exe\" \"C:\deploy\cctv\watch.py\""
 ```
@@ -213,12 +213,12 @@ schtasks /Create /TN "CCTV deploy watcher" /SC MINUTE /MO 10 /IT /F `
 Every 10 minutes, while you are signed in and Docker Desktop is running, the watcher does the following:
 - It pulls `cctv-face-recognition-deploy:stable`, which CI moves to a release only after publishing it, and reads its release from the image label. It deploys it only if that is not the current release and it has not failed before.
 - It copies the bundle out of the image without running it, into `releases\<tag>\`, and refuses it unless its manifest is for that release and pins every image to one of ours by digest.
-- It runs `up --wait` from the bundle with `site\` as the project folder, so the containers get this site's config and data. It records the release as current only after `http://localhost:9090/docs` answers and nothing is restarting 90 seconds later.
-- On failure it rolls back to the previous release, whose bundle and images are still on the host, marks the failed one so it is never retried, and shows a Windows message.
-- It never starts a stack you stopped. If the registry login fails or site files are missing, it stops deploying and shows one message.
-- After a successful deploy it deletes the bundles and images of every release except the current and previous one.
+- For each enrolled client under `sites\`, it runs `up --wait` from the bundle with that client's folder as the project folder and its own compose project (`cctv` for `owner`, `cctv-<client>` otherwise), so the containers get that client's config and data. It records the release as current for that client only after the client's API (`API_PORT` in its `.env`, 9090 by default) answers and nothing is restarting 90 seconds later. It refuses a folder whose `master.env` names a different `CLIENT_ID`.
+- On failure it rolls back that client alone to its previous release, whose bundle and images are still on the host, marks the failed one so it is never retried, and shows a Windows message.
+- It never starts a client's stack you stopped. If the registry login fails or site files are missing, it stops deploying and shows one message.
+- After a successful deploy it deletes the bundles and images of every release except each client's current and previous one.
 
-The watcher never replaces itself; to update it, copy `deploy/watch.py` out of a newer bundle the same way. Its log is `C:\deploy\cctv\watch.log`. To retry a failed release, run `python watch.py --enroll`. To stop watching, run `schtasks /Delete /TN "CCTV deploy watcher" /F`.
+The watcher never replaces itself; to update it, copy `deploy/watch.py` out of a newer bundle the same way. Its log is `C:\deploy\cctv\watch.log`. To retry a failed release, run `python watch.py --enroll <client>`. To add a client, create `sites\<client>\` with its own files and ports (`API_PORT`, `DISPLAY_IMAGE_PORT`, `DISPLAY_PORT` in its `.env`), then enrol it. Each client's state is `sites\<client>\state.json`. To stop watching, run `schtasks /Delete /TN "CCTV deploy watcher" /F`.
 
 The automerge nudge (`deploy/nudge_automerge.py`) needs the owner's `gh` login, so it runs only on the owner's laptop, from the dev checkout:
 
