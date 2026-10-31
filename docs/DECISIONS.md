@@ -540,3 +540,35 @@ Plan, five PRs, each with its tests:
 
 Enrolment (8c), the live view (8b), the Android app (8d) and deletion (8e) build on these boundaries.
 Revisit if: a real client is signed. Then also: model licences; DPDP Act lawful basis, notices, retention and erasure, breach notification, children's data and a processor agreement for central mode; an audit log of views, enrolments and deletions; off-host backups with restore tests; encryption between hosts; credential rotation; MFA or SSO through OIDC where required.
+
+## D-037: Per-client logins on the shared services, and how they are switched on
+Date: 2026-10-31   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
+Context: D-036 step 3 gives each client logins that reach only its own data in PostgreSQL, Milvus, Kafka and the MinIO dataset store. Today the app uses the PostgreSQL superuser, Milvus has no authentication (`root:Milvus` in the code), Kafka is PLAINTEXT on 9092 for app producers and displays, and the dataset store has only its root login. D-036 left one point unproven: whether Milvus enforces per-database permissions. Throwaway spikes on 2026-10-31 showed it does on 3.0.5: a user granted the privilege groups `DatabaseReadWrite`, `DatabaseAdmin` and `CollectionAdmin` on its own database could create, insert, alias, query and drop there. The same user was refused on other databases and on admin actions. Kafka SCRAM users with prefixed ACLs were likewise confined to their own topics and groups.
+Options:
+
+1. one admin login per service, shared by every client stack, with isolation by names only
+2. per-client logins created at runtime by the app
+3. per-client logins created by a provisioning command that holds the admin rights; the app only uses its own
+
+Chosen: 3.
+- Provisioning: `deploy/provision.py` runs on the host.
+  - Clients: it creates, for each one, a Postgres role owning the client's two databases, with `CONNECT` revoked from `PUBLIC`. It also creates a Milvus user and role over the client's database only, Kafka users `<c>_app` (Write and Describe) and `<c>_display` (Read on topics and groups) on the prefix `<c>.`, and a MinIO bucket `<c>-enrolment` with an access key whose policy covers that bucket only.
+  - Passwords: they are generated once and saved atomically to the client's site `.env` before any service is touched, and reruns reuse them. An account whose password is no longer saved stops provisioning instead of being reset.
+  - Milvus root: `--init-milvus-root` replaces root's default password, saving the new one first.
+- Shared settings: the Kafka listener and authorizer settings and the Milvus `user.yaml` live in `STANDALONE-SERVICES/auth/`. The production compose files and `deploy/test_isolation.py` both read them.
+- Kafka: the plaintext listeners (inter-broker, controller) bind to the broker's loopback. `User:ANONYMOUS` is the superuser on every listener, but only tools inside the broker container reach those listeners. All other traffic uses SCRAM on 9092.
+- Kafka add-ons: Schema Registry, Connect, ksqlDB, REST Proxy and Flink go at the cutover. REST Proxy and Connect were published, unauthenticated routes through the internal listener to every topic, and the app uses none of them.
+- Owner topics: the owner's topics become `owner.*` at the cutover, so every client is covered by the same prefix rules. Owner database and collection names stay.
+- Rollout in three PRs:
+  1. 3a: provisioning and the isolation test, with no runtime effect.
+  2. 3b: the app and Kafka-WebApp use the per-client logins and stop creating databases and topics themselves. `LEGACY_SHARED_SERVICES=1` keeps the owner on today's behaviour until the cutover, honoured only with `CLIENT_ID=owner`. The watcher is paused before 3b merges.
+  3. 3c: a manual cutover. Turn on auth, move the owner's app tables, partitions and sequences to `owner_app` one by one (never `REASSIGN OWNED`, which also moves databases and tablespaces), switch the producers and displays together, deploy, verify, then resume the watcher.
+
+Why: only option 3 keeps admin rights out of every client stack, so a stack, or anyone holding its `.env`, cannot reach another client's data; option 1 relies on names, which nothing enforces. Option 2 needs admin rights in the app. Generating the passwords before touching any service, and refusing to reset an unknown one, makes a failed or interrupted run safe to repeat.
+Trade-off:
+- Kafka encryption: SASL_PLAINTEXT authenticates but does not encrypt.
+- Passwords in argv: they appear briefly on command lines inside the Kafka and MinIO containers.
+- Provisioning is per host, by hand.
+- The CPU Milvus in the test proves authorisation only, not GPU indexes.
+- After the cutover, releases before 3b are no longer valid rollback targets.
+Revisit if: real client traffic crosses networks (SASL_SSL and TLS for Postgres and Milvus), anything other than the broker must reach its plaintext listeners (named SCRAM admin instead of ANONYMOUS), or individual displays must be revoked (one Kafka login per display).
