@@ -3,6 +3,7 @@ import json
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -70,7 +71,23 @@ def test():
     test_site_config_survives_checkout()
     test_prune()
     test_stable()
-    print("watch decisions ok (12 scenarios, site config kept, old images pruned, crash loops caught)")
+    test_stuck_prs()
+    print("watch decisions ok (12 scenarios, site config kept, old images pruned, crash loops caught, stuck PRs found)")
+
+
+def test_stuck_prs():
+    """Only a non-draft, non-conflicting PR whose checks all passed over 15 minutes ago counts as stuck."""
+    now = datetime(2026, 10, 31, 12, 0, tzinfo=timezone.utc).timestamp()
+
+    def pr(n, minutes_ago=20, conclusion="SUCCESS", draft=False, mergeable="MERGEABLE", checks=True):
+        done = datetime.fromtimestamp(now - minutes_ago * 60, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        rollup = [{"conclusion": "SUCCESS", "completedAt": "2026-10-31T11:00:00Z"},
+                  {"conclusion": conclusion, "completedAt": done}] if checks else []
+        return {"number": n, "isDraft": draft, "mergeable": mergeable, "statusCheckRollup": rollup}
+
+    prs = [pr(1), pr(2, minutes_ago=5), pr(3, conclusion="FAILURE"), pr(4, conclusion=""), pr(5, draft=True),
+           pr(6, mergeable="CONFLICTING"), pr(7, checks=False), pr(8, conclusion="SKIPPED")]
+    assert watch.stuck_prs(prs, now) == [1, 8], watch.stuck_prs(prs, now)
 
 
 def test_stable():
