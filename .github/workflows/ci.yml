@@ -135,6 +135,10 @@ jobs:
       - name: Face vectors
         if: matrix.service == 'producer-consumer'
         run: docker run --rm --entrypoint python3 ci/${{ matrix.service }}:test src/util/face_vectors.py demo
+      # A worse crop on a full cluster used to loop forever and block the collector
+      - name: Face saver
+        if: matrix.service == 'dynamic-face-dataset-collector'
+        run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test src/dynamic_face_data_collector/test_face_saver.py
 
   # Single required status check for branch rules; fails if any job failed or was cancelled
   ci:
