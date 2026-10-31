@@ -25,6 +25,8 @@ To stop automatic deploys: `schtasks /Change /TN "CCTV deploy watcher" /DISABLE`
 
 These are not managed by the watcher. Revert the compose change, then run `./start_standalone_services.sh`.
 
+InsightFace image from CI (D-033): to run a specific build, set `INSIGHTFACE_IMAGE` to its tag or digest before `./start_standalone_services.sh`. The locally built `insightface-rest:v0.9.5.0` holds the same source as `v0.9.5.0-b6bc9ec9d281` and stays on this host as a fallback until the CI image has run for a few days.
+
 InsightFace 0.9.0 to 0.9.5 (D-031): revert the PR, so `TAG` is `v0.9.0.0` and `src/api_trt` is back, then run `./start_standalone_services.sh`. The old TensorRT 8.5 engines are kept, because 0.9.5 names its engines with the TensorRT version.
 
 ## After any rollback

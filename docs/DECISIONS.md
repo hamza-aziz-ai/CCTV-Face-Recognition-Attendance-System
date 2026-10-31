@@ -498,3 +498,17 @@ Chosen: 2. Every GPU service defaults to GPU 0. InsightFace runs one container t
 Why: The defaults run on any host with one NVIDIA GPU, including this laptop, where the same values ran 0.9.5. A large host still gets its own values through a profile.
 Trade-off: A large GPU is under-used until its profile raises the batch sizes. MIG layouts are still possible, but only through a profile. More InsightFace containers start, but nginx does not balance across them yet.
 Revisit if: a second deployment host exists (give it a profile), or throughput needs more than one InsightFace container (design load balancing that follows `INSIGHTFACE_GPUS`).
+
+## D-033: Deployment hosts get images and a source-free bundle, not the repository
+Date: 2026-10-31   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
+Context: Deployment hosts will be client machines. Today a host holds a full clone of this repository with its history, the producer container mounts that clone, InsightFace-REST is built on the host from source and runs with the source mounted, and the watcher uses the owner's `gh` login. The owner wants client hosts to hold configuration, environment and client data, but not our code.
+Options:
+
+1. keep the clone, and restrict who can log in to the host
+2. ship images plus a source-free deployment bundle from the registry, with a pull-only credential
+3. run the logic on our own servers, so clients hold no logic at all
+
+Chosen: 2, in three PRs. This one: the producer mounts only `master.env`, the camera config, logs and frames; CI builds the InsightFace-REST image once per source tree (`insightface-image.yml`, tagged `<version>-<git tree of src>`) and hosts pull it with no source mount; each release publishes `cctv-face-recognition-deploy:<tag>`, a scratch image with an allow-list of compose files, ops scripts, templates and licences (`deploy/make_bundle.py`), every image pinned by digest and a `release-manifest.json`; `:stable` moves to it only after the release is published, and never back. Next: the watcher pulls `deploy:stable` instead of using git and `gh`, with no self-update; then a package-only machine account and the switch of this host.
+Why: It removes the clone, its history and the owner's credentials from hosts with the tools already in use (GHCR, Docker). Digests, not tags, because the v2.0.2 tags were pushed twice.
+Trade-off: Not 3: the images still hold readable Python, which a host administrator can copy out until the images are compiled (step 4), and compiled code is still our logic on their machine. The bundle's compose files and ops scripts are ours too; the owner accepts them on client hosts. The InsightFace pretrained models are for non-commercial research per the InsightFace README: rights must be settled before a paid client deployment. Client biometric data must stay out of this repository; a dataset store on the same host is not a backup.
+Revisit if: the watcher and credential PRs land (record them here), compiled images exist (new package names, so client tokens cannot pull the old Python images), or a client needs the logic off their premises (option 3).
