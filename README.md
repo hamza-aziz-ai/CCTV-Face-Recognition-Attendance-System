@@ -88,6 +88,7 @@ cp .env.example .env
 | `POSTGRES_USER`, `POSTGRES_PASSWORD` | PostgreSQL and every service that connects to it |
 | `API_KEY` | Reporting API (`?api_key=` query parameter) |
 | `CAM_USERNAME`, `CAM_PASSWORD` | Default camera credentials |
+| `PG_APP_USER`, `PG_APP_PASSWORD`, `MILVUS_APP_USER`, `MILVUS_APP_PASSWORD`, `KAFKA_APP_USER`, `KAFKA_APP_PASSWORD` | This client's own logins on the shared services, written by `deploy/provision.py` (D-037); each service gets only those it uses. Until its step 3c cutover the owner's site sets `LEGACY_SHARED_SERVICES=1` in `master.env` and keeps using `POSTGRES_USER` and `POSTGRES_PASSWORD` |
 | `API_PORT`, `DISPLAY_IMAGE_PORT`, `DISPLAY_PORT` | Published ports of this client's stack (9090, 20013, 9095 if unset); only a second client on the same host needs them |
 | `DATASET_STORE_USER`, `DATASET_STORE_PASSWORD`, `DATASET_STORE_DIR` | Dataset store (MinIO DVC remote): root login and the host folder holding the data, outside the repo |
 
