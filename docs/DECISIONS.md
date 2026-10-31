@@ -471,3 +471,17 @@ Chosen: 2. `src/util/face_vectors.py publish` builds `FACE_DATA_COLLECTION_FOR_C
 Why: Nothing in the app changes: the consumer keeps the same name, and a running `Collection` follows an alias switch without a restart (tested). One `.dvc` file means a dataset version cannot pair photos with the wrong vectors.
 Trade-off: Every enrolment rebuilds the whole collection, which is fine for thousands of people and slow for millions. `pyarrow` makes the producer image larger. The nightly updater still writes only to the staging collection, which is not versioned. The files hold no model or settings lineage, and the manifest does not record them yet. A version drops out of Milvus after three newer ones; rebuilding it means checking out that dataset version and publishing again.
 Revisit if: enrolments get slow (append to a copy of the current version instead), or the embedding model changes (record its md5 in the files and the manifest).
+
+## D-031: InsightFace-REST 0.9.5.0 on TensorRT 11
+Date: 2026-10-31   Model: Claude Opus 5.5
+Context: The vendored InsightFace-REST was 0.9.0.0 on the TensorRT 22.10 image (TensorRT 8.5, Python 3.8, 16.3 GB). The owner asked for the latest upstream on the TensorRT image that matches the host's CUDA toolkit 13.3. A first trial (2026-10-30) stopped at worker boot: PyTurboJPEG 2.x needs libjpeg-turbo 3, and Ubuntu 24.04 ships 2.1.5.
+Options:
+
+1. stay on 0.9.0.0 with TensorRT 8.5
+2. 0.9.5.0 on TensorRT 26.07, installing libjpeg-turbo 3 from its own release
+3. 0.9.5.0 on TensorRT 26.07, pinning PyTurboJPEG 1.8.3, which works with Ubuntu's libjpeg-turbo
+
+Chosen: 3. `src/api_trt` is replaced by upstream `if_rest` at `fb854d8`, on `nvcr.io/nvidia/tensorrt:26.07-py3` pinned by digest (TensorRT 11.1, CUDA 13.3, Python 3.12). Local changes: the engine build uses a strongly typed network with FP16 weights from `onnxconverter-common` (TensorRT 11 removed the FP16 flag), engine files carry the TensorRT version in their name, engines are written atomically, `np_apply_along_axis` is no longer numba-cached (numba 0.66 cannot pickle it, so every request failed), and `tostring()` became `tobytes()` for NumPy 2.
+Why: The service only calls `TurboJPEG()` and `decode()`, which PyTurboJPEG 1.8.3 has; building libjpeg-turbo adds a build step to own. Measured against the running 0.9.0.0 on 330 LFW photos of 30 people (150 enrolled, 180 tested, threshold 0.5): both 173 correct, 0 wrong, 7 below threshold; the same photo's embeddings agree at cosine 0.9951 or more (mean 0.9993). The app's own `IFRClient` gets the same response fields, with msgpack and JSON. The image is 7.1 GB instead of 16.3 GB.
+Trade-off: Python packages other than PyTurboJPEG are unpinned, as upstream has them, so a rebuild can pull newer versions. The first start builds new engines (the recognition engine took 50 s here). The CPU image was updated but not built or tested.
+Revisit if: Ubuntu ships libjpeg-turbo 3 (drop the pin), or a rebuild breaks on a new package version (pin the versions that work).
