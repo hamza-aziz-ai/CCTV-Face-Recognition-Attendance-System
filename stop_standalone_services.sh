@@ -77,6 +77,13 @@ echo "shutdown Milvus stack"
 docker-compose --env-file ../standalone-services.env down
 cd ../..
 
+# PostgreSQL cleanup; its data folder is kept
+# shellcheck disable=SC2164
+cd STANDALONE-SERVICES/PostgreSQL
+echo "shutdown PostgreSQL"
+docker-compose --env-file ../../.env down
+cd ../..
+
 # Dataset store (DVC remote) cleanup; its data folder (DATASET_STORE_DIR) is kept
 # shellcheck disable=SC2164
 cd STANDALONE-SERVICES/Dataset-Store

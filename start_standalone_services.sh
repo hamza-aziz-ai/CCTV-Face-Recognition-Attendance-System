@@ -47,6 +47,15 @@ cd ../..
 
 echo
 
+# start PostgreSQL, shared by every client stack on this host (D-036); its credentials come from .env
+echo "Starting PostgreSQL"
+# shellcheck disable=SC2164
+cd STANDALONE-SERVICES/PostgreSQL
+docker-compose --env-file ../../.env up -d
+cd ../..
+
+echo
+
 # start the dataset store (DVC remote); its credentials and data folder come from .env
 echo "Starting Dataset Store (DVC remote)"
 # shellcheck disable=SC2164
