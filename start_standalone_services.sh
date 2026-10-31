@@ -9,7 +9,10 @@
 # Load the IP_ADDRESS variable from master.env
 . set_configuration.sh
 
-# Per-host overrides (GPU placement, batch sizes) from STANDALONE-SERVICES/hosts/, selected by HOST_PROFILE in .env
+# Per-host overrides (GPU placement, batch sizes) from STANDALONE-SERVICES/hosts/, selected by HOST_PROFILE in .env.
+# Nothing read it from .env before, so a run without it exported silently ignored the profile (2026-10-31).
+# Only this key is read: .env also holds credentials. An exported HOST_PROFILE still wins.
+HOST_PROFILE=${HOST_PROFILE:-$(sed -n 's/^HOST_PROFILE=//p' .env 2>/dev/null | tr -d "\"'\r" | tail -n 1)}
 export HOST_PROFILE
 ENV_FILES=(--env-file ../standalone-services.env)
 if [ -n "${HOST_PROFILE:-}" ]; then
