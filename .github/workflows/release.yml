@@ -99,6 +99,8 @@ jobs:
     needs: [plan, ci, images]
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      tagged: ${{ steps.tag.outputs.tagged }}
     permissions:
       contents: write
       # Only to hand a stale run over to a release of main
@@ -142,6 +144,28 @@ jobs:
           notes=$(gh release view "$TAG" --json body --jq .body)
           { echo "# Changelog"; echo; echo "## $TAG ($(date -u +%F))"; echo; echo "$notes"; tail -n +2 current.md; } > updated.md
           gh api -X PUT "$url" -f branch=main -f sha="$sha" -f message="docs: add $TAG to the changelog" -f content="$(base64 -w0 updated.md)" > /dev/null
+
+  # A published release supersedes earlier failed runs: close their issues, so open issues are only open problems.
+  # Only issues this workflow opened (title and author); a stale run that handed over to main published nothing.
+  close-failures:
+    needs: [plan, publish]
+    if: needs.publish.outputs.tagged == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.plan.outputs.tag }}
+    steps:
+      - run: |
+          set -euo pipefail
+          gh issue list --state open --author "github-actions[bot]" --limit 100 --json number,title \
+            --jq '.[] | select(.title | test("^Release .+ failed$")) | .number' |
+          while read -r n; do
+            gh issue close "$n" --reason completed --comment "Superseded: $TAG was published since."
+          done
 
   # Releases run unattended, and GitHub only emails whoever started a run, which here is the automerge bot.
   # An issue assigned to the owner reaches them by email and in the app, even with the deployment host off.
