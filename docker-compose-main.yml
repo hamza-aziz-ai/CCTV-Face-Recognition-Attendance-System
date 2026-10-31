@@ -1,3 +1,6 @@
+# Fixed project name: hosts run this file from a release bundle whose folder changes with each release (D-033)
+name: cctv
+
 services:
   mfr-cctv-producer-consumer:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-producer-consumer:${IMAGE_TAG:-v-beta}

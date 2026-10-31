@@ -7,9 +7,12 @@ name: insightface-image
 on:
   workflow_call:
     outputs:
-      image:
-        description: The image, pinned by digest
-        value: ${{ jobs.build.outputs.image }}
+      ref:
+        description: The image by tag
+        value: ${{ jobs.build.outputs.ref }}
+      digest:
+        description: Its digest
+        value: ${{ jobs.build.outputs.digest }}
   pull_request:
     branches: [main]
     paths:
@@ -28,7 +31,8 @@ jobs:
       contents: read
       packages: write
     outputs:
-      image: ${{ steps.push.outputs.image }}
+      ref: ${{ steps.ref.outputs.ref }}
+      digest: ${{ steps.push.outputs.digest }}
     env:
       TOKEN: ${{ github.token }}
     steps:
@@ -59,5 +63,5 @@ jobs:
             df -h /mnt
           fi
           digest=$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest.Digest}}' | tr -d '"')
-          echo "image=${REF%:*}@$digest" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "$REF is ${REF%:*}@$digest"
