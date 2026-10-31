@@ -11,100 +11,156 @@ import make_bundle  # noqa: E402
 import watch  # noqa: E402
 
 
-def site(root, missing=()):
-    for name in watch.SITE_FILES:
-        if name not in missing:
-            (root / "site" / name).parent.mkdir(parents=True, exist_ok=True)
-            (root / "site" / name).write_text("x")
+def site(root, name="owner", missing=(), client=None):
+    """A client's site folder; master.env names the client, the other files only need to exist."""
+    folder = root / "sites" / name
+    for file in watch.SITE_FILES:
+        if file not in missing:
+            (folder / file).parent.mkdir(parents=True, exist_ok=True)
+            (folder / file).write_text(f"CLIENT_ID={client or name}\n" if file == "master.env" else "x")
+    return folder
 
 
-def scenario(state, latest, running=True, deploy_fails=False, rollback_fails=False, enroll=False, missing=()):
-    """Run one poll and return (exit code, saved state, deployed tags, started-for-rollback tags, notified, stack stops)."""
-    tmp = Path(tempfile.mkdtemp())
-    site(tmp, missing)
-    calls = {"deploy": [], "start": [], "notify": [], "stop": 0}
+def poll(tmp, states, latest, running=(), fail=(), rollback_fails=False, enroll=None):
+    """Run one poll over the sites under tmp with the given states. running: clients whose stack is up; fail: clients
+    whose deploy fails. Returns (exit code, saved states, deploys, rollback starts, notifications, stops, kept)."""
+    calls = {"deploy": [], "start": [], "notify": [], "stop": 0, "kept": []}
 
     def fake_run(*cmd):
         calls["stop"] += cmd[:2] == ("docker", "stop")
-        return "abc123" if running and "status=running" in cmd else ""
+        projects = [arg.split("=", 2)[2] for arg in cmd if arg.startswith("label=com.docker.compose.project=")]
+        up = {watch.project(tmp / "sites" / name) for name in running}
+        return "abc123" if "status=running" in cmd and projects and projects[0] in up else ""
 
-    def fake_deploy(tag, ref):
+    def fake_deploy(tag, ref, folder):
         assert ref == f"bundle@{tag}"
-        calls["deploy"].append(tag)
-        if deploy_fails:
+        calls["deploy"].append((folder.name, tag))
+        if folder.name in fail:
             raise RuntimeError("up failed")
 
-    def fake_start(tag):
-        calls["start"].append(tag)
+    def fake_start(tag, folder):
+        calls["start"].append((folder.name, tag))
         if rollback_fails:
             raise RuntimeError("rollback failed")
 
-    with mock.patch.multiple(watch, STATE=tmp / "state.json", LOG=tmp / "watch.log", SITE=tmp / "site", run=fake_run,
+    with mock.patch.multiple(watch, SITES=tmp / "sites", LOG=tmp / "watch.log", run=fake_run,
                              latest_release=lambda: latest and (latest, f"bundle@{latest}"), deploy=fake_deploy,
-                             start=fake_start, prune=lambda keep: None, notify=calls["notify"].append):
-        if state is not None:
-            watch.save(state)
+                             start=fake_start, prune=calls["kept"].append, notify=calls["notify"].append):
+        for name, state in states.items():
+            if state is not None:
+                watch.save(tmp / "sites" / name, state)
         code = watch.watch(enroll=enroll)
-        saved = json.loads((tmp / "state.json").read_text()) if (tmp / "state.json").exists() else None
-    return code, saved, calls["deploy"], calls["start"], len(calls["notify"]), calls["stop"]
+        saved = {folder.name: watch.load(folder) for folder in watch.sites()}
+    return code, saved, calls["deploy"], calls["start"], len(calls["notify"]), calls["stop"], calls["kept"]
+
+
+def scenario(state, latest, running=True, deploy_fails=False, rollback_fails=False, enroll=False, missing=()):
+    """One poll of the owner's site alone: (exit code, saved state, deployed tags, rollback tags, notified, stops)."""
+    tmp = Path(tempfile.mkdtemp())
+    site(tmp, missing=missing)
+    code, saved, deployed, started, notified, stops, _ = poll(
+        tmp, {"owner": state}, latest, running=["owner"] if running else [], fail=["owner"] if deploy_fails else [],
+        rollback_fails=rollback_fails, enroll="owner" if enroll else None)
+    return code, saved["owner"], [t for _, t in deployed], [t for _, t in started], notified, stops
 
 
 def test():
+    good = {"current": "v0.1.0", "previous": None, "failed": []}
     # Not enrolled: never deploys on its own.
     assert scenario(None, "v0.1.0")[1:4] == (None, [], [])
     # Enrolling deploys the newest release and records it.
-    assert scenario(None, "v0.1.0", enroll=True)[:3] == (0, {"current": "v0.1.0", "failed": []}, ["v0.1.0"])
+    assert scenario(None, "v0.1.0", enroll=True)[:3] == (0, {"current": "v0.1.0", "previous": None, "failed": []}, ["v0.1.0"])
     # Already on the newest release: nothing to do.
-    assert scenario({"current": "v0.1.0", "failed": []}, "v0.1.0")[2] == []
-    # Newer release: deployed and recorded.
-    assert scenario({"current": "v0.1.0", "failed": []}, "v0.2.0")[1] == {"current": "v0.2.0", "failed": []}
+    assert scenario(good, "v0.1.0")[2] == []
+    # Newer release: deployed and recorded, the old one kept as the previous release.
+    assert scenario(good, "v0.2.0")[1] == {"current": "v0.2.0", "previous": "v0.1.0", "failed": []}
     # Newer release fails: rolled back to the last good one, marked failed, owner notified.
-    code, saved, _, started, notified, stops = scenario({"current": "v0.1.0", "failed": []}, "v0.2.0", deploy_fails=True)
-    assert (code, saved, started, notified, stops) == (1, {"current": "v0.1.0", "failed": ["v0.2.0"]}, ["v0.1.0"], 1, 0)
+    code, saved, _, started, notified, stops = scenario(good, "v0.2.0", deploy_fails=True)
+    assert (code, saved, started, notified, stops) == (1, good | {"failed": ["v0.2.0"]}, ["v0.1.0"], 1, 0)
     # A release that failed before is never retried automatically.
-    assert scenario({"current": "v0.1.0", "failed": ["v0.2.0"]}, "v0.2.0")[2] == []
+    assert scenario(good | {"failed": ["v0.2.0"]}, "v0.2.0")[2] == []
     # ...but enrolling retries it on purpose.
-    assert scenario({"current": "v0.1.0", "failed": ["v0.2.0"]}, "v0.2.0", enroll=True)[2] == ["v0.2.0"]
+    assert scenario(good | {"failed": ["v0.2.0"]}, "v0.2.0", enroll=True)[2] == ["v0.2.0"]
     # Stack stopped by the owner: not started behind their back.
-    assert scenario({"current": "v0.1.0", "failed": []}, "v0.2.0", running=False)[2] == []
+    assert scenario(good, "v0.2.0", running=False)[2] == []
     # Failed rollback is still recorded and notified.
-    code, saved, _, _, notified, _ = scenario({"current": "v0.1.0", "failed": []}, "v0.2.0", deploy_fails=True, rollback_fails=True)
+    code, saved, _, _, notified, _ = scenario(good, "v0.2.0", deploy_fails=True, rollback_fails=True)
     assert (code, saved["failed"], notified) == (1, ["v0.2.0"], 1)
     # First deploy fails with nothing to roll back to: the stack is stopped (no crash loop) and the owner notified.
     code, saved, _, started, notified, stops = scenario(None, "v0.1.0", enroll=True, deploy_fails=True)
-    assert (code, saved, started, notified, stops) == (1, {"current": None, "failed": ["v0.1.0"]}, [], 1, 1)
+    assert (code, saved, started, notified, stops) == (1, {"current": None, "previous": None, "failed": ["v0.1.0"]}, [], 1, 1)
     # ...and a later release is still tried (stack was never running).
-    assert scenario({"current": None, "failed": ["v0.1.0"]}, "v0.1.1", running=False)[2] == ["v0.1.1"]
+    assert scenario({"current": None, "previous": None, "failed": ["v0.1.0"]}, "v0.1.1", running=False)[2] == ["v0.1.1"]
     # No release published yet.
-    assert scenario({"current": None, "failed": []}, None)[2] == []
+    assert scenario(good, None)[2] == []
     # Site config missing: nothing deployed (Docker would mount empty folders in its place), owner notified.
-    code, saved, deployed, _, notified, _ = scenario({"current": "v0.1.0", "failed": []}, "v0.2.0", missing=[".env"])
+    code, saved, deployed, _, notified, _ = scenario(good, "v0.2.0", missing=[".env"])
     assert (code, deployed, notified) == (1, [], 1) and ".env" in saved["problem"]
+    test_clients()
     test_registry_failure()
     test_check_bundle()
     test_stage()
     test_prune()
     test_stable()
-    print("watch decisions ok (13 scenarios, registry failure notified once, bundles checked and staged, "
-          "old releases pruned, crash loops caught)")
+    print("watch decisions ok (13 scenarios, 2 clients kept apart, registry failure notified once, bundles checked "
+          "and staged, old releases pruned, crash loops caught)")
+
+
+def test_clients():
+    """Two clients on one host (D-036): one's failure, rollback or stopped stack never touches the other."""
+    good = {"current": "v0.1.0", "previous": "v0.0.9", "failed": []}
+    tmp = Path(tempfile.mkdtemp())
+    site(tmp, "owner"), site(tmp, "acme")
+    assert (watch.project(tmp / "sites/owner"), watch.project(tmp / "sites/acme")) == ("cctv", "cctv-acme")
+    # acme's deploy fails: only acme rolls back; the owner moves on, and cleanup keeps both clients' rollbacks.
+    code, saved, deployed, started, notified, _, kept = poll(tmp, {"owner": good, "acme": good}, "v0.2.0",
+                                                             running=["owner", "acme"], fail=["acme"])
+    assert (code, notified, started) == (1, 1, [("acme", "v0.1.0")]), (code, notified, started)
+    assert deployed == [("acme", "v0.2.0"), ("owner", "v0.2.0")], deployed
+    assert saved["owner"] == {"current": "v0.2.0", "previous": "v0.1.0", "failed": []}
+    assert saved["acme"] == good | {"failed": ["v0.2.0"]}
+    assert kept == [{"v0.2.0", "v0.1.0", "v0.0.9"}], kept
+
+    # The owner stopped its stack: only acme is deployed.
+    tmp = Path(tempfile.mkdtemp())
+    site(tmp, "owner"), site(tmp, "acme")
+    deployed = poll(tmp, {"owner": good, "acme": good}, "v0.2.0", running=["acme"])[2]
+    assert deployed == [("acme", "v0.2.0")], deployed
+
+    # Enrolling one client deploys that client alone.
+    tmp = Path(tempfile.mkdtemp())
+    site(tmp, "owner"), site(tmp, "acme")
+    deployed = poll(tmp, {"owner": good, "acme": None}, "v0.2.0", running=["owner"], enroll="acme")[2]
+    assert deployed == [("acme", "v0.2.0")], deployed
+
+    # A folder whose master.env names another client is refused: it would start a stack on that client's data.
+    tmp = Path(tempfile.mkdtemp())
+    site(tmp, "owner"), site(tmp, "acme", client="owner")
+    code, saved, deployed, _, notified, _, _ = poll(tmp, {"owner": good, "acme": good}, "v0.2.0", running=["owner", "acme"])
+    assert (code, deployed, notified) == (1, [("owner", "v0.2.0")], 1) and "CLIENT_ID='owner'" in saved["acme"]["problem"]
+
+    # The smoke test asks this client's API port, read alone from its .env.
+    (tmp / "sites/acme/.env").write_text("API_KEY=secret\nAPI_PORT=9190\n")
+    assert watch.setting(tmp / "sites/acme/.env", "API_PORT", "9090") == "9190"
+    assert watch.setting(tmp / "sites/owner/.env", "API_PORT", "9090") == "9090"
 
 
 def test_registry_failure():
     """An expired registry token stops deploys: notify once, not every 10 minutes, and clear it once it works."""
     tmp = Path(tempfile.mkdtemp())
-    site(tmp)
+    folder = site(tmp)
     notified = []
 
     def failing():
         raise RuntimeError("docker pull failed: denied")
 
-    with mock.patch.multiple(watch, STATE=tmp / "state.json", LOG=tmp / "watch.log", SITE=tmp / "site",
+    with mock.patch.multiple(watch, SITES=tmp / "sites", LOG=tmp / "watch.log",
                              run=lambda *cmd: "", latest_release=failing, notify=notified.append):
-        watch.save({"current": "v0.1.0", "failed": []})
+        watch.save(folder, {"current": "v0.1.0", "previous": None, "failed": []})
         assert watch.watch() == 1 and watch.watch() == 1 and len(notified) == 1
         with mock.patch.object(watch, "latest_release", lambda: ("v0.1.0", "bundle@v0.1.0")):
             assert watch.watch() == 0
-        assert "problem" not in json.loads((tmp / "state.json").read_text())
+        assert "problem" not in watch.load(folder)
 
 
 def sample_bundle(folder, tag="v9.9.9"):
@@ -195,10 +251,10 @@ def test_prune():
 def test_stable():
     """A crash-looping service fails the deploy even though the API answers."""
     with mock.patch.multiple(watch, STABLE_SECONDS=0, run=lambda *cmd: ""):
-        watch.stable()
+        watch.stable(Path("sites/owner"))
     with mock.patch.multiple(watch, STABLE_SECONDS=0, run=lambda *cmd: "mfr-cctv-producer-consumer"):
         try:
-            watch.stable()
+            watch.stable(Path("sites/owner"))
         except RuntimeError as e:
             assert "mfr-cctv-producer-consumer" in str(e)
         else:

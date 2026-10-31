@@ -5,14 +5,17 @@ a pull-only registry login (docker login ghcr.io). Each release publishes a bund
 the compose files and every image pinned by digest; :stable points at the newest published one.
 
 Runtime folder (this file is installed there by hand, and is never replaced by a release):
-  watch.py, state.json, watch.log
-  site/       this site's .env, master.env, src/Camera-Configuration/camera_configuration.json and dataset folders
-  releases/   one extracted bundle per release; the current and previous ones are kept for a rollback
+  watch.py, watch.log
+  sites/<client>/   one per client this host serves (D-036): its .env, master.env (CLIENT_ID=<client>),
+                    src/Camera-Configuration/camera_configuration.json, dataset folders, logs, and state.json
+  releases/         one extracted bundle per release; every client's current and previous ones are kept for a rollback
 
-  pythonw watch.py            poll; deploy a newer release; roll back to the last good one on failure
-  python  watch.py --enroll   first deploy, by the owner: deploy the newest release now and start watching
-  python  watch.py --check    fetch and check the newest bundle without deploying it
-Only the main compose stack is managed; the standalone services (InsightFace-REST, Milvus, Kafka) must already run.
+  pythonw watch.py                   poll; deploy a newer release to each enrolled client; roll back on failure
+  python  watch.py --enroll CLIENT   first deploy of a client, by the owner: deploy the newest release now, start watching
+  python  watch.py --check           fetch and check the newest bundle without deploying it
+Each client is its own compose project: cctv for the owner, cctv-<client> for the others. One client's failure,
+rollback or stopped stack never touches another's. Only the main compose stack is managed; the standalone services
+(InsightFace-REST, Milvus, Kafka, PostgreSQL) must already run.
 """
 import json
 import os
@@ -25,18 +28,17 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-STATE = ROOT / "state.json"
 LOG = ROOT / "watch.log"
 LOCK = ROOT / "watch.lock"
-SITE = ROOT / "site"
+SITES = ROOT / "sites"
 RELEASES = ROOT / "releases"
 CHANNEL = "ghcr.io/hamza-aziz-ai/cctv-face-recognition-deploy:stable"
 IMAGE_PREFIX = "ghcr.io/hamza-aziz-ai/cctv-face-recognition-"
-# Fixed project name: every release's compose file runs as the same stack, whatever folder it is extracted to
-PROJECT = "cctv"
+# Same rule as src/parameters.py; the owner's stack keeps the project name it had before D-036
+CLIENT_ID = re.compile(r"[a-z][a-z0-9]{2,29}")
+OWNER = "owner"
 # Bind-mounted into the containers: a missing file would be created by Docker as an empty folder
 SITE_FILES = [".env", "master.env", "src/Camera-Configuration/camera_configuration.json"]
-SMOKE_URL = "http://localhost:9090/docs"
 STABLE_SECONDS = 90
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -61,8 +63,20 @@ def notify(msg):
     subprocess.run(["msg", os.environ.get("USERNAME", "*"), msg], capture_output=True, creationflags=NO_WINDOW)
 
 
-def compose(tag):
-    return ["docker", "compose", "-p", PROJECT, "--project-directory", str(SITE),
+def project(site):
+    """Fixed per client: every release's compose file runs as the same stack, whatever folder it is extracted to."""
+    return "cctv" if site.name == OWNER else f"cctv-{site.name}"
+
+
+def setting(path, key, default=None):
+    """One key of an env file; the rest (credentials) is never kept."""
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    values = [line.split("=", 1)[1].strip().strip("'\"") for line in lines if line.startswith(f"{key}=")]
+    return values[-1] if values else default
+
+
+def compose(tag, site):
+    return ["docker", "compose", "-p", project(site), "--project-directory", str(site),
             "-f", str(RELEASES / tag / "docker-compose-main.yml")]
 
 
@@ -115,41 +129,43 @@ def stage(tag, ref):
     return manifest
 
 
-def smoke():
+def smoke(site):
+    url = f"http://localhost:{setting(site / '.env', 'API_PORT', '9090')}/docs"  # this client's own API port
     for _ in range(30):
         try:
-            with urllib.request.urlopen(SMOKE_URL, timeout=5) as r:
+            with urllib.request.urlopen(url, timeout=5) as r:
                 if r.status == 200:
                     return
         except OSError:
             pass
         time.sleep(10)
-    raise RuntimeError(f"smoke test failed: no HTTP 200 from {SMOKE_URL} within 5 minutes")
+    raise RuntimeError(f"smoke test failed: no HTTP 200 from {url} within 5 minutes")
 
 
-def project_containers(*filters, fmt="{{.ID}}"):
-    return run("docker", "ps", "-a", "--filter", f"label=com.docker.compose.project={PROJECT}", *filters, "--format", fmt)
+def project_containers(site, *filters, fmt="{{.ID}}"):
+    return run("docker", "ps", "-a", "--filter", f"label=com.docker.compose.project={project(site)}", *filters,
+               "--format", fmt)
 
 
-def stable():
+def stable(site):
     """Fail if a service is crash-looping: with a restart policy and no healthcheck, up --wait counts it as started."""
     time.sleep(STABLE_SECONDS)
-    down = project_containers("--filter", "status=restarting", "--filter", "status=exited",
+    down = project_containers(site, "--filter", "status=restarting", "--filter", "status=exited",
                               fmt='{{.Label "com.docker.compose.service"}}')
     if down:
         raise RuntimeError(f"not stable after {STABLE_SECONDS}s: {', '.join(down.split())}")
 
 
-def start(tag):
-    """Start the release's stack from its bundle, with this site's config and data."""
-    run(*compose(tag), "up", "-d", "--pull", "missing", "--no-build", "--wait", "--wait-timeout", "600")
-    smoke()
-    stable()
+def start(tag, site):
+    """Start the release's stack from its bundle, with this client's config and data."""
+    run(*compose(tag, site), "up", "-d", "--pull", "missing", "--no-build", "--wait", "--wait-timeout", "600")
+    smoke(site)
+    stable(site)
 
 
-def deploy(tag, ref):
+def deploy(tag, ref, site):
     stage(tag, ref)
-    start(tag)
+    start(tag, site)
 
 
 def prune(keep):
@@ -175,23 +191,99 @@ def prune(keep):
         log(f"Cleanup failed: {e}")
 
 
-def save(state):
-    STATE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+def load(site):
+    path = site / "state.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
 
-def problem(state, msg):
+def save(site, state):
+    (site / "state.json").write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
+def problem(site, state, msg):
     """Log a problem that stops deploys; notify once per new problem, not every 10 minutes."""
-    log(msg)
+    log(f"[{site.name}] {msg}")
     if state is not None and state.get("problem") != msg:
         state["problem"] = msg
-        save(state)
-        notify(f"CCTV deploy watcher: {msg}. See watch.log in the deploy folder.")
+        save(site, state)
+        notify(f"CCTV deploy watcher, {site.name}: {msg}. See watch.log in the deploy folder.")
 
 
-def watch(enroll=False, check=False):
-    state = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else None
-    if state is None and not (enroll or check):
-        log("Not enrolled; the owner runs: python watch.py --enroll")
+def sites():
+    return sorted(p for p in SITES.iterdir() if p.is_dir()) if SITES.exists() else []
+
+
+def kept():
+    """Every client's current and previous release, so one client's cleanup never deletes another's rollback."""
+    states = [load(site) or {} for site in sites()]
+    return {tag for state in states for tag in (state.get("current"), state.get("previous")) if tag}
+
+
+def watch_site(site, tag, ref, enroll=False):
+    """Bring one client to tag; on failure roll back that client only. Returns 1 on a problem, else 0."""
+    state = load(site)
+    if state is None and not enroll:
+        log(f"[{site.name}] Not enrolled; the owner runs: python watch.py --enroll {site.name}")
+        return 0
+    client = setting(site / "master.env", "CLIENT_ID")
+    # The folder is the client's identity (state, data, project name), so it must agree with what the services use
+    if not CLIENT_ID.fullmatch(site.name) or client != site.name:
+        problem(site, state, f"folder {site.name} has CLIENT_ID={client!r} in master.env; both must be the same valid ID")
+        return 1
+    missing = [name for name in SITE_FILES if not (site / name).is_file()]
+    if missing:
+        problem(site, state, f"site config missing: {', '.join(missing)} under {site}")
+        return 1
+    state = state or {"current": None, "previous": None, "failed": []}
+    state.pop("problem", None)
+    if not enroll:
+        if tag == state["current"] or tag in state["failed"]:
+            save(site, state)
+            return 0
+        # The owner stopped the stack on purpose; never start it behind their back.
+        if state["current"] and not project_containers(site, "--filter", "status=running"):
+            log(f"[{site.name}] Stack is stopped; not deploying {tag}. Start it, or run --enroll {site.name}, to resume.")
+            return 0
+    prev = state["current"]
+    log(f"[{site.name}] Deploying {tag} (current: {prev})")
+    try:
+        deploy(tag, ref, site)
+    except Exception as e:  # any failure, including a crash mid-deploy, ends in a rollback
+        log(f"[{site.name}] Deploy of {tag} failed: {e}")
+        state["failed"].append(tag)
+        try:
+            if prev:
+                start(prev, site)  # its bundle and images are still here, so no network is needed
+                outcome = f"rolled back to {prev}"
+            else:
+                # Restart policies would keep a broken first deploy crash-looping
+                running = project_containers(site, "--filter", "status=running").split()
+                if running:
+                    run("docker", "stop", *running)
+                outcome = "nothing to roll back to; stack stopped"
+        except Exception as e2:
+            outcome = f"ROLLBACK TO {prev} FAILED: {e2}" if prev else f"nothing to roll back to; STOP FAILED: {e2}"
+        log(f"[{site.name}] {outcome}")
+        save(site, state)
+        notify(f"CCTV deploy of {tag} for {site.name} failed; {outcome}. See watch.log in the deploy folder.")
+        return 1
+    if prev != tag:  # an enrolled redeploy of the same release keeps the older rollback
+        state["previous"] = prev
+    state["current"] = tag
+    save(site, state)
+    log(f"[{site.name}] Deployed {tag}")
+    prune(kept())
+    return 0
+
+
+def watch(enroll=None, check=False):
+    """One poll: every client under sites/, or only the one being enrolled."""
+    targets = [site for site in sites() if enroll in (None, site.name)]
+    if enroll and not targets:
+        print(f"No site folder {SITES / enroll}")
+        return 1
+    if not (enroll or check or any(load(site) for site in targets)):
+        log("No client enrolled; the owner runs: python watch.py --enroll CLIENT")
         return 0
     try:
         run("docker", "info")
@@ -200,8 +292,9 @@ def watch(enroll=False, check=False):
         return 0
     try:
         release = latest_release()
-    except RuntimeError as e:  # most often an expired or revoked registry token
-        problem(state, f"cannot read {CHANNEL}: {e}")
+    except RuntimeError as e:  # most often an expired or revoked registry token: it stops every client
+        for site in targets:
+            problem(site, load(site), f"cannot read {CHANNEL}: {e}")
         return 1
     if not release:
         log("No published release yet.")
@@ -211,48 +304,7 @@ def watch(enroll=False, check=False):
         stage(tag, ref)
         print(f"{tag}: bundle {ref} checked, in {RELEASES / tag}")
         return 0
-    missing = [name for name in SITE_FILES if not (SITE / name).is_file()]
-    if missing:
-        problem(state, f"site config missing: {', '.join(missing)} under {SITE}")
-        return 1
-    state = state or {"current": None, "failed": []}
-    state.pop("problem", None)
-    if not enroll:
-        if tag == state["current"] or tag in state["failed"]:
-            save(state)
-            return 0
-        # The owner stopped the stack on purpose; never start it behind their back.
-        if state["current"] and not project_containers("--filter", "status=running"):
-            log(f"Stack is stopped; not deploying {tag}. Start it, or run --enroll, to resume.")
-            return 0
-    prev = state["current"]
-    log(f"Deploying {tag} (current: {prev})")
-    try:
-        deploy(tag, ref)
-    except Exception as e:  # any failure, including a crash mid-deploy, ends in a rollback
-        log(f"Deploy of {tag} failed: {e}")
-        state["failed"].append(tag)
-        try:
-            if prev:
-                start(prev)  # its bundle and images are still here, so no network is needed
-                outcome = f"rolled back to {prev}"
-            else:
-                # Restart policies would keep a broken first deploy crash-looping
-                running = project_containers("--filter", "status=running").split()
-                if running:
-                    run("docker", "stop", *running)
-                outcome = "nothing to roll back to; stack stopped"
-        except Exception as e2:
-            outcome = f"ROLLBACK TO {prev} FAILED: {e2}" if prev else f"nothing to roll back to; STOP FAILED: {e2}"
-        log(outcome)
-        save(state)
-        notify(f"CCTV deploy of {tag} failed; {outcome}. See watch.log in the deploy folder.")
-        return 1
-    state["current"] = tag
-    save(state)
-    log(f"Deployed {tag}")
-    prune({tag, prev})  # the previous release stays for a rollback
-    return 0
+    return max([watch_site(site, tag, ref, enroll=bool(enroll)) for site in targets], default=0)
 
 
 def main():
@@ -266,7 +318,10 @@ def main():
         fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     os.close(fd)
     try:
-        return watch(enroll="--enroll" in sys.argv, check="--check" in sys.argv)
+        if sys.argv[-1:] == ["--enroll"]:
+            sys.exit("Usage: python watch.py --enroll CLIENT")
+        enroll = sys.argv[sys.argv.index("--enroll") + 1] if "--enroll" in sys.argv else None
+        return watch(enroll=enroll, check="--check" in sys.argv)
     finally:
         LOCK.unlink(missing_ok=True)
 
