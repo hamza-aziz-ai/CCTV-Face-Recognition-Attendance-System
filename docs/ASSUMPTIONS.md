@@ -22,6 +22,6 @@ Mark each item verified, unverified or wrong. Clear or consciously accept the un
 - Should the Raspberry Pis pull a public image, or log in to ghcr.io?
 - Should the release gate fail while manifest values are still null?
 - Should the app move off pickle before or after the datasets are migrated?
-- Is InsightFace 0.9.5 on TensorRT 11 still wanted? See [features/insightface-0.9.5-trt11.md](features/insightface-0.9.5-trt11.md).
+- InsightFace 0.9.5 on TensorRT 11 was compared with 0.9.0 on LFW only, not on CCTV footage (D-031).
 - Retention period for frames and face data?
 - How to serve several clients: one central service or dedicated deployments? The code currently serves one site.

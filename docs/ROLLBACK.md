@@ -25,6 +25,8 @@ To stop automatic deploys: `schtasks /Change /TN "CCTV deploy watcher" /DISABLE`
 
 These are not managed by the watcher. Revert the compose change, then run `./start_standalone_services.sh`.
 
+InsightFace 0.9.0 to 0.9.5 (D-031): revert the PR, so `TAG` is `v0.9.0.0` and `src/api_trt` is back, then run `./start_standalone_services.sh`. The old TensorRT 8.5 engines are kept, because 0.9.5 names its engines with the TensorRT version.
+
 ## After any rollback
 
 Run the live checks in [TEST-CHECKLIST.md](TEST-CHECKLIST.md), and note it in [HANDOVER.md](HANDOVER.md).
