@@ -97,7 +97,7 @@ cp src/Camera-Configuration/camera_configuration.example.json \
 
 Each location has an ERP `api-endpoint` and a set of `cctv-cameras` grouped by point (for example `entry` and `exit`). Each camera has `ip_address`, `port`, `endpoint`, `username`, `password` and an optional ROI polygon in `masking-coordinates`. A camera whose `username` or `password` is `null` falls back to `CAM_USERNAME` / `CAM_PASSWORD`. Kafka topics are named `<location>_<point>`, with one partition per camera.
 
-To draw an ROI polygon on a live stream, run `Custom-ROI-Provisioning/crop_rectangle.py` with `RTSP_URL` set, then copy the printed points into `masking-coordinates`.
+To draw a camera's ROI polygon, start the ROI page with `docker compose -f docker-compose-main.yml --profile roi up -d roi-provisioning` and open http://localhost:8069. Pick a camera, load a full-resolution snapshot, click around the area to keep, preview the crop (the producer's own `crop_and_mask_roi`), and save: the points go into that camera's `masking-coordinates`. Restart `producer-consumer` to apply them, and stop the page afterwards (`docker compose -f docker-compose-main.yml --profile roi stop roi-provisioning`). It listens on this host only and has no login (D-035). Without Docker, `Custom-ROI-Provisioning/crop_rectangle.py` with `RTSP_URL` set prints the same kind of points to copy in by hand.
 
 ### Parameters
 
@@ -265,13 +265,12 @@ The system stores biometric data (face images and embeddings) in several places.
 │   ├── Camera-Configuration/            # camera config template
 │   └── util/                            # enrollment, dataset and development scripts
 ├── STANDALONE-SERVICES/                 # InsightFace-REST, Milvus, Kafka, face liveness
-├── Custom-ROI-Provisioning/             # ROI drawing tool (crop_rectangle.py)
+├── Custom-ROI-Provisioning/             # ROI page (app.py, compose profile roi) and desktop tool (crop_rectangle.py)
 ├── docker-compose-main.yml
 ├── *.Dockerfile
 └── start_* / stop_* / set_configuration.sh
 ```
 
-`Custom-ROI-Provisioning/app.py` is a legacy Flask tool that no longer runs against the current code.
 
 ## Raspberry Pi display
 
