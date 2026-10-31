@@ -15,8 +15,8 @@ One deployment serves one site.
 flowchart LR
     CAM["IP cameras<br/>RTSP / HTTP"] -->|"1 reader thread per camera"| PC["Producer-consumer<br/>src/main.py"]
     PC -->|"batches of 32 frames"| NGX["nginx :6385"]
-    NGX --> IFR0["InsightFace-REST TRT<br/>MIG 7:0"]
-    NGX --> IFR1["InsightFace-REST TRT<br/>MIG 7:1"]
+    NGX --> IFR0["InsightFace-REST TRT<br/>GPU 0"]
+    NGX --> IFR1["InsightFace-REST TRT<br/>GPU 0"]
     PC -->|"top-5 search"| MV[("Milvus :19530<br/>primary + staging")]
     PC -->|"POST /ingest"| DBC["DB controller :20001"] --> PG[("PostgreSQL :5432")]
     PC -->|"TCP JSON"| FBC["Feedback controller :20012"] --> K["Kafka :9092"]
@@ -59,14 +59,14 @@ Frames travel from the camera threads to the recognition threads through an in-m
 
 ### Standalone stacks (`STANDALONE-SERVICES/`)
 
-| Service | Image | Ports | GPU (MIG) |
+| Service | Image | Ports | GPU (default) |
 |---|---|---|---|
-| InsightFace-REST (×2) | `insightface-rest` (TensorRT) | 19000, 19001 → 18080 | 7:0, 7:1 (10 GB each) |
+| InsightFace-REST (×2) | `insightface-rest` (TensorRT) | 19000, 19001 → 18080 | 0, 0 |
 | nginx load balancer | `nginx` | 6385 → 18080 | — |
-| Milvus standalone | `milvusdb/milvus:v3.0.5-gpu` (+ etcd 3.5.25, Milvus-tested MinIO) | 19530, 9091, 9000, 9001 | 7:4 (5 GB) |
+| Milvus standalone | `milvusdb/milvus:v3.0.5-gpu` (+ etcd 3.5.25, Milvus-tested MinIO) | 19530, 9091, 9000, 9001 | 0 |
 | Kafka broker (KRaft) | `confluentinc/cp-kafka:8.4.0` (+ Schema Registry, Connect, ksqlDB, REST Proxy, Flink: cp-all-in-one community 8.4.0) | 9092, 9101 | — |
 | Dataset store (DVC remote) | `pgsty/minio` (MinIO) | 9010 (S3 API), 9011 (console) | — |
-| Face liveness detection (disabled) | `face-liveness-detection:v-beta` + nginx | 6970, 6971, 6386 | 7:2, 7:3 (5 GB each) |
+| Face liveness detection (disabled) | `face-liveness-detection:v-beta` + nginx | 6970, 6971, 6386 | 0, 0 |
 
 Liveness detection (MiniFASNet anti-spoofing) is switched off by `ENABLE_FACE_LIVENESS_DETECTION = False` in `src/parameters.py`, and its start command is commented out.
 
@@ -102,14 +102,14 @@ To draw an ROI polygon on a live stream, run `Custom-ROI-Provisioning/crop_recta
 
 ### Parameters
 
-Runtime parameters such as batch size, thresholds, ports, staging and liveness flags live in [`src/parameters.py`](src/parameters.py). The host IP is written to `master.env` (created from `master.env.example` on first run, not tracked) and `STANDALONE-SERVICES/standalone-services.env` by `set_configuration.sh` at startup. InsightFace-REST models, batch sizes and MIG devices are set in `STANDALONE-SERVICES/standalone-services.env`.
+Runtime parameters such as batch size, thresholds, ports, staging and liveness flags live in [`src/parameters.py`](src/parameters.py). The host IP is written to `master.env` (created from `master.env.example` on first run, not tracked) and `STANDALONE-SERVICES/standalone-services.env` by `set_configuration.sh` at startup. InsightFace-REST models, batch sizes and GPU devices are set in `STANDALONE-SERVICES/standalone-services.env`.
 
 ## Getting started
 
 ### Prerequisites
 
 - Linux host with Docker, Docker Compose and the NVIDIA Container Toolkit
-- NVIDIA GPU with MIG instances matching `standalone-services.env` (developed on an NVIDIA DGX)
+- An NVIDIA GPU. The defaults in `standalone-services.env` put every service on GPU 0 with small batches (tested on a 6 GB laptop GPU); a larger or multi-GPU host sets its own GPUs and batch sizes in a profile under `STANDALONE-SERVICES/hosts/`, chosen by `HOST_PROFILE` in `.env`
 - [DVC](https://dvc.org/doc/install) access to the face datasets
 
 ### 1. Clone

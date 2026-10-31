@@ -51,13 +51,13 @@ RESIZE_FRAME = True
 CROP_ROI = True
 
 # set BATCH_SIZE for face detection
-BATCH_SIZE = 32  # for DGX 64, 8 for CPU
+BATCH_SIZE = 32  # frames per InsightFace request; lower it on a small GPU, 8 for CPU
 
 # buffer size for video streaming to minimize inconsistent network conditions
 LIVE_STREAM_BUFFER_SIZE = 4096
 
 # buffer size for frames on which face recognition will be performed
-LIVE_STREAM_BUFFER_PURGE_SIZE = 256  # 256 for DGX
+LIVE_STREAM_BUFFER_PURGE_SIZE = 256
 
 # IP Camera Details
 CAM_USERNAME = os.environ.get("CAM_USERNAME")
@@ -86,7 +86,7 @@ MAXIMUM_DARK_FRAMES = 80
 INSIGHTFACE_HOST = f"http://{IP_ADDRESS}"
 
 # InsightFace-REST port
-INSIGHTFACE_PORT = "6385"  # 6385 for DGX, 18081 for the local system
+INSIGHTFACE_PORT = "6385"  # the nginx load balancer in front of the InsightFace-REST containers
 
 # Threaded GPU Flag
 THREAD_FLAG = True

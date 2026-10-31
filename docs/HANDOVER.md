@@ -38,8 +38,7 @@ In progress:
 - InsightFace 0.9.5 on TensorRT 11 is ready to switch (D-031): run `./start_standalone_services.sh` after the PR merges.
 
 Broken or risky:
-- This machine is both the dev and the deployment server (from 2026-10-30): Windows 11, Docker Desktop, RTX 4050 Laptop 6 GB. The repo config assumes an A100 host:
-  - The MIG slices and A100 batch sizes are handled by the `laptop-rtx4050` host profile (D-015), but the profile's batch sizes have not been tested on the GPU yet.
+- This machine is both the dev and the deployment server (from 2026-10-30): Windows 11, Docker Desktop, RTX 4050 Laptop 6 GB. The repo defaults are generic and fit it: every GPU service on GPU 0, batch sizes 8 and 16 (D-032). Speed and memory under real camera load are not measured.
   - InsightFace TAG `v0.9.5.0` is built by `deploy_trt_multi-gpu.sh` itself. Keep the old `v0.9.0.0` image until the switch is proven, for a rollback.
   - Milvus `v2.5.1-gpu` in the repo; `v3.0.0` is the local image.
   - Compose `/workspace/...` paths land inside the Docker Desktop VM.

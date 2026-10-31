@@ -485,3 +485,16 @@ Chosen: 3. `src/api_trt` is replaced by upstream `if_rest` at `fb854d8`, on `nvc
 Why: The service only calls `TurboJPEG()` and `decode()`, which PyTurboJPEG 1.8.3 has; building libjpeg-turbo adds a build step to own. Measured against the running 0.9.0.0 on 330 LFW photos of 30 people (150 enrolled, 180 tested, threshold 0.5): both 173 correct, 0 wrong, 7 below threshold; the same photo's embeddings agree at cosine 0.9951 or more (mean 0.9993). The app's own `IFRClient` gets the same response fields, with msgpack and JSON. The image is 7.1 GB instead of 16.3 GB.
 Trade-off: Python packages other than PyTurboJPEG are unpinned, as upstream has them, so a rebuild can pull newer versions. The first start builds new engines (the recognition engine took 50 s here). The CPU image was updated but not built or tested.
 Revisit if: Ubuntu ships libjpeg-turbo 3 (drop the pin), or a rebuild breaks on a new package version (pin the versions that work).
+
+## D-032: Generic GPU defaults instead of the A100 MIG layout
+Date: 2026-10-31   Model: Claude Opus 5.5
+Context: `standalone-services.env` described the original A100 host: MIG slices `7:0` to `7:4`, two workers per container and batch sizes 64 and 128. Every other host needed a profile (D-015). On 2026-10-31 a start without `HOST_PROFILE` used those defaults here: InsightFace failed with `unknown device` and Milvus was left created but not running. The owner asked for generic defaults.
+Options:
+
+1. keep the A100 defaults and a profile per host
+2. generic defaults that fit one small GPU, and a profile only where a host needs more
+
+Chosen: 2. Every GPU service defaults to GPU 0, InsightFace runs two containers there with one worker each and batch sizes 8 and 16. `MIG_GPU` is renamed `INSIGHTFACE_GPUS`, and the containers `insightface-rest-trt-0` and `-1`. The `laptop-rtx4050` profile equaled the new defaults and is removed. `start_standalone_services.sh` now reads `HOST_PROFILE` from `.env`.
+Why: The defaults run on any host with one NVIDIA GPU, including this laptop, where the same values ran 0.9.5. A large host still gets its own values through a profile.
+Trade-off: A large GPU is under-used until its profile raises the batch sizes. MIG layouts are still possible, but only through a profile.
+Revisit if: a second deployment host exists: give it a profile.
