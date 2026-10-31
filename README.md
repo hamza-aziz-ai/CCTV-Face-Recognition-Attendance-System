@@ -101,7 +101,7 @@ To draw an ROI polygon on a live stream, run `Custom-ROI-Provisioning/crop_recta
 
 ### Parameters
 
-Runtime parameters such as batch size, thresholds, ports, staging and liveness flags live in [`src/parameters.py`](src/parameters.py). The host IP is written to `master.env` (created from `master.env.example` on first run, not tracked) and `STANDALONE-SERVICES/standalone-services.env` by `set_configuration.sh` at startup. InsightFace-REST models, batch sizes and GPU devices are set in `STANDALONE-SERVICES/standalone-services.env`.
+Runtime parameters such as batch size, thresholds, ports, staging and liveness flags live in [`src/parameters.py`](src/parameters.py). The host IP is written to `master.env` (created from `master.env.example` on first run, not tracked) and `STANDALONE-SERVICES/standalone-services.env` by `set_configuration.sh` at startup. `master.env` also names the client the site serves, `CLIENT_ID` (D-036): every service refuses to start without a valid one, and `CLIENT_ID=owner` keeps the database, collection and topic names used before. InsightFace-REST models, batch sizes and GPU devices are set in `STANDALONE-SERVICES/standalone-services.env`.
 
 ## Getting started
 
@@ -241,6 +241,8 @@ A background job posts the current day's unacknowledged recognitions to the ERP 
 | Milvus `FACE_DATA_STAGING_COLLECTION_FOR_COSINE` | CCTV-captured embeddings |
 | `DYNAMIC-FACIAL-RECOGNITION-DATASET/` | Collected face crops and `meta.json` per person and cluster |
 | `logs/<year>/<month>/<logger>/` | Per-service logs, rotated at midnight, 31 kept |
+
+The names above are the owner's (`CLIENT_ID=owner`). Any other client gets its own: PostgreSQL `<client>_cctv_camera_surveillance` and `<client>_face_recognition_database`, the Milvus database `<client>_default` with the same collection names inside, and Kafka topics `<client>.<location>_<point>` (D-036).
 
 The system stores biometric data (face images and embeddings) in several places. Apply your organisation's access, retention and deletion policy to all of them.
 
