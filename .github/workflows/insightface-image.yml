@@ -72,7 +72,13 @@ jobs:
               echo "::error::Only ${free} GB free on $disk; the TensorRT build needs about 45 GB"; exit 1
             fi
             docker build -t "$REF" -f STANDALONE-SERVICES/InsightFace-REST/src/Dockerfile_trt STANDALONE-SERVICES/InsightFace-REST/src
-            docker push "$REF"
+            # ghcr.io refused the first push into the new package after every layer was uploaded ("denied"), as it did
+            # for the app images; a retry skips the layers already there
+            for attempt in 1 2 3; do
+              docker push "$REF" && break
+              [ "$attempt" -lt 3 ] || exit 1
+              echo "Push attempt $attempt refused; retrying"; sleep 20
+            done
             df -h "$disk"
           fi
           digest=$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest.Digest}}' | tr -d '"')
