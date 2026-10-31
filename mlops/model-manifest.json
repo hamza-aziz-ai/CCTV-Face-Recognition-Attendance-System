@@ -42,7 +42,7 @@
       "FACE_DATA_COLLECTION_FOR_COSINE",
       "FACE_DATA_STAGING_COLLECTION_FOR_COSINE"
     ],
-    "embedding_snapshot": null
+    "embedding_snapshot": "datasets.FACIAL-RECOGNITION-DATASET: each person's vectors.parquet, published to the collection version in use (D-030)"
   },
   "pipeline": {
     "frame_size": [640, 360],
@@ -51,13 +51,12 @@
     "liveness_enabled": false
   },
   "datasets": {
-    "FACIAL-RECOGNITION-DATASET": {"dvc_md5": "3e723cbef3d78af0f2bc3f6f9e7d58f2.dir", "files": 10, "bytes": 2165802},
+    "FACIAL-RECOGNITION-DATASET": {"dvc_md5": "8626b12963d840d9871a2c377b8d9390.dir", "files": 11, "bytes": 2195962},
     "DISPLAY-FACE-DATASET": {"dvc_md5": "80e9276468ddcb23eae6ff8bcce6044b.dir", "files": 1, "bytes": 220557}
   },
   "unverified": {
     "inference_service.image_digest": "On the GPU host: docker image inspect --format '{{.Id}}' insightface-rest:v0.9.5.0",
     "detector.engine_sha256": "On the GPU host: sha256sum of the built scrfd_10g_gnkps TensorRT engine under the InsightFace-REST models volume",
-    "recognizer.engine_sha256": "On the GPU host: sha256sum of the built w600k_r50 TensorRT engine under the InsightFace-REST models volume",
-    "vector_store.embedding_snapshot": "Identity of the embeddings currently loaded into the primary collection (export or DVC revision); none exists yet"
+    "recognizer.engine_sha256": "On the GPU host: sha256sum of the built w600k_r50 TensorRT engine under the InsightFace-REST models volume"
   }
 }
