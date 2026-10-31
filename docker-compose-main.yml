@@ -146,10 +146,11 @@ services:
     environment:
       # This host has no SSH, Redis or liveness service, so the client waits only for the services that run here
       HOST_CHECK_PORT: 9092
-      PROJECT_SERVICES_PORT: 6385,19000,19001,19530,9092,${DISPLAY_IMAGE_PORT:-20013}
+      # One InsightFace-REST container (D-032): nothing listens on 19001, so checking it kept the display waiting (#67)
+      PROJECT_SERVICES_PORT: 6385,19000,19530,9092,${DISPLAY_IMAGE_PORT:-20013}
       # Newer Kafka-WebApp images check these instead, so failures of the internal services, which publish no host port,
       # still show on the display; older images ignore it
-      PROJECT_SERVICES: 6385,19000,19001,19530,9092,mfr-database-controller:20001,mfr-feedback-controller:20012,display-image-server:20013
+      PROJECT_SERVICES: 6385,19000,19530,9092,mfr-database-controller:20001,mfr-feedback-controller:20012,display-image-server:20013
       # This client's own portrait server, by service name (Kafka-WebApp reads it from v0.2; older images use IP_ADDRESS:20013)
       IMAGE_SERVER_ADDRESS: http://display-image-server:20013/post_images
     ports:
