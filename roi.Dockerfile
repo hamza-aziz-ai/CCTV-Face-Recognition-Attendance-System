@@ -18,10 +18,8 @@ WORKDIR /Multi-Person-Face-Recognition
 
 # Copy the current directory contents into the container at /Multi-Person-Face-Recognition
 COPY Custom-ROI-Provisioning/ Custom-ROI-Provisioning/
-Copy src/ src/
-
-# Change permissions for parameters.py
-RUN chmod 777 src/parameters.py
+# The page reuses src/parameters.py and src/util; it writes only the mounted camera configuration
+COPY src/ src/
 
 # Install requirements
 RUN python3 -m pip install -r Custom-ROI-Provisioning/requirements.txt
@@ -29,5 +27,5 @@ RUN python3 -m pip install -r Custom-ROI-Provisioning/requirements.txt
 # Expose the port your Flask app will run on
 EXPOSE 8069
 
-# Start the FastAPI application
+# Start the Flask application
 CMD ["python3", "-m", "flask", "--app", "Custom-ROI-Provisioning/app.py", "run", "--host=0.0.0.0", "--port=8069"]
