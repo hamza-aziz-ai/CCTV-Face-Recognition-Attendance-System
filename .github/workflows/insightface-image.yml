@@ -53,14 +53,27 @@ jobs:
           if docker buildx imagetools inspect "$REF" > /dev/null 2>&1; then
             echo "$REF is already published"
           else
-            # The TensorRT base image is bigger than the root disk's free space: keep Docker's data on the larger /mnt
-            cfg=$( (sudo cat /etc/docker/daemon.json 2> /dev/null || echo '{}') | jq '. + {"data-root": "/mnt/docker"}')
-            echo "$cfg" | sudo tee /etc/docker/daemon.json > /dev/null
-            sudo systemctl restart docker
-            df -h / /mnt
+            # The TensorRT base image filled the runner's disk and crashed the runner itself, losing the log. Free the
+            # preinstalled toolchains this job does not use, put Docker's data on the disk with the most room, and stop
+            # with a readable error if that is still too small.
+            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost \
+              /usr/share/swift /usr/local/julia* /usr/local/share/powershell /usr/local/share/chromium
+            docker system prune -af > /dev/null
+            disk=$(df --output=avail,target -B1G / /mnt 2> /dev/null | tail -n +2 | sort -n | tail -n 1 | awk '{print $2}')
+            if [ "$disk" != / ]; then
+              cfg=$( (sudo cat /etc/docker/daemon.json 2> /dev/null || echo '{}') | jq --arg d "$disk/docker" '. + {"data-root": $d}')
+              echo "$cfg" | sudo tee /etc/docker/daemon.json > /dev/null
+              sudo systemctl restart docker
+              echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+            fi
+            df -h / /mnt 2> /dev/null || df -h /
+            free=$(df --output=avail -B1G "$disk" | tail -n 1 | tr -d ' ')
+            if [ "$free" -lt 45 ]; then
+              echo "::error::Only ${free} GB free on $disk; the TensorRT build needs about 45 GB"; exit 1
+            fi
             docker build -t "$REF" -f STANDALONE-SERVICES/InsightFace-REST/src/Dockerfile_trt STANDALONE-SERVICES/InsightFace-REST/src
             docker push "$REF"
-            df -h /mnt
+            df -h "$disk"
           fi
           digest=$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
