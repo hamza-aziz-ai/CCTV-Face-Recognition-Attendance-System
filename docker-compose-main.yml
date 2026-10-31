@@ -11,6 +11,11 @@ services:
     environment:
       CAM_USERNAME: ${CAM_USERNAME}
       CAM_PASSWORD: ${CAM_PASSWORD}
+      # This client's own logins, written to its site .env by deploy/provision.py (D-037)
+      MILVUS_APP_USER: ${MILVUS_APP_USER:-}
+      MILVUS_APP_PASSWORD: ${MILVUS_APP_PASSWORD:-}
+      KAFKA_APP_USER: ${KAFKA_APP_USER:-}
+      KAFKA_APP_PASSWORD: ${KAFKA_APP_PASSWORD:-}
     volumes:
       # Only config and data: the code comes from the image. Enrolment scripts that need the datasets run in their own container
       - ./master.env:/Multi-Person-Face-Recognition/master.env
@@ -30,9 +35,12 @@ services:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-database-controller:${IMAGE_TAG:-v-beta}
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PG_APP_USER: ${PG_APP_USER:-}
+      PG_APP_PASSWORD: ${PG_APP_PASSWORD:-}
+      # The admin login, used only while master.env has LEGACY_SHARED_SERVICES=1 (owner, until step 3c, D-037)
+      POSTGRES_USER: ${POSTGRES_USER:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
@@ -47,6 +55,9 @@ services:
   mfr-feedback-controller:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-feedback-controller:${IMAGE_TAG:-v-beta}
     restart: unless-stopped
+    environment:
+      KAFKA_APP_USER: ${KAFKA_APP_USER:-}
+      KAFKA_APP_PASSWORD: ${KAFKA_APP_PASSWORD:-}
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
@@ -63,9 +74,12 @@ services:
     restart: unless-stopped
     environment:
       API_KEY: ${API_KEY}
-      POSTGRESQL_USERNAME: ${POSTGRES_USER}
       POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
-      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD}
+      PG_APP_USER: ${PG_APP_USER:-}
+      PG_APP_PASSWORD: ${PG_APP_PASSWORD:-}
+      # The admin login, used only while master.env has LEGACY_SHARED_SERVICES=1 (owner, until step 3c, D-037)
+      POSTGRES_USER: ${POSTGRES_USER:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
@@ -91,9 +105,12 @@ services:
       - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
       - ./logs:/Multi-Person-Face-Recognition/logs
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PG_APP_USER: ${PG_APP_USER:-}
+      PG_APP_PASSWORD: ${PG_APP_PASSWORD:-}
+      # The admin login, used only while master.env has LEGACY_SHARED_SERVICES=1 (owner, until step 3c, D-037)
+      POSTGRES_USER: ${POSTGRES_USER:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     init: true
     healthcheck:
       test: [ "CMD", "./src/dynamic_face_data_collector/healthcheck.sh" ]
@@ -110,9 +127,14 @@ services:
       - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
       - ./logs:/Multi-Person-Face-Recognition/logs
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PG_APP_USER: ${PG_APP_USER:-}
+      PG_APP_PASSWORD: ${PG_APP_PASSWORD:-}
+      # The admin login, used only while master.env has LEGACY_SHARED_SERVICES=1 (owner, until step 3c, D-037)
+      POSTGRES_USER: ${POSTGRES_USER:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      MILVUS_APP_USER: ${MILVUS_APP_USER:-}
+      MILVUS_APP_PASSWORD: ${MILVUS_APP_PASSWORD:-}
     # Reads Face_Recognition_Database, which the collector creates
     depends_on:
       dynamic-face-dataset-collector:

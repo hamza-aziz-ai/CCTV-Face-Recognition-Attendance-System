@@ -22,7 +22,7 @@ current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
 from custom_logging import feedback_server_logger
-from parameters import KAFKA_HOST, \
+from parameters import LEGACY_SHARED_SERVICES, kafka_login, KAFKA_HOST, \
     KAFKA_PORT, \
     KAFKA_MESSAGE_RETENTION, \
     SEGMENT_RETENTION_TIME, \
@@ -33,7 +33,8 @@ from util.generic_utilities import count_cameras, map_camera_to_kafka_topic_and_
 # Define Kafka producer configuration
 producer_config = {
     "bootstrap.servers": f"{KAFKA_HOST}:{KAFKA_PORT}",  # Replace with your Kafka broker(s) address
-    "client.id": "feedback_message_publisher"
+    "client.id": "feedback_message_publisher",
+    **kafka_login(),  # this client's SCRAM login (D-037); none for the legacy owner
 }
 
 # Create an AdminClient instance
@@ -66,6 +67,10 @@ def ensure_kafka_topics():
     missing = [t for t in topics_list if t.topic not in existing]
     grow = [NewPartitions(t.topic, t.num_partitions) for t in topics_list
             if t.topic in existing and existing[t.topic] < t.num_partitions]
+    if not LEGACY_SHARED_SERVICES and (missing or grow):
+        # The client may only write to its topics; deploy/provision.py makes them from the camera configuration (D-037)
+        raise RuntimeError(f"Kafka topics missing or short of partitions: {[t.topic for t in missing]}, "
+                           f"{[p.topic for p in grow]}; rerun deploy/provision.py after changing cameras")
     for futures in ([admin_client.create_topics(missing)] if missing else []) + ([admin_client.create_partitions(grow)] if grow else []):
         for name, future in futures.items():
             future.result()  # raise on failure: producing to a missing topic would lose every message
