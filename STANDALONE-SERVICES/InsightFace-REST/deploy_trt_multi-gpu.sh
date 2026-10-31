@@ -94,8 +94,9 @@ echo "Starting Docker NGINX Load Balancer";
 docker network create insightface-network
 
 # Connect existing containers to the network
-docker network connect insightface-network "$name"-0
-docker network connect insightface-network "$name"-1
+for ((n = 0; n < ${#INSIGHTFACE_GPUS[@]}; n++)); do
+    docker network connect insightface-network "$name-$n"
+done
 
 docker rm -f docker-nginx-insightface 2>/dev/null || true
 # shellcheck disable=SC2046

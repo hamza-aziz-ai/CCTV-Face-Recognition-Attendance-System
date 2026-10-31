@@ -494,7 +494,7 @@ Options:
 1. keep the A100 defaults and a profile per host
 2. generic defaults that fit one small GPU, and a profile only where a host needs more
 
-Chosen: 2. Every GPU service defaults to GPU 0, InsightFace runs two containers there with one worker each and batch sizes 8 and 16. `MIG_GPU` is renamed `INSIGHTFACE_GPUS`, and the containers `insightface-rest-trt-0` and `-1`. The `laptop-rtx4050` profile equaled the new defaults and is removed. `start_standalone_services.sh` now reads `HOST_PROFILE` from `.env`.
+Chosen: 2. Every GPU service defaults to GPU 0. InsightFace runs one container there, with one worker and batch sizes 8 and 16; the owner judged this laptop too small for two. nginx stays on port 6385 with that one backend, so the app is unchanged. `MIG_GPU` is renamed `INSIGHTFACE_GPUS`, and the containers `insightface-rest-trt-0` and `-1`. The `laptop-rtx4050` profile equaled the new defaults and is removed. `start_standalone_services.sh` now reads `HOST_PROFILE` from `.env`.
 Why: The defaults run on any host with one NVIDIA GPU, including this laptop, where the same values ran 0.9.5. A large host still gets its own values through a profile.
-Trade-off: A large GPU is under-used until its profile raises the batch sizes. MIG layouts are still possible, but only through a profile.
-Revisit if: a second deployment host exists: give it a profile.
+Trade-off: A large GPU is under-used until its profile raises the batch sizes. MIG layouts are still possible, but only through a profile. More InsightFace containers start, but nginx does not balance across them yet.
+Revisit if: a second deployment host exists (give it a profile), or throughput needs more than one InsightFace container (design load balancing that follows `INSIGHTFACE_GPUS`).

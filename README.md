@@ -16,7 +16,6 @@ flowchart LR
     CAM["IP cameras<br/>RTSP / HTTP"] -->|"1 reader thread per camera"| PC["Producer-consumer<br/>src/main.py"]
     PC -->|"batches of 32 frames"| NGX["nginx :6385"]
     NGX --> IFR0["InsightFace-REST TRT<br/>GPU 0"]
-    NGX --> IFR1["InsightFace-REST TRT<br/>GPU 0"]
     PC -->|"top-5 search"| MV[("Milvus :19530<br/>primary + staging")]
     PC -->|"POST /ingest"| DBC["DB controller :20001"] --> PG[("PostgreSQL :5432")]
     PC -->|"TCP JSON"| FBC["Feedback controller :20012"] --> K["Kafka :9092"]
@@ -61,7 +60,7 @@ Frames travel from the camera threads to the recognition threads through an in-m
 
 | Service | Image | Ports | GPU (default) |
 |---|---|---|---|
-| InsightFace-REST (×2) | `insightface-rest` (TensorRT) | 19000, 19001 → 18080 | 0, 0 |
+| InsightFace-REST | `insightface-rest` (TensorRT) | 19000 → 18080 | 0 |
 | nginx load balancer | `nginx` | 6385 → 18080 | — |
 | Milvus standalone | `milvusdb/milvus:v3.0.5-gpu` (+ etcd 3.5.25, Milvus-tested MinIO) | 19530, 9091, 9000, 9001 | 0 |
 | Kafka broker (KRaft) | `confluentinc/cp-kafka:8.4.0` (+ Schema Registry, Connect, ksqlDB, REST Proxy, Flink: cp-all-in-one community 8.4.0) | 9092, 9101 | — |
