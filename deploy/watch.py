@@ -158,15 +158,24 @@ def stable(site):
 
 
 def tag_images(tag):
-    """Name a release's images: pulled by digest, they show as <none> in docker images."""
-    names = dict(check_bundle(RELEASES / tag, tag)["images"])
-    text = (RELEASES / tag / "docker-compose-main.yml").read_text(encoding="utf-8")
-    for name, digest in re.findall(r"image:\s*(\S+:[^@\s]+)@(sha256:[0-9a-f]{64})", text):
-        names[name] = f"{name.rsplit(':', 1)[0]}@{digest}"
+    """Give a release's images their tag and drop their digest name, which Docker Desktop lists as a <none> row. Runs
+    every poll, so an image that was not running last time is retried. Cosmetic: a failure never fails a deploy."""
+    try:
+        folder = RELEASES / tag
+        names = dict(check_bundle(folder, tag)["images"])
+        for path in [folder / "docker-compose-main.yml", *folder.glob("STANDALONE-SERVICES/*/docker-compose*.yml")]:
+            for name, digest in re.findall(r"(\S+:[^@\s]+)@(sha256:[0-9a-f]{64})", path.read_text(encoding="utf-8")):
+                names[name] = f"{name.rsplit(':', 1)[0]}@{digest}"
+    except (OSError, RuntimeError) as e:
+        log(f"Image tagging skipped: {e}")
+        return
     for name, pinned in names.items():
         try:
             run("docker", "tag", pinned, name)
-        except RuntimeError:  # not on this host: InsightFace runs from its own image, the ROI page only on demand
+            # With no container on the image, rmi would delete the image itself, tag included
+            if run("docker", "ps", "-q", "--filter", f"ancestor={name}"):
+                run("docker", "rmi", "-f", pinned)
+        except RuntimeError:  # not on this host, or the digest name is already gone
             pass
 
 
@@ -254,6 +263,7 @@ def watch_site(site, tag, ref, enroll=False):
     if not enroll:
         if tag == state["current"] or tag in state["failed"]:
             save(site, state)
+            tag_images(state["current"])
             return 0
         # The owner stopped the stack on purpose; never start it behind their back.
         if state["current"] and not project_containers(site, "--filter", "status=running"):

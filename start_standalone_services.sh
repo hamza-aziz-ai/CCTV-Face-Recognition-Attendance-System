@@ -85,8 +85,10 @@ cd STANDALONE-SERVICES/Confluent-Kafka
 docker-compose "${ENV_FILES[@]}" up -d
 cd ../..
 
-# Name the images compose pulled by digest, which docker images shows as <none>; one not on this host is skipped
+# Compose pulls these by digest. Tag them, then drop the digest name, which Docker Desktop lists as a <none> row. With no container on the image, rmi would delete the image itself, so that waits for the watcher's next run
 grep -ohE '[^ ]+:[^ @]+@sha256:[0-9a-f]{64}' STANDALONE-SERVICES/*/docker-compose*.yml | sort -u | while read -r ref; do
     name=${ref%@*}
-    docker tag "${name%:*}@${ref#*@}" "$name" 2>/dev/null
+    pinned=${name%:*}@${ref#*@}
+    docker tag "$pinned" "$name" 2>/dev/null
+    [ -z "$(docker ps -q --filter ancestor="$name" 2>/dev/null)" ] || docker rmi -f "$pinned" > /dev/null 2>&1
 done
