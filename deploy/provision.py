@@ -288,6 +288,48 @@ def root_token(admin_env):
     return f"root:{password}"
 
 
+def proxy_route(client, host):
+    """This client's HTTPS route (D-040). Pages with no login of their own, Kafka-WebApp and its WebSockets, are guarded by the API's /auth/check, and report routes by the API itself. Compose names the containers from the project."""
+    project = "cctv" if client == "owner" else f"cctv-{client}"
+    api = f"{project}-mfr-api-service-1:8000"
+    return f"""{host} {{
+	tls internal
+	handle /auth/* {{
+		reverse_proxy {api}
+	}}
+	handle_path /api/* {{
+		respond /docs 404
+		respond /redoc 404
+		respond /openapi.json 404
+		reverse_proxy {api}
+	}}
+	handle {{
+		forward_auth {api} {{
+			uri /auth/check
+			header_up -Connection
+			header_up -Upgrade
+			@signed_out status 401
+			handle_response @signed_out {{
+				redir * /auth/sign-in
+			}}
+		}}
+		reverse_proxy {project}-kafka-webapp-1:9090
+	}}
+}}
+"""
+
+
+def write_proxy_route(client, sites):
+    host = read_env(sites / client / ".env").get("SITE_HOST") or f"{client}.localhost"
+    if not re.fullmatch(r"[a-z0-9]([a-z0-9.-]*[a-z0-9])?", host):  # it goes into a Caddy file
+        raise Stop(f"SITE_HOST {host!r} is not a host name")
+    folder = sites.parent / "proxy"
+    folder.mkdir(exist_ok=True)
+    (folder / f"{client}.caddy").write_text(proxy_route(client, host), encoding="utf-8", newline="
+")
+    return host
+
+
 def provision(client, sites, admin_env, pg, kafka_container, store_container, milvus_url):
     if not CLIENT_ID.fullmatch(client):
         raise Stop(f"{client!r} is not a client ID: 3 to 30 lowercase letters or digits, starting with a letter")
@@ -360,6 +402,7 @@ def main(argv=None):
     parser.add_argument("client", nargs="?")
     parser.add_argument("--init-milvus-root", action="store_true")
     parser.add_argument("--init-kafbat", action="store_true")
+    parser.add_argument("--proxy", action="store_true", help="only write this client's HTTPS route")
     parser.add_argument("--sites", type=Path, default=ROOT / "sites")
     parser.add_argument("--admin-env", type=Path, default=ROOT / "admin.env")
     parser.add_argument("--postgres", default="cctv-postgresql")
@@ -372,6 +415,8 @@ def main(argv=None):
             init_milvus_root(args.admin_env, args.milvus)
         elif args.init_kafbat:
             init_kafbat(args.admin_env, args.kafka)
+        elif args.proxy and args.client:
+            print(f"https://{write_proxy_route(args.client, args.sites)}")
         elif args.client:
             provision(args.client, args.sites, args.admin_env, args.postgres, args.kafka, args.store, args.milvus)
         else:

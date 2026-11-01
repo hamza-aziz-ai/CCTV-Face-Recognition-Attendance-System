@@ -1,0 +1,24 @@
+# HTTPS for every client stack on this host (D-036 step 4, D-040). One Caddy, with one route file per client written by deploy/provision.py into PROXY_DIR, which holds no secrets.
+# The private CA that signs each client's host name stays in the named volume.
+services:
+  proxy:
+    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    container_name: cctv-proxy
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${PROXY_DIR:?set PROXY_DIR to the deploy folder's proxy folder}:/routes:ro
+      - proxy-data:/data
+    networks:
+      - edge
+
+volumes:
+  proxy-data:
+    name: cctv-proxy-data
+
+networks:
+  edge:
+    name: cctv-edge
+    external: true
