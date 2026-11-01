@@ -71,7 +71,7 @@ flowchart TB
 3. **Identity search.** Every face is searched against both Milvus collections. A face is accepted when its best primary hit scores at least 0.5 (cosine). Otherwise, with `STAGING = True`, the best primary hit that also appears in the staging top 5 is accepted at 0.45 or more. Staging vectors come from CCTV crops, so they help people whose enrollment photos differ from how the cameras see them.
 4. **Liveness.** Anti-spoofing exists but is off (`ENABLE_FACE_LIVENESS_DETECTION = False`). When on, a person whose crops look spoofed more often than real is dropped from the attendance records; the display and the collector still receive that person.
 5. **Attendance record.** Accepted faces, with the annotated frame, go to the DB controller, which answers at once and writes to PostgreSQL in the background. Each record lands in a partition for its year and location.
-6. **Display.** Strict primary matches go over TCP to the feedback controller, which publishes each person ID to the entry point's Kafka topic, on the camera's partition. Kafka-WebApp reads the topic, asks the display image server for portraits, and shows them. Staging matches are recorded but not displayed.
+6. **Display.** Strict primary matches go over TCP to the feedback controller, which publishes each person ID to the entry point's Kafka topic, on the camera's partition. Kafka-WebApp (v0.3.0) reads every partition of the topic, so every camera of the entry point, asks the display image server for portraits, and shows them. Camera `ERROR` and `SUCCESS` messages go to a per-camera status strip on the display instead. Staging matches are recorded but not displayed.
 7. **ERP.** Every minute the reporting API posts the day's unacknowledged records to the location's ERP endpoint, and marks each one acknowledged when the ERP confirms it. The same service answers report queries.
 8. **Gallery refresh.** Strict primary matches also send their face crops to the collector, which keeps the best three per person and camera cluster. At 01:00 the nightly updater embeds new crops and replaces that person's vectors in the staging collection.
 
@@ -79,22 +79,22 @@ Each step is traced in detail in [docs/FLOW.md](docs/FLOW.md).
 
 ## Solution Architecture
 
-How to read it: solid arrows are what happens on every release; dotted arrows are optional or not used yet.
+How to read it: solid arrows are what happens on every release; dotted arrows are optional or happen by hand.
 
 ```mermaid
 flowchart TB
     DEV["`Developer opens a pull request`"]:::entry
-    CI{"`(1) ci.yml: lint, secret scan, compose and bundle check, manifest check, 8 image builds with smoke tests`"}:::decision
+    CI{"`(1) ci.yml: lint, secret scan, compose, bundle and script checks, manifest check, 8 image builds unless docs only`"}:::decision
     AM{"`(2) automerge.yml: every check green on the head commit?`"}:::decision
     MAIN["`Squash merge into main`"]:::step
     REL{"`(3) release.yml: feat, fix, perf or breaking change since the last tag?`"}:::decision
     NOREL["`No release`"]:::outcome
     BUILD["`(3) CI again on the merged commit, then images and the deploy bundle`"]:::step
-    GHCR[("`ghcr.io: 7 app images by release tag, InsightFace-REST image, deploy bundle and its stable tag`")]:::store
+    GHCR[("`ghcr.io: 8 app images by release tag, InsightFace-REST image, deploy bundle and its stable tag`")]:::store
     GHR["`GitHub Release with the model manifest, CHANGELOG entry`"]:::outcome
-    W["`(4) deploy/watch.py on the host, every 10 minutes`"]:::step
+    W["`(4) watch.py in the deploy folder on the host, every 10 minutes`"]:::step
     WD{"`(5) Compose up, smoke test on :9090, stable after 90 s?`"}:::decision
-    STACK["`(6) Main compose stack, project cctv`"]:::outcome
+    STACK["`(6) Main compose stack, project cctv, config and data from the site folder`"]:::outcome
     RB["`Roll back to the previous release, Windows message`"]:::error
     SA[("`(7) Standalone services: InsightFace-REST and nginx, Milvus, Kafka, dataset store`")]:::store
 
@@ -104,13 +104,12 @@ flowchart TB
     REL -->|"`yes`"| BUILD
     BUILD --> GHCR
     BUILD --> GHR
-    GHR -->|"`gh release list`"| W
-    W -->|"`git checkout of the tag in the deploy clone`"| WD
-    GHCR -->|"`app images by IMAGE_TAG`"| WD
+    GHCR -->|"`pull the deploy bundle by its stable tag`"| W
+    W -->|"`bundle copied into releases, manifest checked`"| WD
+    GHCR -->|"`app images by digest`"| WD
     WD -->|"`yes`"| STACK
     WD -->|"`no`"| RB
     GHCR -.->|"`InsightFace-REST image, pulled by start_standalone_services.sh`"| SA
-    GHCR -.->|"`deploy bundle, published but not yet used by the watcher`"| W
     STACK -->|"`connects by host IP`"| SA
 
     classDef entry fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
@@ -121,13 +120,13 @@ flowchart TB
     classDef store fill:#f1f5f9,stroke:#475569,color:#0f172a
 ```
 
-1. **Continuous integration.** Every pull request runs `ci.yml`. The aggregate `ci` check passes only when lint, the gitleaks scan, the compose and bundle checks, the model-manifest drift check and all eight image builds with their smoke tests pass. Beyond the watcher, enrollment-check, face-vector and bundle self-checks there are no unit tests (D-006).
+1. **Continuous integration.** Every pull request runs `ci.yml`. The aggregate `ci` check passes only when lint, the gitleaks scan, the compose, bundle and standalone-script checks, the model-manifest drift check and all eight image builds with their smoke tests pass. A pull request that changes only `docs/` or Markdown files skips the image builds, to save Actions minutes. Beyond the self-checks of the watcher, automerge nudge, enrollment checks, face vectors, face saver, ROI page, bundle and standalone scripts there are no unit tests (D-006).
 2. **Auto-merge.** `automerge.yml` runs from main's copy after `ci` or the code-review workflow finishes. It squash-merges a non-draft pull request from this repository, and deletes its branch, only when every check on the latest commit passed (D-013, D-025). Green CI is the merge and ship gate; there is no human review step.
-3. **Build and release.** After a merge, `release.yml` reads the merged pull request titles as Conventional Commits: `type!:` or a `BREAKING CHANGE` footer gives a major bump, `feat:` a minor one, `fix:` or `perf:` a patch, and anything else no release. It re-runs CI on the exact commit, pushes the seven app images to `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, builds the InsightFace-REST image if its source changed, and publishes the deploy bundle (D-033). Only then does it tag, create the GitHub Release with `mlops/model-manifest.json`, move the bundle's `stable` tag and add the notes to `CHANGELOG.md`. A failed release opens an issue for the owner (D-014, D-017, D-029). **Pull request titles must follow this convention.**
-4. **Watcher.** `deploy/watch.py` runs from a dedicated deploy clone through Windows Task Scheduler. It deploys the newest published release only if the tag is on main, is not the current release and has not failed before. It also starts automerge for green pull requests left open (D-016, D-029).
-5. **Deploy check.** The watcher checks out the tag, runs `docker compose up --pull missing --no-build --wait` with `IMAGE_TAG` set to it, waits for `http://localhost:9090/docs` to answer, then checks that no service is restarting or exited 90 seconds later. On failure it starts the previous release, records the failed tag so it is never retried unattended, and shows a Windows message. See [docs/ROLLBACK.md](docs/ROLLBACK.md).
-6. **Live stack.** The main compose stack runs seven application containers, PostgreSQL and Kafka-WebApp. The watcher never starts a stack the owner stopped, and keeps only the current and previous release images.
-7. **Standalone services.** InsightFace-REST, Milvus, Kafka and the dataset store run as separate compose stacks or containers, started by `start_standalone_services.sh`. The watcher does not manage them; they change only when someone runs that script. The deploy bundle that is meant to replace the deploy clone is published with each release but not used yet; switching the watcher to it is the next step of D-033.
+3. **Build and release.** After a merge, `release.yml` reads the merged pull request titles as Conventional Commits: `type!:` or a `BREAKING CHANGE` footer gives a major bump, `feat:` a minor one, `fix:` or `perf:` a patch, and anything else no release. It re-runs CI on the exact commit, pushes the eight app images, including the ROI page, to `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, builds the InsightFace-REST image if its source changed, and publishes the deploy bundle (D-033). Only then does it tag, create the GitHub Release with `mlops/model-manifest.json`, move the bundle's `stable` tag and add the notes to `CHANGELOG.md`. A failed release opens an issue for the owner (D-014, D-017, D-029). **Pull request titles must follow this convention.**
+4. **Watcher.** `watch.py` runs through Windows Task Scheduler from a deploy folder that holds no repository and no GitHub login, only a pull-only registry login (D-033, D-034). It pulls the deploy bundle's `stable` tag, which only `release.yml` moves, and reads the release from the image label. It deploys that release only if it is not the current one and has not failed before. The owner installs `watch.py` by hand from a bundle; it never replaces itself. Starting automerge for green pull requests left open is a separate script, `deploy/nudge_automerge.py`, which runs only on the owner's laptop (D-029).
+5. **Deploy check.** The watcher copies the bundle out of its image with `docker create` and `docker cp`, without running it, into `releases\<tag>\`, and refuses it unless its manifest is for that release and pins every image to one of ours by digest. It then runs `docker compose -p cctv --project-directory site up --pull missing --no-build --wait` with the bundle's compose file, waits for `http://localhost:9090/docs` to answer, then checks that no service is restarting or exited 90 seconds later. On failure it starts the previous release from its bundle, records the failed tag so it is never retried unattended, and shows a Windows message. A registry login or site-config problem stops deploys with a single message. See [docs/ROLLBACK.md](docs/ROLLBACK.md).
+6. **Live stack.** The main compose stack runs seven application containers, PostgreSQL and Kafka-WebApp, plus the ROI page on demand. Config and data come from the deploy folder's `site\` folder, so a new release changes only images and compose files. The watcher never starts a stack the owner stopped, and keeps only the bundles and images of the current and previous releases.
+7. **Standalone services.** InsightFace-REST, Milvus, Kafka and the dataset store run as separate compose stacks or containers, started by `start_standalone_services.sh`. The watcher does not manage them; they change only when someone runs that script. On a deployment host the script runs from a release bundle, with `CONFIG_DIR` pointing at the site folder.
 
 Who owns which part, and the runtime ports, are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -170,9 +169,9 @@ The camera configuration is git-ignored. Create it from the template:
 cp src/Camera-Configuration/camera_configuration.example.json src/Camera-Configuration/camera_configuration.json
 ```
 
-Each location has an ERP `api-endpoint` and a set of `cctv-cameras` grouped by entry point (for example `entry` and `exit`). Each camera has `ip_address`, `port`, `endpoint`, `username`, `password` and an optional ROI polygon in `masking-coordinates`. A camera whose `username` or `password` is `null` falls back to `CAM_USERNAME` and `CAM_PASSWORD`. Camera keys end in a number (`cctv-camera-1`), which sets the camera's Kafka partition. To draw an ROI polygon on a live stream, run `Custom-ROI-Provisioning/crop_rectangle.py` with `RTSP_URL` set, then copy the printed points into `masking-coordinates`.
+Each location has an ERP `api-endpoint` and a set of `cctv-cameras` grouped by entry point (for example `entry` and `exit`). Each camera has `ip_address`, `port`, `endpoint`, `username`, `password` and an optional ROI polygon in `masking-coordinates`. A camera whose `username` or `password` is `null` falls back to `CAM_USERNAME` and `CAM_PASSWORD`. Camera keys end in a number (`cctv-camera-1`), which sets the camera's Kafka partition. To draw a camera's ROI polygon, start the ROI page with `docker compose -f docker-compose-main.yml --profile roi up -d roi-provisioning` and open http://localhost:8069. Pick a camera, load a full-resolution snapshot, click around the area to keep, preview the crop (made with the producer's own `crop_and_mask_roi`), and save: the points go into that camera's `masking-coordinates`. Restart the producer-consumer to apply them, and stop the page afterwards (`docker compose -f docker-compose-main.yml --profile roi stop roi-provisioning`). It listens on this host only and has no login (D-035). Without Docker, `Custom-ROI-Provisioning/crop_rectangle.py` with `RTSP_URL` set prints the same kind of points to copy in by hand.
 
-Runtime parameters such as batch size, thresholds, ports and the staging and liveness flags live in [`src/parameters.py`](src/parameters.py). At startup `set_configuration.sh` writes the host IP to `master.env` (created from `master.env.example`, not tracked) and to `STANDALONE-SERVICES/standalone-services.env`. InsightFace-REST models, batch sizes and GPU devices are set in `standalone-services.env`.
+Runtime parameters such as batch size, thresholds, ports and the staging and liveness flags live in [`src/parameters.py`](src/parameters.py). At startup `set_configuration.sh` writes the host IP to `master.env` (created from `master.env.example`, not tracked). The standalone stacks read it from there too, so no tracked file changes. InsightFace-REST models, batch sizes and GPU devices are set in `standalone-services.env`.
 
 ### 3. Get the datasets
 
@@ -203,7 +202,9 @@ docker compose -f docker-compose-main.yml -f docker-compose.dev.yml build   # bu
 
 To start in two steps instead, run `./start_standalone_services.sh`, then `docker-compose -f docker-compose-main.yml up -d`.
 
-The images contain the application source, so rebuild them after code changes. For development, start with both files (`docker compose -f docker-compose-main.yml -f docker-compose.dev.yml up -d`): `docker-compose.dev.yml` mounts `./src` over the baked copy in every service except the producer-consumer, so edits to those services apply on restart without a rebuild. The producer-consumer always runs the code in its image.
+The standalone scripts also run from a release bundle, with the site's config in a separate folder: `CONFIG_DIR=<site folder> bash <bundle>/start_standalone_services.sh`. They then read `.env` and `master.env` from that folder and keep the InsightFace-REST models and TensorRT engines in `<site folder>/insightface-models`, so a new release does not rebuild them.
+
+The images contain the application source, so rebuild them after code changes. For development, start with both files (`docker compose -f docker-compose-main.yml -f docker-compose.dev.yml up -d`): `docker-compose.dev.yml` mounts `./src` over the baked copy in every service except the producer-consumer and the ROI page, so edits to those services apply on restart without a rebuild. Those two always run the code in their image.
 
 ### 5. Enroll faces
 
@@ -247,15 +248,13 @@ This also stops the standalone stacks: InsightFace-REST, Milvus, Kafka and the d
 ## Known issues and limitations
 
 - The duplicate check in `src/database_server/postgresql_database.py` queries a `recognition_timestamp` column that the table does not define, and puts a `%s` placeholder inside a quoted interval. Recognition inserts fail unless the live table was migrated by hand.
-- The display reads only partition 0 of its topic (`CONFLUENT_KAFKA_PARTITION = 0` in Kafka-WebApp), so each display shows only camera 1 of its entry point. Messages from the other cameras are published but not shown.
-- On this host, `kafka-webapp` starts reading only when ports 6385, 19000, 19001, 19530, 9092, 20001, 20012 and 20013 all answer (`PROJECT_SERVICES_PORT` in `docker-compose-main.yml`). With the default single InsightFace-REST container nothing listens on 19001, so it keeps waiting. Found by reading the code, not observed.
 - nginx forwards to one InsightFace-REST container only; more containers from `INSIGHTFACE_GPUS` start but are not balanced (D-032).
 - Face liveness detection is off, so a printed photo can be recognized.
 - The nightly updater replaces all of a person's staging vectors with only that night's new crops, and still marks crops processed when the Milvus insert fails.
 - Face clusters are defined only for the `maingate` entry and exit cameras, so the face collector rejects crops from other cameras.
-- When a person's cluster already holds three crops and a new crop is not better than the worst, the `while` loop in `save_face_if_better()` (`src/dynamic_face_data_collector/face_saver.py`) never ends, and the synchronous call blocks the collector. Found by reading the code, not observed.
 - Most internal services have no authentication: see [docs/THREAT.md](docs/THREAT.md).
-- Separating client data and deployments is planned work (D-036), not part of main yet.
+- Separating clients (shared infrastructure, one app stack and set of logins per client) is decided in D-036 and D-037 but not built on main yet.
+- The ROI page has no login; it is bound to 127.0.0.1 and runs only when started with the `roi` profile (D-035).
 
 ## Authors
 

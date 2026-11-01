@@ -4,6 +4,7 @@ import os
 import cv2
 import sys
 import json
+import urllib.parse
 import numpy as np
 
 # Relative issue - https://www.geeksforgeeks.org/python-import-from-parent-directory/
@@ -11,7 +12,7 @@ current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
 
-from parameters import CAMERA_CONFIGURATION_FILE, FRAME_SIZE
+from parameters import CAMERA_CONFIGURATION_FILE, FRAME_SIZE, CAM_USERNAME, CAM_PASSWORD, CAM_PORT, STREAM_ENDPOINT
 
 
 def check_for_directory(directory_path: str):
@@ -81,6 +82,19 @@ def map_camera_to_api_endpoint():
         if cctv_cameras
         for camera in cctv_cameras
     }
+
+
+def camera_stream_url(camera_config):
+    """The URL OpenCV opens for a camera: http(s) addresses as they are, otherwise RTSP with the camera's own login,
+    port and endpoint, or the site-wide ones from the environment when the camera leaves them null."""
+    ip_address = camera_config["ip_address"]
+    if ip_address.startswith("http"):
+        return ip_address
+    port = CAM_PORT if camera_config["port"] is None else camera_config["port"]
+    username = CAM_USERNAME if camera_config["username"] is None else camera_config["username"]
+    password = CAM_PASSWORD if camera_config["password"] is None else urllib.parse.quote(camera_config["password"])
+    endpoint = STREAM_ENDPOINT if camera_config["endpoint"] is None else camera_config["endpoint"]
+    return f"rtsp://{username}:{password}@{ip_address}:{port}/{endpoint}"
 
 
 def crop_and_mask_roi(frame, polygon_points):

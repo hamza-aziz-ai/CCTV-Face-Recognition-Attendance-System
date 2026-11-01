@@ -2,7 +2,7 @@
 
 How execution travels through the system, one flow per section. The overview is the System Design diagram in the [README](../README.md#system-design); what exists and who owns it is in [ARCHITECTURE.md](ARCHITECTURE.md); stored data is in [DATA.md](DATA.md).
 
-Checked against commit `0a89025` on main. The latest release tag is `v2.1.0`; `0a89025` is six commits after it and not released yet.
+Checked against main after #69, which pins Kafka-WebApp v0.3.0. The latest release tag is `v2.1.0`.
 
 ## How to read the diagrams
 
@@ -26,7 +26,7 @@ Each section has a diagram, a key that maps names to files, and a numbered trace
 ```mermaid
 flowchart TB
     START["`start_complete_project.sh`"]:::entry
-    CFG["`(1) set_configuration.sh: host IP into master.env and standalone-services.env`"]:::step
+    CFG["`(1) set_configuration.sh: host IP into the site's master.env`"]:::step
     SA["`(2) start_standalone_services.sh: InsightFace-REST and nginx, Milvus, dataset store, Kafka`"]:::step
     UP["`(3) docker-compose up of docker-compose-main.yml, PostgreSQL first`"]:::step
     INIT["`(4) DB controller and face collector create their databases and tables`"]:::step
@@ -58,8 +58,8 @@ flowchart TB
 
 **Key:** producer-consumer is `src/main.py`, `src/multiprocessing_shared_buffer.py`, `src/milvus_server.py`, `src/multicam_stream_producer.py` and `src/multicam_stream_consumer.py`. Topic creation is `ensure_kafka_topics()` in `src/feedback_server/feedback_message_kafka_publisher.py`. DB controller is `src/database_server/`; face collector is `src/dynamic_face_data_collector/`.
 
-1. `start_standalone_services.sh` sources `set_configuration.sh`, which reads the host IP through `get_ip.sh`, creates `master.env` from `master.env.example` if it is missing, and writes `IP_ADDRESS` into it and into `STANDALONE-SERVICES/standalone-services.env`. Every service reaches the others through this IP.
-2. The script reads `HOST_PROFILE` from `.env`, then starts InsightFace-REST with `deploy_trt_multi-gpu.sh` (one container per `INSIGHTFACE_GPUS` entry, then nginx on 6385), Milvus, the dataset store and Kafka. Face liveness is commented out. The deployment watcher skips steps 1 and 2: it expects these services to run already.
+1. `start_standalone_services.sh` first changes to its own folder, so it works the same from a checkout and from a release bundle. `CONFIG_DIR` is the folder with this site's `.env` and `master.env`: the checkout by default, the site folder on a deployment host. It sources `set_configuration.sh`, which reads the host IP through `get_ip.sh`, creates `$CONFIG_DIR/master.env` from `master.env.example` if it is missing, and writes `IP_ADDRESS` into it. No tracked file changes. Every service reaches the others through this IP.
+2. The script reads `HOST_PROFILE` from `$CONFIG_DIR/.env`, then starts InsightFace-REST with `deploy_trt_multi-gpu.sh` (one container per `INSIGHTFACE_GPUS` entry, then nginx on 6385), Milvus, the dataset store and Kafka. Milvus and Kafka get `standalone-services.env`, the host profile if any, and `$CONFIG_DIR/master.env` last, so this host's IP wins over the placeholder. The dataset store gets `$CONFIG_DIR/.env`. When `CONFIG_DIR` is not the script's folder, InsightFace-REST keeps its models and TensorRT engines in `$CONFIG_DIR/insightface-models`, so a new release does not rebuild them. Face liveness is commented out. `deploy/test_standalone_scripts.sh` checks both modes with Docker stubbed. The deployment watcher skips steps 1 and 2: it expects these services to run already.
 3. `start_complete_project.sh` then runs `docker-compose -f docker-compose-main.yml up -d`. PostgreSQL starts first; the other services wait for its health check.
 4. On start, the DB controller creates `CCTV_Camera_Surveillance` and the partitioned table `recognition_results` if they are missing. The face collector creates `Face_Recognition_Database` with `person_summary` and `face_images`.
 5. Compose starts the producer-consumer only once the DB controller, feedback controller and face collector report healthy.
@@ -132,12 +132,12 @@ flowchart TB
     classDef store fill:#f1f5f9,stroke:#475569,color:#0f172a
 ```
 
-**Key:** camera threads are `IPCamera` and `create_camera()` in `src/multicam_stream_producer.py`. Recognition threads are `face_recognition()` in `src/multicam_stream_consumer.py`, which calls `batched_frame_face_recognition()` in `src/insightface_face_recognition.py`. The InsightFace-REST client is `IFRClient` in `src/insightface_face_detection.py`, the search is `search_embedding()` in `src/milvus_server.py`, and the match rules are in `src/inference_data_cleaner.py`. Settings are in `src/parameters.py`.
+**Key:** camera threads are `IPCamera` and `create_camera()` in `src/multicam_stream_producer.py`, which opens each stream with `camera_stream_url()` from `src/util/generic_utilities.py`. Recognition threads are `face_recognition()` in `src/multicam_stream_consumer.py`, which calls `batched_frame_face_recognition()` in `src/insightface_face_recognition.py`. The InsightFace-REST client is `IFRClient` in `src/insightface_face_detection.py`, the search is `search_embedding()` in `src/milvus_server.py`, and the match rules are in `src/inference_data_cleaner.py`. Settings are in `src/parameters.py`.
 
-1. Each camera thread builds an `IPCamera`. An `ip_address` that starts with `http` is opened as is; anything else becomes `rtsp://<user>:<password>@<ip>:<port>/<endpoint>`, with `CAM_USERNAME`, `CAM_PASSWORD`, `CAM_PORT` and `STREAM_ENDPOINT` as defaults for `null` fields.
+1. Each camera thread builds an `IPCamera`. `camera_stream_url()`, shared with the ROI page, builds the address: an `ip_address` that starts with `http` is opened as is; anything else becomes `rtsp://<user>:<password>@<ip>:<port>/<endpoint>`, with `CAM_USERNAME`, `CAM_PASSWORD`, `CAM_PORT` and `STREAM_ENDPOINT` as defaults for `null` fields.
 2. If the stream does not open, or a read fails later, the thread sends `ERROR <camera>: Camera stream from <camera> is not accessible.` to its Kafka topic and partition, waits `IP_CAM_REINIT_WAIT_DURATION` (30 s) and opens it again. A successful reopen sends a `SUCCESS` message. These messages go straight to Kafka, not through the feedback controller.
 3. The thread reads frames continuously. With `FRAME_RATE_FACTOR = 1` every frame is processed.
-4. If the camera has `masking-coordinates` and `CROP_ROI` is on, the frame is cropped to the polygon's bounding box, masked outside the polygon, and resized to the area of a 640x360 frame, keeping its aspect ratio. Otherwise a frame larger than 640x360 is resized to it.
+4. If the camera has `masking-coordinates` (drawn on the ROI page, D-035) and `CROP_ROI` is on, the frame is cropped to the polygon's bounding box, masked outside the polygon, and resized to the area of a 640x360 frame, keeping its aspect ratio. Otherwise a frame larger than 640x360 is resized to it.
 5. Darkness detection runs on a blurred copy of the full frame: a frame is dark when its mean grey level is under 80. Over a window of 100 frames, 80 dark frames switch the camera to "too dark": it sends an `ERROR` message and stops queueing. 80 bright frames switch it back and send `SUCCESS`.
 6. Frames that pass go into the shared queue as `(frame, camera name, camera address)`. The queue lives in memory and is lost on restart.
 7. Each recognition thread checks the queue size and, when at least `BATCH_SIZE = 32` frames are waiting, takes 32 under a lock. Otherwise it checks again at once.
@@ -204,7 +204,7 @@ sequenceDiagram
     participant D as Display image server :20013
     participant B as Browser on the display
     KW->>KW: wait until the host and service ports answer, show a start message, wait 2 minutes
-    KW->>K: assign partition 0 of its topic, reading from the end
+    KW->>K: group topic.display, assign every partition of its topic or KAFKA_PARTITIONS, from the end
     C->>FBC: TCP, JSON of strict primary matches, every batch
     FBC-->>C: OK, not read by the sender
     loop each person and camera
@@ -216,32 +216,32 @@ sequenceDiagram
         K-->>KW: next message, if any
     end
     alt ERROR or SUCCESS text
-        KW->>KW: the list becomes that one message
+        KW->>KW: update that camera's entry in the status strip
     else person ID
         KW->>KW: add the ID to the front of the list, no duplicates, at most 4
+        KW->>D: POST /post_images with the list
+        D-->>KW: per ID a 256x256 portrait in base64, or a placeholder
     end
-    KW->>D: POST /post_images with the list
-    D-->>KW: per ID a 256x256 portrait in base64 or a placeholder, or the status text
     B->>KW: Socket.IO check_updates
-    KW-->>B: new_message with the latest list
+    KW-->>B: new_message with the latest list and the camera status strip
 ```
 
-**Key:** the sender is `batched_frame_face_recognition()` in `src/insightface_face_recognition.py` with `feedback_data_formatter()` in `src/inference_data_cleaner.py`. The feedback controller is `src/feedback_server/feedback_msg_server_controller.py` and `feedback_message_publisher()` in `feedback_message_kafka_publisher.py`. The topic and partition map is `map_camera_to_kafka_topic_and_partition()` in `src/util/generic_utilities.py`. The display image server is `src/fetch_face_image_server/`. Kafka-WebApp is the `Kafka-WebApp` submodule (`app.py`, `parameters.py`), maintained in its own repository and checked here at the pinned commit `0f05931`.
+**Key:** the sender is `batched_frame_face_recognition()` in `src/insightface_face_recognition.py` with `feedback_data_formatter()` in `src/inference_data_cleaner.py`. The feedback controller is `src/feedback_server/feedback_msg_server_controller.py` and `feedback_message_publisher()` in `feedback_message_kafka_publisher.py`. The topic and partition map is `map_camera_to_kafka_topic_and_partition()` in `src/util/generic_utilities.py`. The display image server is `src/fetch_face_image_server/`. Kafka-WebApp runs from the image `ghcr.io/hamza-aziz-ai/kafka-webapp:v0.3.0`, pinned by digest in `docker-compose-main.yml`; its code (`app.py`, `parameters.py`) lives in its own repository and was checked here at the `v0.3.0` tag (`c1f4d7f`).
 
-1. Kafka-WebApp checks that the host answers on `HOST_CHECK_PORT` and that every port in `PROJECT_SERVICES_PORT` answers. On this host the compose file sets them to 9092 and to 6385, 19000, 19001, 19530, 9092, 20001, 20012, 20013. Then it shows a start message and waits 2 minutes. With one InsightFace-REST container, nothing listens on 19001, so this step does not finish (README, known issues).
-2. It assigns itself `CONFLUENT_KAFKA_PARTITION = 0` of `KAFKA_TOPIC` (default `maingate_entry`), starting at the end, so old messages are never replayed. Only camera 1 of the entry point is on partition 0, so the other cameras' messages are not shown.
+1. Kafka-WebApp checks that the host answers on `HOST_CHECK_PORT` and that every service it depends on answers: the `host:port` entries of `PROJECT_SERVICES`, or, when that is unset, the ports in `PROJECT_SERVICES_PORT` on `IP_ADDRESS` (which defaults to 127.0.0.1). On this host the compose file sets `HOST_CHECK_PORT` to 9092 and `PROJECT_SERVICES_PORT` to 6385, 19000, 19530, 9092, 20001, 20012, 20013. Then it shows a start message and waits 2 minutes.
+2. It reads `KAFKA_TOPIC` (default `maingate_entry`) as consumer group `<topic>.display`, and assigns itself every partition of the topic, so every camera of the entry point is shown; `KAFKA_PARTITIONS` (camera number minus 1, comma-separated) narrows it to chosen cameras. It starts at the end, so old messages are never replayed, and checks for partitions added with a new camera every 60 s. When `KAFKA_USERNAME` is set it logs in with SASL/SCRAM; empty means no login, which is what this compose file sets today.
 3. When `ENABLE_FEEDBACK_SERVER` is on, the recognition thread opens a TCP connection to 20012 after every batch and sends the strict primary matches as JSON: person ID to `(camera name, camera address, score, recognized)`. The JSON is sent even when empty.
 4. The controller reads up to 1 MB, answers `OK` and closes the connection. The sender does not read the answer.
 5. In a new thread, the controller publishes each person ID to the topic `<location>_<point>`, on partition `<camera number> - 1` taken from the camera key (`cctv-camera-3` is partition 2), with the camera name as key, and flushes after each message.
 6. Camera threads publish their own `ERROR <camera>: ...` and `SUCCESS <camera>: ...` messages to the same topic and partition (section 2, steps 2 and 5). Topics keep messages for 5 s.
 7. Kafka-WebApp polls every 0.2 s.
-8. Each message is a person ID or a status text.
-9. An `ERROR` or `SUCCESS` text replaces the whole list.
+8. Each message is a person ID or a camera status text.
+9. An `ERROR <camera>: ...` or `SUCCESS <camera>: ...` text updates that camera's entry in a status strip and never enters the recognition list or `/post_images`. An `ERROR` stays until the same camera's `SUCCESS`; a `SUCCESS` shows for 5 s.
 10. A person ID goes to the front of the list unless it is already there; the list holds at most `DISPLAY_LIST_SIZE = 4`.
-11. After each message Kafka-WebApp posts the list to `/post_images` on 20013.
-12. The display image server returns, for each ID, `DISPLAY-FACE-DATASET/<id>/front_face.jpg` resized to 256x256 as base64, or `placeholder.jpg` if there is none. For a status text it returns `{"ERROR": text}` or `{"SUCCESS": text}`, with the text after the first `: `. It has no authentication and allows any origin.
+11. After each person ID Kafka-WebApp posts the list to `IMAGE_SERVER_ADDRESS`, by default `http://<IP_ADDRESS>:20013/post_images`, with a 5 s timeout.
+12. The display image server returns, for each ID, `DISPLAY-FACE-DATASET/<id>/front_face.jpg` resized to 256x256 as base64, or `placeholder.jpg` if there is none. It still turns an `ERROR` or `SUCCESS` text into `{"ERROR": text}` or `{"SUCCESS": text}`, but v0.3.0 no longer sends those. It has no authentication and allows any origin.
 13. The browser asks for updates over Socket.IO.
-14. Kafka-WebApp sends the latest list, which the page shows.
+14. Kafka-WebApp sends the latest list and the current camera status strip, which the page shows. The list clears after 15 s without a new recognition.
 
 ## 5. ERP sync and reporting API
 
@@ -332,7 +332,6 @@ flowchart TB
     SKIP["`Crop not kept`"]:::outcome
     FULLC{"`(6) Person already has 3 crops in this cluster?`"}:::decision
     BETTER{"`Better than the worst crop?`"}:::decision
-    HANG["`Loop never ends: the request hangs`"]:::error
     REPLACE["`Delete the worst crop file and its row`"]:::step
     SAVE["`(7) Save the crop, meta.json and a face_images row`"]:::step
     STORE[("`DYNAMIC-FACIAL-RECOGNITION-DATASET and Face_Recognition_Database`")]:::store
@@ -357,7 +356,7 @@ flowchart TB
     FULLC -->|"`no`"| SAVE
     FULLC -->|"`yes`"| BETTER
     BETTER -->|"`yes`"| REPLACE --> SAVE
-    BETTER -->|"`no`"| HANG
+    BETTER -->|"`no`"| SKIP
     SAVE --> STORE
     NIGHT --> ROWS
     STORE --> ROWS
@@ -381,7 +380,7 @@ flowchart TB
 3. A record needs at least two landmarks and a decodable base64 image. A failed record is reported in a 207 answer; the others still count.
 4. `get_cluster()` maps the camera to a cluster. Only the `maingate` entry and exit cameras 1 to 10 have clusters (`cluster-1` to `cluster-4`); any other camera raises an error and the record fails.
 5. The pupil distance, from the first two landmarks, must be at least `PUPIL_DISTANCE_THRESHOLD = 28` px. A smaller face is not kept.
-6. Each person keeps at most `NUMBER_OF_PICTURES = 3` crops per cluster. When the cluster is full, the worst crop (smaller pupil distance, then lower score) is replaced if the new one is better. Known issue, found by reading the code: when the new crop is not better, the `while` loop in `save_face_if_better()` never ends. The handler is synchronous inside an `async` route, so it blocks the collector.
+6. Each person keeps at most `NUMBER_OF_PICTURES = 3` crops per cluster. When the cluster is full, the worst crop (smaller pupil distance, then lower score) is replaced if the new one is better; otherwise the new crop is not kept. `src/dynamic_face_data_collector/test_face_saver.py` checks both cases in CI.
 7. The crop is saved under `DYNAMIC-FACIAL-RECOGNITION-DATASET/<person>/<cluster>/`, `meta.json` is updated, and a `face_images` row is inserted with `is_processed` false.
 8. The updater container runs `process_unprocessed_images_from_db()` every day at 01:00, container time. The module docstring still says 12:00 AM.
 9. It selects every `face_images` row not yet processed and groups them by person.
@@ -463,30 +462,34 @@ Related commands:
 flowchart TB
     subgraph GITHUB["`GitHub`"]
         PR["`(1) Pull request into main`"]:::entry
-        CI{"`(2) ci passes: lint, gitleaks, compose and bundle, manifest and self-checks, 8 image builds?`"}:::decision
+        CI{"`(2) ci passes: lint and self-checks, gitleaks, compose, bundle and scripts, 8 image builds unless docs only?`"}:::decision
         RED["`PR stays open; a canceled run is retried once`"]:::error
         AM{"`(3) automerge: every check on the head commit passed?`"}:::decision
         MERGE["`(4) Squash merge, delete the branch, start release.yml`"]:::step
         PLAN{"`(5) feat, fix, perf or breaking change since the last tag?`"}:::decision
         NOREL["`No release`"]:::outcome
         RCI["`(6) ci.yml again on the merged commit`"]:::step
-        IMG["`(7) Push 7 app images; InsightFace-REST image if its source changed`"]:::step
-        BUN["`(8) Deploy bundle: 16 allow-listed files, images pinned by digest`"]:::step
+        IMG["`(7) Push 8 app images; InsightFace-REST image if its source changed`"]:::step
+        BUN["`(8) Deploy bundle: 17 allow-listed files, images pinned by digest`"]:::step
         TAG{"`(9) Manifest check passes and the tag is created?`"}:::decision
         ISSUE["`Issue for the owner; if main moved on, a release of main starts instead`"]:::error
         REL["`(10) GitHub Release, bundle stable tag moved, CHANGELOG entry`"]:::outcome
-        GHCR[("`ghcr.io packages`")]:::store
+        GHCR[("`ghcr.io: app images, bundle by tag and stable`")]:::store
     end
-    subgraph HOST["`Deployment host, deploy clone`"]
+    NUDGE["`(21) Owner's laptop: nudge_automerge.py starts automerge for PRs green over 15 minutes`"]:::step
+    subgraph HOST["`Deployment host, deploy folder`"]
         TICK["`(11) Task Scheduler runs watch.py every 10 minutes`"]:::entry
-        NUDGE["`(12) Start automerge for PRs green for over 15 minutes`"]:::step
-        NEED{"`(13) Enrolled, Docker up, new release, not failed before, stack not stopped?`"}:::decision
+        ENR{"`(12) Enrolled and Docker running?`"}:::decision
         IDLE["`Nothing to do`"]:::outcome
-        ONMAIN{"`(14) Tag on origin/main?`"}:::decision
-        UP["`(15) Check out the tag, keep master.env, compose up with IMAGE_TAG`"]:::step
-        HEALTH{"`(16) :9090/docs answers within 5 minutes and nothing restarting after 90 s?`"}:::decision
-        DONE["`(17) Record as current, delete older release images except the previous`"]:::outcome
-        BACK["`(18) Mark failed, start the previous release or stop the stack, Windows message`"]:::error
+        PULL["`(13) Pull the bundle's stable tag, read the release from its label`"]:::step
+        SITEOK{"`(14) Registry readable and site files present?`"}:::decision
+        PROB["`One message per new problem, deploys stop`"]:::error
+        NEW{"`(15) Release neither current nor failed, stack not stopped?`"}:::decision
+        STAGE{"`(16) Bundle copied into releases: manifest for this release, our images pinned by digest?`"}:::decision
+        UP["`(17) compose -p cctv with the site folder, up from the bundle`"]:::step
+        HEALTH{"`(18) :9090/docs answers within 5 minutes and nothing restarting after 90 s?`"}:::decision
+        DONE["`(19) Record as current, delete bundles and images of older releases except the previous`"]:::outcome
+        BACK["`(20) Mark failed, start the previous release or stop the stack, Windows message`"]:::error
     end
 
     PR --> CI
@@ -498,13 +501,19 @@ flowchart TB
     BUN --> GHCR
     TAG -->|"`no`"| ISSUE
     TAG -->|"`yes`"| REL
-    TICK --> NUDGE --> NEED
-    NEED -->|"`no`"| IDLE
-    NEED -->|"`yes`"| ONMAIN
-    REL -.->|"`gh release list`"| NEED
-    ONMAIN -->|"`no`"| BACK
-    ONMAIN -->|"`yes`"| UP --> HEALTH
-    GHCR -->|"`pull missing images`"| UP
+    REL -->|"`stable moved`"| GHCR
+    NUDGE -.-> AM
+    TICK --> ENR
+    ENR -->|"`no`"| IDLE
+    ENR -->|"`yes`"| PULL --> SITEOK
+    GHCR -->|"`bundle image`"| PULL
+    SITEOK -->|"`no`"| PROB
+    SITEOK -->|"`yes`"| NEW
+    NEW -->|"`no`"| IDLE
+    NEW -->|"`yes`"| STAGE
+    STAGE -->|"`no`"| BACK
+    STAGE -->|"`yes`"| UP --> HEALTH
+    GHCR -->|"`pull missing images by digest`"| UP
     HEALTH -->|"`yes`"| DONE
     HEALTH -->|"`no`"| BACK
 
@@ -516,23 +525,26 @@ flowchart TB
     classDef store fill:#f1f5f9,stroke:#475569,color:#0f172a
 ```
 
-**Key:** workflows are in `.github/workflows/`: `ci.yml`, `automerge.yml`, `release.yml` and `insightface-image.yml`. The bundle is `deploy/make_bundle.py` and `deploy/bundle.Dockerfile`; the manifest check is `mlops/check_manifest.py`. The watcher is `deploy/watch.py`, tested by `deploy/test_watch.py`.
+**Key:** workflows are in `.github/workflows/`: `ci.yml`, `automerge.yml`, `release.yml` and `insightface-image.yml`. The bundle is `deploy/make_bundle.py` and `deploy/bundle.Dockerfile`; the manifest check is `mlops/check_manifest.py`. The watcher is `deploy/watch.py`, tested by `deploy/test_watch.py`; the automerge nudge is `deploy/nudge_automerge.py`. On the host, the deploy folder (for example `C:\deploy\cctv`) holds `watch.py`, `state.json`, `watch.log`, `site\` and `releases\`.
 
 1. Every pull request into main starts `ci.yml`, plus `insightface-image.yml` when InsightFace-REST source or `standalone-services.env` changed.
-2. `ci` is the aggregate check of four jobs: lint (ruff for syntax errors and undefined names, `check_manifest.py`, `test_watch.py`, `enrolment_checks.py`), the gitleaks secret scan, compose validation including a sample bundle from `make_bundle.py demo`, and eight image builds with smoke tests, including the start method and `face_vectors.py demo` in the producer-consumer image.
+2. `ci` is the aggregate check of five jobs. Lint runs ruff for syntax errors and undefined names, `check_manifest.py`, `test_watch.py`, `nudge_automerge.py demo` and `enrolment_checks.py`. Then come the gitleaks secret scan, and compose validation with a sample bundle from `make_bundle.py demo` and `deploy/test_standalone_scripts.sh`. A `changes` job decides whether images are built: a pull request that changes only `docs/` or Markdown files skips them; pushes and release runs always build. The eight image builds have smoke tests, including the start method and `face_vectors.py demo` in the producer-consumer image, the face-saver test in the collector image and the ROI page test in the ROI image.
 3. `automerge.yml` runs from main's copy when `ci` or `Claude Code Review` completes, or by hand. If a first attempt had canceled jobs and its commit is still a pull request's head, the failed jobs are re-run once; a real failure is not retried. It merges an open, non-draft pull request from this repository only when `ci` passed and every other check on the head commit passed, skipped or was neutral; each skip is logged with the checks it saw (D-013, D-029).
 4. It squash-merges with `--match-head-commit`, deletes the branch, sweeps again for stacked pull requests, and starts `release.yml` if anything merged.
 5. `plan` reads the commit subjects since the last `v*.*.*` tag: `type!:` or a `BREAKING CHANGE` footer gives a major bump, `feat:` minor, `fix:` or `perf:` patch. Anything else, such as `docs:`, ends the run with no release (D-014).
 6. `ci.yml` runs again on the exact merged commit.
-7. `images` builds with both compose files and pushes the seven app images to `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, one at a time (D-017). `insightface-image.yml` builds `cctv-face-recognition-insightface-rest:<version>-<git tree of src>` only if that tag does not exist yet.
-8. `bundle` collects each image's digest and runs `make_bundle.py`, which copies 16 allow-listed files, pins every image by digest and writes `release-manifest.json`. It pushes `cctv-face-recognition-deploy:<tag>` (D-033).
+7. `images` builds with both compose files and the `roi` profile, and pushes the eight app images, the ROI page included, to `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, one at a time (D-017). `insightface-image.yml` builds `cctv-face-recognition-insightface-rest:<version>-<git tree of src>` only if that tag does not exist yet.
+8. `bundle` collects each image's digest and runs `make_bundle.py`, which copies 17 allow-listed files (compose files, ops scripts, templates, the InsightFace-REST license and `deploy/watch.py`), pins every image by digest and writes `release-manifest.json`. It pushes `cctv-face-recognition-deploy:<tag>`, retrying up to three times (D-033).
 9. `publish` runs `check_manifest.py`, then creates the tag. If tagging fails and main has moved on, it starts a release of main instead and stops. Any failed job opens an issue assigned to the owner.
-10. It creates the GitHub Release with `mlops/model-manifest.json` attached, moves the bundle's `stable` tag unless it already points at a newer release, and adds the notes to `CHANGELOG.md`. Release-failure issues opened earlier are closed.
-11. On the host, Task Scheduler runs `pythonw deploy\watch.py` every 10 minutes while the owner is signed in. A lock file stops overlapping runs.
-12. The watcher starts `automerge.yml` for any open pull request whose checks all passed more than 15 minutes ago (D-029).
-13. It deploys only if `deploy/state.json` exists (`--enroll` was run), Docker answers, the newest published release is neither current nor in the failed list, and the stack has not been stopped by the owner.
-14. It fetches tags and refuses a tag that is not an ancestor of `origin/main`; that counts as a failed deploy.
-15. It checks the tag out in the deploy clone, keeping `master.env`, and runs `docker compose -f docker-compose-main.yml up -d --pull missing --no-build --wait --wait-timeout 600` with `IMAGE_TAG` set to the tag. The deploy bundle is not used yet.
-16. It waits up to 5 minutes for HTTP 200 from `http://localhost:9090/docs`, then 90 seconds, and fails if any service is restarting or exited.
-17. On success the tag becomes current and release images of every tag except the current and previous one are deleted.
-18. On any failure the tag is added to the failed list and never retried unattended. The previous release is started again, or the stack is stopped if there is none, and a Windows message is shown. Details are in [ROLLBACK.md](ROLLBACK.md).
+10. It creates the GitHub Release with `mlops/model-manifest.json` attached, moves the bundle's `stable` tag unless it already points at a newer release, and adds the notes to `CHANGELOG.md`. Release-failure issues opened earlier are closed. Only this workflow moves `stable`, so hosts trust it for what to deploy.
+11. On the host, Task Scheduler runs `pythonw watch.py` in the deploy folder every 10 minutes while the owner is signed in. A lock file stops overlapping runs. The host holds no repository and no GitHub login, only a pull-only registry login (D-034).
+12. The watcher does nothing until `state.json` exists (the owner ran `--enroll`) and Docker answers.
+13. It pulls `ghcr.io/hamza-aziz-ai/cctv-face-recognition-deploy:stable` and reads the release tag from the image's `org.opencontainers.image.version` label, and the bundle's digest.
+14. If the pull fails, most often because the registry token expired, or a site file is missing (`site\.env`, `site\master.env` or `site\src\Camera-Configuration\camera_configuration.json`), deploys stop and the owner gets one Windows message per new problem, not one every 10 minutes.
+15. It deploys only a release that is neither current nor in the failed list, and never one while the owner has stopped the stack. `--enroll` skips these checks; `--check` stops after step 16 and deploys nothing.
+16. It copies the bundle out of the image with `docker create` and `docker cp`, never running it, into a temporary folder. It refuses the bundle unless `release-manifest.json` is schema 1 for this release and pins every image to `ghcr.io/hamza-aziz-ai/cctv-face-recognition-*` by digest, and the compose file has no build, no checkout mount and no `IMAGE_TAG`. Then it renames the folder to `releases\<tag>`. A refused bundle counts as a failed deploy.
+17. It runs `docker compose -p cctv --project-directory site -f releases\<tag>\docker-compose-main.yml up -d --pull missing --no-build --wait --wait-timeout 600`, so every release runs as the same stack with this site's config and data.
+18. It waits up to 5 minutes for HTTP 200 from `http://localhost:9090/docs`, then 90 seconds, and fails if any container of project `cctv` is restarting or exited.
+19. On success the tag becomes current. Bundles and our images that neither the current nor the previous release uses are deleted; the InsightFace-REST image and local dev builds stay.
+20. On any failure the tag is added to the failed list and never retried unattended. The previous release is started again from its bundle and images, which are still on the host, or the stack is stopped if there is none, and a Windows message is shown. Details are in [ROLLBACK.md](ROLLBACK.md).
+21. Starting automerge for a green pull request left open needs the owner's `gh` login, so `deploy/nudge_automerge.py` runs every 10 minutes on the owner's laptop from the dev checkout, never on a deployment host. It starts `automerge.yml` for any open pull request whose checks all passed more than 15 minutes ago (D-029).

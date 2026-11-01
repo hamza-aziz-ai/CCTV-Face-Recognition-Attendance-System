@@ -6,6 +6,12 @@
 # Created: Thur September 14 2023
 # Modified: Sunday, 29 December 2024
 
+# Run from this script's folder, so a checkout and a release bundle work alike (D-033). This site's .env and master.env
+# are in CONFIG_DIR: the checkout itself by default, the site folder on a deployment host.
+cd "$(dirname "$0")" || exit 1
+CONFIG_DIR=${CONFIG_DIR:-$(pwd)}
+export CONFIG_DIR
+
 NETWORK_NAME="insightface-network"
 
 # check if insightface-rest-trt-0 containers exists
@@ -81,5 +87,5 @@ cd ../..
 # shellcheck disable=SC2164
 cd STANDALONE-SERVICES/Dataset-Store
 echo "shutdown Dataset Store"
-docker-compose --env-file ../../.env down
+docker-compose --env-file "$CONFIG_DIR/.env" down
 cd ../..

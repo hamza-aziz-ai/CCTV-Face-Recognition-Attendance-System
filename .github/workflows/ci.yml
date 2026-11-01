@@ -24,8 +24,9 @@ jobs:
       - run: pipx run ruff==0.17.3 check --select E9,F63,F7,F82 --target-version py314 --extend-exclude STANDALONE-SERVICES,graphify-out --output-format github .
       # Model manifest must match the code and config it describes; unverified (null) fields only block releases
       - run: python3 -I mlops/check_manifest.py
-      # Deployment watcher decisions (deploy, skip, roll back) with Docker, git and GitHub faked
+      # Deployment watcher decisions (deploy, skip, roll back, bundle checks) with Docker and the registry faked; then the laptop-only automerge nudge
       - run: python3 -I deploy/test_watch.py
+      - run: python3 -I deploy/nudge_automerge.py demo
       # Enrolment photo checks (D-026)
       - run: python3 -I src/util/enrolment_checks.py
 
@@ -61,8 +62,35 @@ jobs:
       - run: |
           python3 -I deploy/make_bundle.py demo /tmp/bundle
           docker compose -f /tmp/bundle/docker-compose-main.yml config --quiet
+      # The standalone scripts from a bundle with a separate site folder, and from the checkout, with Docker stubbed
+      - run: bash deploy/test_standalone_scripts.sh
+
+  # Whether a PR changes anything an image is built from. The image builds used most of the monthly Actions minutes,
+  # and docs-only PRs were common. Pushes and release runs always build.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      images: ${{ steps.diff.outputs.images }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != pull_request ]; then echo "images=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          changed=$(git diff --name-only "origin/$BASE...HEAD")
+          echo "$changed"
+          # Only docs/ and Markdown files: nothing an image is built from
+          if grep -qvE '^docs/|\.md$' <<<"$changed"; then echo "images=true"; else echo "images=false"; fi >> "$GITHUB_OUTPUT"
 
   images:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -92,7 +120,7 @@ jobs:
             files: src/automatic-vector-db-updation/milvus_updater.py
           - service: roi
             dockerfile: roi.Dockerfile
-            files: Custom-ROI-Provisioning/app.py
+            files: Custom-ROI-Provisioning/app.py Custom-ROI-Provisioning/templates/index.html
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -131,15 +159,23 @@ jobs:
           import multiprocessing_shared_buffer
           assert mp.get_start_method() == "fork", mp.get_start_method()
           '
+      # The ROI page lists cameras, previews and saves one camera's region, and refuses bad input (D-035)
+      - name: ROI page
+        if: matrix.service == 'roi'
+        run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test Custom-ROI-Provisioning/test_app.py
       # Face vectors saved with the dataset round-trip through Parquet, and versions are numbered right (D-030)
       - name: Face vectors
         if: matrix.service == 'producer-consumer'
         run: docker run --rm --entrypoint python3 ci/${{ matrix.service }}:test src/util/face_vectors.py demo
+      # A worse crop on a full cluster used to loop forever and block the collector
+      - name: Face saver
+        if: matrix.service == 'dynamic-face-dataset-collector'
+        run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test src/dynamic_face_data_collector/test_face_saver.py
 
   # Single required status check for branch rules; fails if any job failed or was cancelled
   ci:
     if: always()
-    needs: [lint, secrets, compose, images]
+    needs: [lint, secrets, compose, changes, images]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
