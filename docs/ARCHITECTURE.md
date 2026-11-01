@@ -223,7 +223,7 @@ Nothing alerts when the standalone services fail: the watcher does not manage th
 
 ## A3. Where each kind of data lives and who writes it
 
-Who writes and reads each store. Shapes, sizes and trade-offs are in [DATA.md](DATA.md); this view adds where each store sits on the host.
+Who writes and reads each store. Shapes, sizes and trade-offs are in [DATA.md](DATA.md); this view adds where each store sits on the host. The names are the owner's (`CLIENT_ID=owner`); any other client gets its own databases, Milvus database and topics (D-036, DATA.md).
 
 ```mermaid
 flowchart LR

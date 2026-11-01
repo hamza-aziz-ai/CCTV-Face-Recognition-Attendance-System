@@ -31,7 +31,7 @@ flowchart TB
     UP["`(3) docker-compose up of docker-compose-main.yml, PostgreSQL first`"]:::step
     INIT["`(4) DB controller and face collector create their databases and tables`"]:::step
     WAITDEP{"`(5) DB controller, feedback controller and collector healthy?`"}:::decision
-    FORK["`(6) Import sets the fork start method and creates the frame queue`"]:::step
+    FORK["`(6) Import checks CLIENT_ID, sets the fork start method and creates the frame queue`"]:::step
     MV["`(7) Connect to Milvus, open or create both collections and their index`"]:::step
     LOAD{"`(8) Both collections loaded?`"}:::decision
     RETRY["`Log the error, retry in 10 s`"]:::error
@@ -63,10 +63,10 @@ flowchart TB
 3. `start_complete_project.sh` then runs `docker-compose -f docker-compose-main.yml up -d`. PostgreSQL starts first; the other services wait for its health check.
 4. On start, the DB controller creates `CCTV_Camera_Surveillance` and the partitioned table `recognition_results` if they are missing. The face collector creates `Face_Recognition_Database` with `person_summary` and `face_images`.
 5. Compose starts the producer-consumer only once the DB controller, feedback controller and face collector report healthy.
-6. Importing `multiprocessing_shared_buffer` sets the `fork` start method, so workers inherit live Milvus collections (D-023), and creates `MULTIPROCESS_SHARED_BUFFER`, an unbounded `multiprocessing.Queue`.
-7. `create_connection()` connects to Milvus at the host IP on 19530. `create_collection()` opens the primary (`FACE_DATA_COLLECTION_FOR_COSINE`, an alias since D-030) and staging (`FACE_DATA_STAGING_COLLECTION_FOR_COSINE`) collections, creating a collection and a `GPU_IVF_FLAT` index (nlist 128) if either is missing.
+6. The first import of `src/parameters.py` reads `CLIENT_ID` from `master.env` and exits unless it is 3 to 30 lowercase letters or digits starting with a letter, so a stack never runs without knowing whose data it touches (D-036). Every app service does the same. Importing `multiprocessing_shared_buffer` then sets the `fork` start method, so workers inherit live Milvus collections (D-023), and creates `MULTIPROCESS_SHARED_BUFFER`, an unbounded `multiprocessing.Queue`.
+7. `create_connection()` connects to Milvus at the host IP on 19530, creates the client's database if it is missing (`default` for `CLIENT_ID=owner`, `<client>_default` otherwise) and binds the connection to it. `create_collection()` opens the primary (`FACE_DATA_COLLECTION_FOR_COSINE`, an alias since D-030) and staging (`FACE_DATA_STAGING_COLLECTION_FOR_COSINE`) collections, creating a collection and a `GPU_IVF_FLAT` index (nlist 128) if either is missing.
 8. `load_with_retry()` loads each collection, retrying every 10 seconds until it succeeds.
-9. `ensure_kafka_topics()` creates a topic `<location>_<point>` for each entry point that has cameras, with one partition per camera, 5 s retention and 5 s segments. It adds partitions when cameras were added and never deletes topics (D-028). Any failure raises, so the process exits rather than produce to a missing topic, and the restart policy starts it again.
+9. `ensure_kafka_topics()` creates a topic `<location>_<point>` (`<client>.<location>_<point>` for a client other than the owner) for each entry point that has cameras, with one partition per camera, 5 s retention and 5 s segments. It adds partitions when cameras were added and never deletes topics (D-028). Any failure raises, so the process exits rather than produce to a missing topic, and the restart policy starts it again.
 10. The producer process reads `src/Camera-Configuration/camera_configuration.json` and starts one thread per camera, named `<location>_<point>_<camera>`. Section 2 follows each thread.
 11. The main process runs `consumer_main()`. With `THREAD_FLAG = True` it starts `NUMBER_OF_THREADS = 4` recognition threads; the multiprocess mode (`NUMBER_OF_PROCESSES = 2`) is off.
 
@@ -232,7 +232,7 @@ sequenceDiagram
 2. It reads `KAFKA_TOPIC` (default `maingate_entry`) as consumer group `<topic>.display`, and assigns itself every partition of the topic, so every camera of the entry point is shown; `KAFKA_PARTITIONS` (camera number minus 1, comma-separated) narrows it to chosen cameras. It starts at the end, so old messages are never replayed, and checks for partitions added with a new camera every 60 s. When `KAFKA_USERNAME` is set it logs in with SASL/SCRAM; empty means no login, which is what this compose file sets today.
 3. When `ENABLE_FEEDBACK_SERVER` is on, the recognition thread opens a TCP connection to 20012 after every batch and sends the strict primary matches as JSON: person ID to `(camera name, camera address, score, recognized)`. The JSON is sent even when empty.
 4. The controller reads up to 1 MB, answers `OK` and closes the connection. The sender does not read the answer.
-5. In a new thread, the controller publishes each person ID to the topic `<location>_<point>`, on partition `<camera number> - 1` taken from the camera key (`cctv-camera-3` is partition 2), with the camera name as key, and flushes after each message.
+5. In a new thread, the controller publishes each person ID to the topic `<location>_<point>` (prefixed `<client>.` for a client other than the owner), on partition `<camera number> - 1` taken from the camera key (`cctv-camera-3` is partition 2), with the camera name as key, and flushes after each message.
 6. Camera threads publish their own `ERROR <camera>: ...` and `SUCCESS <camera>: ...` messages to the same topic and partition (section 2, steps 2 and 5). Topics keep messages for 5 s.
 7. Kafka-WebApp polls every 0.2 s.
 8. Each message is a person ID or a camera status text.
