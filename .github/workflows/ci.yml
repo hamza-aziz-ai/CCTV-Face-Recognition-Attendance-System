@@ -63,7 +63,32 @@ jobs:
           python3 -I deploy/make_bundle.py demo /tmp/bundle
           docker compose -f /tmp/bundle/docker-compose-main.yml config --quiet
 
+  # Whether a PR changes anything an image is built from. The image builds used most of the monthly Actions minutes,
+  # and docs-only PRs were common. Pushes and release runs always build.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      images: ${{ steps.diff.outputs.images }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != pull_request ]; then echo "images=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          changed=$(git diff --name-only "origin/$BASE...HEAD")
+          echo "$changed"
+          # Only docs/ and Markdown files: nothing an image is built from
+          if grep -qvE '^docs/|\.md$' <<<"$changed"; then echo "images=true"; else echo "images=false"; fi >> "$GITHUB_OUTPUT"
+
   images:
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -140,7 +165,7 @@ jobs:
   # Single required status check for branch rules; fails if any job failed or was cancelled
   ci:
     if: always()
-    needs: [lint, secrets, compose, images]
+    needs: [lint, secrets, compose, changes, images]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
