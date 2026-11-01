@@ -19,6 +19,8 @@ parent = os.path.dirname(current)
 sys.path.append(parent)
 
 from parameters import (
+    LEGACY_SHARED_SERVICES,
+    postgres_login,
     POSTGRESQL_HOST,
     POSTGRESQL_PORT,
     POSTGRESQL_DATABASE_NAME,
@@ -27,8 +29,7 @@ from parameters import (
 from custom_logging import dynamic_face_data_collector_logger
 
 # Read credentials from the environment.
-POSTGRESQL_USERNAME = os.environ.get("POSTGRES_USER")
-POSTGRESQL_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
+POSTGRESQL_USERNAME, POSTGRESQL_PASSWORD = postgres_login()  # this client's own role (D-037)
 
 # Main database configuration.
 DB_CONFIG = {
@@ -45,6 +46,8 @@ def ensure_database_exists():
     Ensure that the main database exists.
     If not, connect to the default database and create it.
     """
+    if not LEGACY_SHARED_SERVICES:
+        return  # deploy/provision.py made it, owned by this client's role, which cannot create databases (D-037)
     try:
         default_config = DB_CONFIG.copy()
         default_config['dbname'] = 'postgres'

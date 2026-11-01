@@ -13,20 +13,35 @@ Authors: Hamza Aziz and Kshitij Parashar
 from pymilvus import (
     MilvusClient,
     connections,
+    db,
     utility,
     FieldSchema, CollectionSchema, DataType,
     Collection
 )
 
 from custom_logging import multicam_server_logger, dynamic_face_data_collector_logger
-from parameters import MILVUS_HOST, MILVUS_PORT, METRIC_TYPE, INDEX_TYPE
-from parameters import MILVUS_STAGING_COLLECTION_NAME
+from parameters import MILVUS_HOST, MILVUS_PORT, METRIC_TYPE, INDEX_TYPE, MILVUS_DATABASE
+from parameters import MILVUS_STAGING_COLLECTION_NAME, LEGACY_SHARED_SERVICES, milvus_login
+
+
+def milvus_token():
+    """This client's Milvus login for MilvusClient; Milvus ignores it while authentication is off (legacy owner)."""
+    user, password = milvus_login()
+    return f"{user}:{password}" if user else "root:Milvus"
 
 
 # PART 1: CONNECTING TO MILVUS
 def create_connection(host: str = MILVUS_HOST, port: str = MILVUS_PORT):
     try:
-        connections.connect("default", host=host, port=port)
+        if LEGACY_SHARED_SERVICES:
+            # Until the owner's cutover the app creates its own database; after it, deploy/provision.py does (D-037)
+            connections.connect("setup", host=host, port=port)
+            if MILVUS_DATABASE not in db.list_database(using="setup"):
+                db.create_database(MILVUS_DATABASE, using="setup")
+            connections.disconnect("setup")
+        user, password = milvus_login()
+        # Bound to the client's database at connect, so a failure leaves no connection rather than one to another database
+        connections.connect("default", host=host, port=port, db_name=MILVUS_DATABASE, user=user, password=password)
         multicam_server_logger.info("Successfully connected to Milvus Server")
     except Exception as exception:
         multicam_server_logger.error(f"Error connecting to Milvus server due to exception: {exception}")
@@ -127,7 +142,7 @@ def delete_collection_without_consent(collection_name: str):
 
 # PART 7: DELETE THE ENTITIES THAT ARE NO LONGER NEEDED BY FILTERING CONDITIONS OR THEIR PRIMARY KEYS
 def delete_by_filter(person_id: str):
-    client = MilvusClient(uri=f"http://{MILVUS_HOST}:{MILVUS_PORT}", token="root:Milvus")
+    client = MilvusClient(uri=f"http://{MILVUS_HOST}:{MILVUS_PORT}", token=milvus_token(), db_name=MILVUS_DATABASE)
     deletion_result = client.delete(
         collection_name=MILVUS_STAGING_COLLECTION_NAME,
         filter=f"name_id in ['{person_id}']"

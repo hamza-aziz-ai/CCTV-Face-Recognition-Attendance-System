@@ -8,7 +8,7 @@ The owner's displays go blank for a few minutes. Messages sent during the switch
 
 1. These are merged and released, and the release is `:stable`:
    - client IDs (#61);
-   - per-client stacks (#62, #63);
+   - per-client stacks (#62, #74);
    - provisioning (#64);
    - app logins (#65);
    - this change.

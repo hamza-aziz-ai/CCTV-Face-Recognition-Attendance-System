@@ -12,7 +12,6 @@ import json
 import threading
 import time
 from collections import Counter, defaultdict
-import urllib.parse
 import cv2
 import numpy as np
 
@@ -30,12 +29,9 @@ from parameters import FRAME_HEIGHT, \
     LOW_LIGHT_INTENSITY_DETECTION_BUFFER_SIZE, \
     MAXIMUM_DARK_FRAMES, \
     RESIZE_FRAME, \
-    CAM_USERNAME, \
-    CAM_PASSWORD, \
-    CAM_PORT, \
-    STREAM_ENDPOINT, \
     CAMERA_CONFIGURATION_FILE
-from util.generic_utilities import map_camera_to_kafka_topic_and_partition, resize_roi_to_area, crop_and_mask_roi
+from util.generic_utilities import map_camera_to_kafka_topic_and_partition, resize_roi_to_area, crop_and_mask_roi, \
+    camera_stream_url
 
 # A list of all the active cameras
 cameras = []
@@ -97,17 +93,14 @@ class IPCamera:
         self.shared_buffer = shared_buffer
         self.cam_name = cam_name
         self.cam_ip = camera_config["ip_address"]
-        self.cam_port = CAM_PORT if camera_config["port"] is None else camera_config["port"]
-        self.username = CAM_USERNAME if camera_config["username"] is None else camera_config["username"]
-        self.password = CAM_PASSWORD if camera_config["password"] is None else urllib.parse.quote(camera_config["password"])
-        self.stream_endpoint = STREAM_ENDPOINT if camera_config["endpoint"] is None else camera_config["endpoint"]
         self.roi = camera_config["masking-coordinates"]
         # Map camera to its corresponding kafka topic and partition
         self.kafka_topic_name, self.topic_partition = camera_to_topic_and_partition[self.cam_name]
         # Create Kafka Producer
         self.producer = create_kafka_producer()
         # initialize the video camera stream and read the first frame
-        self.stream = cv2.VideoCapture(self.cam_ip if self.cam_ip.startswith("http") else f"rtsp://{self.username}:{self.password}@{self.cam_ip}:{self.cam_port}/{self.stream_endpoint}")
+        # Shared with the ROI tool, so both open the camera the same way
+        self.stream = cv2.VideoCapture(camera_stream_url(camera_config))
         # self.stream = cv2.VideoCapture(f"http://{self.cam_ip}:4747/video")
         # we need to read the first frame to initialize the stream
         # _, _ = self.stream.read()

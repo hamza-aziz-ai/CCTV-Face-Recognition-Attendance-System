@@ -1,101 +1,132 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
+    <meta charset="utf-8">
     <title>ROI Provisioning</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f0f0f0;
-        }
-
-        h1 {
-            background-color: #00008b;
-            color: #fff;
-            padding: 10px;
-            text-align: center;
-        }
-
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #fff;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
-        }
-
-        form {
-            margin-top: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 5px;
-        }
-
-        input[type="text"] {
-            width: 770px;
-            margin-right: 10px;
-            padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-
-        input[type="submit"] {
-            background-color: #00008b;
-            color: #fff;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
-        img {
-            max-width: 100%;
-            height: auto;
-            display: inline-block;
-            margin-top: 20px;
-        }
+        body { font-family: Arial, sans-serif; margin: 0; background: #f0f0f0; }
+        h1 { background: #00008b; color: #fff; padding: 10px; margin: 0; text-align: center; font-size: 1.4em; }
+        main { max-width: 1100px; margin: 0 auto; padding: 16px; background: #fff; }
+        .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+        button { background: #00008b; color: #fff; border: none; border-radius: 4px; padding: 8px 14px; cursor: pointer; }
+        button:disabled { background: #999; cursor: default; }
+        .stage { position: relative; display: inline-block; max-width: 100%; }
+        .stage img { display: block; max-width: 100%; height: auto; }
+        .stage canvas { position: absolute; left: 0; top: 0; cursor: crosshair; }
+        #status { margin: 8px 0; min-height: 1.2em; }
+        #preview { max-width: 100%; margin-top: 12px; border: 1px solid #ccc; }
     </style>
 </head>
-
 <body>
-    <h1>Custom Region of Interest Provisioning</h1>
-    <div class="container">
-        <form method="POST">
-            <label for="camera_name">Camera Name:</label>
-            <input type="text" id="camera_name" name="camera_name" required>
-
-            <p>Region of Interest Details: </p>
-
-            <label for="width">ROI Width:</label>
-            <input type="text" id="width" name="width" required><br>
-
-            <label for="height">ROI Height:</label>
-            <input type="text" id="height" name="height" required><br>
-
-            <label for="pos_x">X-Axis:</label>
-            <input type="text" id="pos_x" name="pos_x" required><br>
-
-            <label for="pos_y">Y-Axis:</label>
-            <input type="text" id="pos_y" name="pos_y" required><br>
-
-            <input type="submit" value="Preview">
-        </form>
-        <form method="POST" action="/send_variables">
-            <input type="submit" value="Submit Details" id="submitButton">
-        </form>
-        <script>
-        document.getElementById("submitButton").addEventListener("click", function() {
-            alert("Region of Interest Updated!");
-        });
-        </script>
-        <img src="{{ url_for('video_feed') }}" alt="Video Stream">
+<h1>Custom Region of Interest Provisioning</h1>
+<main>
+    <p>Pick a camera, then click around the area to recognise faces in. Everything outside the shape is ignored.
+       Points are saved at the camera's full resolution. Restart producer-consumer after saving.</p>
+    <div class="controls">
+        <label for="camera">Camera</label>
+        <select id="camera"></select>
+        <button id="load">Load snapshot</button>
+        <button id="undo" disabled>Undo point</button>
+        <button id="reset" disabled>Clear shape</button>
+        <button id="show-preview" disabled>Preview crop</button>
+        <button id="save" disabled>Save region</button>
+        <button id="remove" disabled>Remove region</button>
     </div>
-</body>
+    <div id="status" role="status"></div>
+    <div class="stage">
+        <img id="snapshot" alt="Camera snapshot">
+        <canvas id="canvas"></canvas>
+    </div>
+    <img id="preview" alt="Preview of the cropped region" hidden>
+</main>
+<script>
+    const $ = (id) => document.getElementById(id);
+    const img = $("snapshot"), canvas = $("canvas"), ctx = canvas.getContext("2d");
+    let saved = {}, points = [];
 
+    function status(text, error) { $("status").textContent = text; $("status").style.color = error ? "#b00" : "#060"; }
+    function camera() { return $("camera").value; }
+    function scale() { return img.naturalWidth / img.clientWidth; }
+
+    function draw() {
+        canvas.width = img.clientWidth; canvas.height = img.clientHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (points.length) {
+            ctx.strokeStyle = "#ff0"; ctx.fillStyle = "rgba(255,255,0,0.2)"; ctx.lineWidth = 2;
+            ctx.beginPath();
+            points.forEach(([x, y], i) => { const sx = x / scale(), sy = y / scale(); i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); });
+            if (points.length > 2) ctx.closePath();
+            ctx.fill(); ctx.stroke();
+        }
+        const ready = img.naturalWidth > 0;
+        $("undo").disabled = $("reset").disabled = !points.length;
+        $("show-preview").disabled = $("save").disabled = !(ready && points.length > 2);
+        $("remove").disabled = !saved[camera()];
+    }
+
+    async function request(url, options) {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            throw new Error(body.error || response.statusText);
+        }
+        return response;
+    }
+
+    async function loadCameras() {
+        const list = await (await request("/api/cameras")).json();
+        $("camera").innerHTML = "";
+        for (const cam of list) {
+            saved[cam.id] = cam.points;
+            $("camera").add(new Option(cam.id + (cam.points ? " (region set)" : ""), cam.id));
+        }
+    }
+
+    $("load").onclick = async () => {
+        status("Reading a frame from the camera...");
+        $("preview").hidden = true;
+        try {
+            const blob = await (await request("/snapshot?camera=" + encodeURIComponent(camera()))).blob();
+            img.onload = () => { points = (saved[camera()] || []).map((p) => [...p]); draw(); status("Click to add points."); };
+            img.src = URL.createObjectURL(blob);
+        } catch (e) { status(e.message, true); }
+    };
+
+    canvas.onclick = (e) => {
+        points.push([Math.round(e.offsetX * scale()), Math.round(e.offsetY * scale())]);
+        draw();
+    };
+    $("undo").onclick = () => { points.pop(); draw(); };
+    $("reset").onclick = () => { points = []; draw(); };
+    window.onresize = draw;
+
+    $("show-preview").onclick = async () => {
+        try {
+            const blob = await (await request("/preview", {
+                method: "POST", headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({camera: camera(), points}),
+            })).blob();
+            $("preview").src = URL.createObjectURL(blob); $("preview").hidden = false;
+            status("This is what the producer will see.");
+        } catch (e) { status(e.message, true); }
+    };
+
+    async function store(newPoints, done) {
+        try {
+            const body = await (await request("/api/roi", {
+                method: "POST", headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({camera: camera(), points: newPoints}),
+            })).json();
+            const selected = camera();
+            await loadCameras(); $("camera").value = selected; draw();
+            status(done + " " + body.note);
+        } catch (e) { status(e.message, true); }
+    }
+    $("save").onclick = () => store(points, "Region saved.");
+    $("remove").onclick = () => { points = []; store(null, "Region removed."); };
+    $("camera").onchange = () => { img.removeAttribute("src"); points = []; $("preview").hidden = true; draw(); status(""); };
+
+    loadCameras().then(draw).catch((e) => status(e.message, true));
+</script>
+</body>
 </html>

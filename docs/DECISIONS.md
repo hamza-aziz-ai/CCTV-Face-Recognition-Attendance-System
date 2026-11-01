@@ -512,3 +512,103 @@ Chosen: 2, in three PRs. This one: the producer mounts only `master.env`, the ca
 Why: It removes the clone, its history and the owner's credentials from hosts with the tools already in use (GHCR, Docker). Digests, not tags, because the v2.0.2 tags were pushed twice.
 Trade-off: Not 3: the images still hold readable Python, which a host administrator can copy out until the images are compiled (step 4), and compiled code is still our logic on their machine. The bundle's compose files and ops scripts are ours too; the owner accepts them on client hosts. The InsightFace pretrained models are for non-commercial research per the InsightFace README: rights must be settled before a paid client deployment. Client biometric data must stay out of this repository; a dataset store on the same host is not a backup.
 Revisit if: the watcher and credential PRs land (record them here), compiled images exist (new package names, so client tokens cannot pull the old Python images), or a client needs the logic off their premises (option 3).
+
+## D-034: The watcher deploys bundles from the registry, with no git and no GitHub login
+Date: 2026-10-31   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
+Context: Second step of D-033. `deploy/watch.py` found releases with `gh release list`, fetched with the owner's `gh` login and deployed with `git checkout` in a full clone; it also nudged automerge with `gh`. Client hosts must have neither the repository nor that login.
+Options:
+
+1. a GitHub Release asset per release (needs a GitHub API token on the host)
+2. a containerised watcher with the Docker socket
+3. the host watcher pulls the bundle image's `:stable` tag with the registry login it already needs for the app images
+
+Chosen: 3. The watcher reads the release from the bundle's version label, copies the bundle out with `docker create` and `docker cp` without running it, refuses it unless `release-manifest.json` is for that release and pins only our images by digest, stages it atomically in `releases/<tag>`, and runs compose from it with `-p cctv --project-directory site`. Smoke test, 90-second stability check, rollback, failed-release suppression and the stopped-stack rule are kept. The watcher never updates itself: the owner installs `watch.py` from a bundle. A registry or site-config problem stops deploys with one notification, not one every poll. The automerge nudge moved to `deploy/nudge_automerge.py`, scheduled only on the owner's laptop.
+Why: One credential, for the registry, serves both the images and the bundle; no API token and no socket mount. Option 2 needs bind sources as host paths from inside a container, which is fragile on Docker Desktop. A watcher that replaced itself could disable every later deploy and rollback.
+Trade-off: Python 3 is needed on the host. Trust moved from "the tag is on main" to "only release.yml can move :stable", which holds while only the workflow and the owner can write the packages. The standalone services' scripts still assume the repository layout; switching this host (next PR) has to account for that. Until then, on this host: once the old watcher deploys a release with this change, its checkout replaces the scheduled watch.py with this one, which finds no site folder and stops deploying with one message, so the switch should follow straight after.
+Revisit if: a host cannot have Python, or watcher updates become frequent enough to need a safe self-update (previous version kept, atomic switch, recovery tests).
+## D-035: The ROI page draws polygons into the camera configuration
+Date: 2026-10-31   Model: Claude Opus 5.5
+Context: `Custom-ROI-Provisioning/app.py` could not start: it imported `IP_CAMS`, `create_mask` and `roi_coordinates`, which no longer exist, and it saved a rectangle by rewriting `src/parameters.py` inside the image. The producer has since moved to per-camera polygons in `camera_configuration.json` (`masking-coordinates`, applied by `crop_and_mask_roi` to the full-resolution frame). The owner chose repair over deletion.
+Options:
+
+1. delete the page and keep only the desktop tool `crop_rectangle.py`
+2. repair the rectangle page against `parameters.py`
+3. rebuild the page around the camera configuration: polygon on a full-resolution snapshot, saved into `masking-coordinates`
+
+Chosen: 3. The page lists the cameras from the configuration, opens each one with `camera_stream_url` (now shared with the producer, so both connect the same way), shows a full-resolution snapshot, takes clicked points, previews with the producer's `crop_and_mask_roi`, and saves into that camera's `masking-coordinates` with validation and an atomic write. It runs as `roi-provisioning` behind the compose profile `roi`: off by default, on 127.0.0.1 only, with the camera configuration mounted read-write for this service only. Releases build and pin its image with the others.
+Why: The configuration is already the one place the producer reads regions from, so the page writes exactly what is used; editing source files from a container cannot work with images (D-001) and breaks with compiled code (step 4).
+Trade-off: The producer reads regions at start, so a saved region applies after a restart of `producer-consumer`. No login: anyone on the host can change regions while the page runs. The desktop tool stays for use without Docker.
+Revisit if: regions must apply without a restart, or the page must be reachable from another machine (add a login first).
+## D-036: Client separation: shared infrastructure, one app stack per client, local logins
+Date: 2026-10-31   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
+Context: One codebase must serve a dedicated deployment on a client's own host and a central deployment for several clients on ours, with a standard tier and an optional DeepStream tier (owner, 2026-10-31). Today everything is single-site: fixed container names, host ports and compose project; one Postgres role for all services; Milvus with its default root login; Kafka without authentication; one shared API key in the URL; display and collector endpoints with no login; databases and Kafka topics created at runtime by the app. This host has one 6 GB GPU. This is a rehearsal; nothing is sold.
+Options:
+
+1. separate everything per client, including InsightFace and Milvus
+2. share the infrastructure and run a separate app stack per client
+3. one app process serving all clients, with a tenant ID on every query
+
+Chosen: 2. Shared per host: InsightFace (stateless, the GPU), Milvus, Postgres, Kafka, the MinIO dataset store. Per client: an app stack from the same images and bundle, its own site folder (configuration, logs, photos, vectors), and inside the shared servers its own Milvus database and login (collection names inside unchanged, D-030 alias included), its own Postgres databases and a role that reaches nothing else, its own Kafka topic and consumer-group prefix enforced by SCRAM logins and deny-by-default ACLs, its own MinIO bucket and access key. A dedicated deployment is the infrastructure plus one client stack.
+- Identity: a required, immutable, validated `CLIENT_ID` per stack; missing configuration fails, never falls back; today's names survive only through an explicit mapping for the owner's site.
+- Provisioning: a provisioning command with admin credentials that never enter app containers creates databases, logins, grants, buckets, topics and partitions; the app only checks they exist at start and fails clearly if not. Exception: the face-vector publisher (D-030) may create numbered collections and switch the alias inside its own Milvus database only.
+- Logins: local accounts per client in its Postgres; roles `client_admin`, `enrolment_operator`, `viewer`. Passwords hashed with stdlib `hashlib.scrypt` (OWASP parameters, explicit `maxmem`, unique salts, constant-time comparison). Random session tokens stored only as hashes; secure host-only cookies over HTTPS, CSRF protection, expiry, revocation, login throttling, bounded password length. Machines (ERP pulls, collector, displays, Kafka-WebApp) get scoped tokens; the shared API key leaves the URL. Owner support uses explicit per-client accounts; no login bypasses clients.
+- Tiers: central clients' tier is owner-set configuration the client cannot edit, checked server-side, selecting exactly one recognition image; bundles reference only enabled images. Dedicated clients are gated by which packages their pull token can download, which cannot revoke an image already on their host.
+- Biometric data: each client's photos and vectors stay in its folders and bucket, never in our repository, CI or images. Each Milvus version records the dataset snapshot it was built from; bucket versioning alone is neither a snapshot nor a backup. The owner's own test photos stay as DVC data for development only.
+Why: settings are global per process today, so a process serving one client needs no tenant filtering, and it fits one GPU. Option 3 needs a tenant filter on every query, queue and cache, where one miss exposes another client's biometric data; option 1 does not fit a 6 GB GPU.
+Trade-off: clients still share administrators, failures and GPU capacity; separation is enforced by permissions, not hardware, with no performance guarantee. Unproven until steps 3 and 5: Milvus per-database permission enforcement in practice, and how many clients one shared GPU carries.
+Plan, five PRs, each with its tests:
+
+1. names and configuration: required `CLIENT_ID`, owner mapping, per-client databases, topics and consumer groups (missing or invalid configuration refused; identical camera or person IDs in two clients never collide)
+2. deployment layout: no fixed container names, separate compose projects, per-client data and log folders, networks, watcher state and locks, image cleanup that keeps every client's rollback images or none on central hosts (A's stop, upgrade or rollback leaves B running with its rollback images)
+3. provisioning and credentials: restricted logins in Postgres, Milvus, Kafka, MinIO, publisher exception (A's credentials refused on all four for B's data; publishing succeeds with client-only credentials)
+4. accounts and protected callers: HTTPS hostnames per client behind a reverse proxy (secure cookies need it), logins, roles, sessions, machine tokens, protection on the API, feedback intake and Kafka-WebApp pages and WebSockets (role matrix, cross-client sessions, login bypass, CSRF, throttling, revocation)
+5. tiers and recovery: tier selection, then a two-client synthetic rehearsal: snapshot, publish, restore one client without touching the other, remove a client
+
+Enrolment (8c), the live view (8b), the Android app (8d) and deletion (8e) build on these boundaries.
+Revisit if: a real client is signed. Then also: model licences; DPDP Act lawful basis, notices, retention and erasure, breach notification, children's data and a processor agreement for central mode; an audit log of views, enrolments and deletions; off-host backups with restore tests; encryption between hosts; credential rotation; MFA or SSO through OIDC where required.
+
+## D-037: Per-client logins on the shared services, and how they are switched on
+Date: 2026-10-31   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
+Context: D-036 step 3 gives each client logins that reach only its own data in PostgreSQL, Milvus, Kafka and the MinIO dataset store. Today the app uses the PostgreSQL superuser, Milvus has no authentication (`root:Milvus` in the code), Kafka is PLAINTEXT on 9092 for app producers and displays, and the dataset store has only its root login. D-036 left one point unproven: whether Milvus enforces per-database permissions. Throwaway spikes on 2026-10-31 showed it does on 3.0.5: a user granted the privilege groups `DatabaseReadWrite`, `DatabaseAdmin` and `CollectionAdmin` on its own database could create, insert, alias, query and drop there. The same user was refused on other databases and on admin actions. Kafka SCRAM users with prefixed ACLs were likewise confined to their own topics and groups.
+Options:
+
+1. one admin login per service, shared by every client stack, with isolation by names only
+2. per-client logins created at runtime by the app
+3. per-client logins created by a provisioning command that holds the admin rights; the app only uses its own
+
+Chosen: 3.
+- Provisioning: `deploy/provision.py` runs on the host.
+  - Clients: it creates, for each one, a Postgres role owning the client's two databases, with `CONNECT` revoked from `PUBLIC`. It also creates a Milvus user and role over the client's database only, Kafka users `<c>_app` (Write and Describe) and `<c>_display` (Read on topics and groups) on the prefix `<c>.`, and a MinIO bucket `<c>-enrolment` with an access key whose policy covers that bucket only.
+  - Passwords: they are generated once and saved atomically to the client's site `.env` before any service is touched, and reruns reuse them. An account whose password is no longer saved stops provisioning instead of being reset.
+  - Milvus root: `--init-milvus-root` replaces root's default password, saving the new one first.
+- Shared settings: the Kafka listener and authorizer settings and the Milvus `user.yaml` live in `STANDALONE-SERVICES/auth/`. The production compose files and `deploy/test_isolation.py` both read them.
+- Kafka: the plaintext listeners (inter-broker, controller) bind to the broker's loopback. `User:ANONYMOUS` is the superuser on every listener, but only tools inside the broker container reach those listeners. All other traffic uses SCRAM on 9092.
+- Kafka add-ons: Schema Registry, Connect, ksqlDB, REST Proxy and Flink go at the cutover. REST Proxy and Connect were published, unauthenticated routes through the internal listener to every topic, and the app uses none of them.
+- Owner topics: the owner's topics become `owner.*` at the cutover, so every client is covered by the same prefix rules. Owner database and collection names stay.
+- Rollout in three PRs:
+  1. 3a: provisioning and the isolation test, with no runtime effect.
+  2. 3b: the app and Kafka-WebApp use the per-client logins and stop creating databases and topics themselves. `LEGACY_SHARED_SERVICES=1` keeps the owner on today's behaviour until the cutover, honoured only with `CLIENT_ID=owner`. The watcher is paused before 3b merges.
+  3. 3c: a manual cutover. Turn on auth, move the owner's app tables, partitions and sequences to `owner_app` one by one (never `REASSIGN OWNED`, which also moves databases and tablespaces), switch the producers and displays together, deploy, verify, then resume the watcher.
+
+Why: only option 3 keeps admin rights out of every client stack, so a stack, or anyone holding its `.env`, cannot reach another client's data; option 1 relies on names, which nothing enforces. Option 2 needs admin rights in the app. Generating the passwords before touching any service, and refusing to reset an unknown one, makes a failed or interrupted run safe to repeat.
+Trade-off:
+- Kafka encryption: SASL_PLAINTEXT authenticates but does not encrypt.
+- Passwords in argv: they appear briefly on command lines inside the Kafka and MinIO containers.
+- Provisioning is per host, by hand.
+- The CPU Milvus in the test proves authorisation only, not GPU indexes.
+- After the cutover, releases before 3b are no longer valid rollback targets.
+Revisit if: real client traffic crosses networks (SASL_SSL and TLS for Postgres and Milvus), anything other than the broker must reach its plaintext listeners (named SCRAM admin instead of ANONYMOUS), or individual displays must be revoked (one Kafka login per display).
+
+## D-038: Stateful services use named volumes
+Date: 2026-11-01   Model: Claude Opus 5.5
+Context: Postgres and Milvus (with its etcd and MinIO) used bind mounts to Linux paths. On Docker Desktop those paths are inside the VM and are emptied by a restart, which lost their data on 2026-11-01 (docs/bugs/2026-11-01-data-lost-on-restart.md). The owner directed mounted volumes for persistent storage.
+Options:
+
+1. keep the Linux paths, and run a restore after every restart
+2. bind mount Windows folders
+3. named Docker volumes
+
+Chosen: 3. PostgreSQL uses `cctv-postgres-data`; Milvus uses `milvus-data`, `milvus-etcd` and `milvus-minio`. Each has an explicit `name`, so the data stays with the service if its compose project changes (#62 moves PostgreSQL to a shared service). `DOCKER_VOLUME_DIRECTORY` is removed.
+Why: named volumes work the same on Docker Desktop and Linux and persist on Docker's own disk; Kafka's named volume survived this same restart (D-028). Option 2 depends on the host's folder layout, and POSIX ownership and fsync behave poorly on Windows mounts, which databases rely on.
+Trade-off: the data is inside Docker's disk, so copying it needs `docker run` or `pg_dump`, not a file manager, and removing Docker Desktop's data or running `docker volume prune` deletes it. Off-host backups are still missing (D-036).
+Revisit if: a host needs its data on a specific disk (a bind mount or a volume driver).

@@ -1,0 +1,106 @@
+# Timelines
+
+Purpose: real durations, so promised timelines can be met. This project is a rehearsal; nothing is sold yet. Add one row per PR when it merges, and one row per incident that cost time.
+
+## How to read the numbers
+
+- **Work (upper bound):** time from the previous PR being opened to this one being opened. Work here was sequential, so this bounds the effort behind the PR. It includes reviews, questions and side tasks, so it overstates pure coding time. Gaps over 3 hours (breaks, nights) show `n/a`. When several PRs were prepared together and opened minutes apart, the later ones show too little; #7 to #11 (re-openings of #2 to #6) are left out.
+- **Open to merge:** the wait for CI and auto-merge once the PR existed. It was measured from GitHub timestamps (UTC).
+- **Incidents:** time lost to problems, measured from logs where marked "measured", otherwise an estimate and marked so.
+
+## Work by kind of change (merged PRs with a work figure)
+
+| Kind       | PRs | Median work | Longest |
+|------------|-----|-------------|---------|
+| `feat`     | 17  | 13m         | 2h 51m  |
+| `fix`      | 12  | 19m         | 1h 25m  |
+| `ci`       | 7   | 11m         | 25m     |
+| `docs`     | 4   | 7m          | 14m     |
+| `other`    | 1   | 7m          | 7m      |
+| `chore`    | 1   | 2h 19m      | 2h 19m  |
+| `refactor` | 1   | 6m          | 6m      |
+
+## Pull requests
+
+| PR  | Opened (UTC)     | Work (upper bound) | Open to merge        | Size           | Title                                                                              |
+|-----|------------------|--------------------|----------------------|----------------|------------------------------------------------------------------------------------|
+| #1  | 2026-10-30 06:24 | n/a                | 4h 30m               | +582/-1003 29f | build: make images registry-ready (Python 3.11, baked source, real healthchecks)   |
+| #2  | 2026-10-30 06:33 | 8m                 | closed, redone as #7 | +184/-2 5f     | feat(mlops): add model manifest with CI drift check                                |
+| #3  | 2026-10-30 06:53 | 20m                | 4h 02m               | +77/-0 3f      | ci: auto-merge PRs once every check on the head commit passes                      |
+| #4  | 2026-10-30 06:56 | 3m                 | 3h 59m               | +114/-1 4f     | ci: release automatically when merged titles call for a version bump               |
+| #5  | 2026-10-30 07:01 | 4m                 | 3h 55m               | +49/-5 7f      | feat(ops): add per-host GPU profiles, starting with the RTX 4050 laptop            |
+| #6  | 2026-10-30 09:52 | 2h 51m             | 1h 03m               | +287/-8 8f     | feat(ops): add pull-based deployment watcher with rollback                         |
+| #7  | 2026-10-30 11:00 | redo of #2         | 2m                   | +184/-2 5f     | feat(mlops): add model manifest with CI drift check                                |
+| #8  | 2026-10-30 11:02 | redo of #3         | 2m                   | +77/-0 3f      | ci: auto-merge PRs once every check on the head commit passes                      |
+| #9  | 2026-10-30 11:05 | redo of #4         | 1m                   | +114/-1 4f     | ci: release automatically when merged titles call for a version bump               |
+| #10 | 2026-10-30 11:08 | redo of #5         | 1m                   | +49/-5 7f      | feat(ops): add per-host GPU profiles, starting with the RTX 4050 laptop            |
+| #11 | 2026-10-30 11:10 | redo of #6         | 1m                   | +287/-8 8f     | feat(ops): add pull-based deployment watcher with rollback                         |
+| #12 | 2026-10-30 11:30 | 19m                | 1m                   | +78/-21 14f    | feat(release): publish service images to GitHub Packages (ghcr.io)                 |
+| #13 | 2026-10-30 11:52 | 21m                | 1m                   | +4/-2 2f       | fix(release): push images to ghcr.io one at a time                                 |
+| #14 | 2026-10-30 11:57 | 5m                 | 1m                   | +47/-6 7f      | feat(ops): restart standalone and app containers automatically                     |
+| #15 | 2026-10-30 12:15 | 17m                | 1m                   | +34/-4 4f      | fix: stop tracking master.env and keep the host's copy on deploy                   |
+| #16 | 2026-10-30 13:40 | 1h 25m             | 6m                   | +14/-145 6f    | fix(standalone): make the standalone services start on the Windows laptop host     |
+| #17 | 2026-10-30 13:43 | 3m                 | 3m                   | +12/-5 5f      | fix: make the stack's Postgres host port configurable                              |
+| #18 | 2026-10-30 15:03 | 1h 20m             | 1m                   | +29/-14 4f     | fix: first deploy on the Windows host (camera config mount, host IP, crash loop)   |
+| #19 | 2026-10-30 15:10 | 6m                 | 1m                   | +88/-7 10f     | feat(mlops): add a MinIO dataset store as the DVC remote                           |
+| #20 | 2026-10-30 15:53 | 43m                | 4m                   | +20/-6 6f      | feat!: move PostgreSQL from 12 to 18.6                                             |
+| #21 | 2026-10-30 16:03 | 9m                 | 18m                  | +74/-88 5f     | feat(standalone): move Kafka to Confluent Platform 8.4.0 community edition         |
+| #22 | 2026-10-30 16:16 | 13m                | 8m                   | +56/-17 6f     | feat(standalone): move Milvus to 3.0.5 following its official GPU compose file     |
+| #23 | 2026-10-30 16:24 | 7m                 | 1m                   | +35/-1 3f      | feat(ops): delete release images the watcher no longer needs                       |
+| #24 | 2026-10-30 16:37 | 13m                | 5m                   | +87/-76 20f    | feat: move app images to Python 3.14 with current libraries                        |
+| #25 | 2026-10-30 16:56 | 18m                | 1m                   | +19/-3 5f      | feat: add Kafka-WebApp as a submodule of hamza-aziz-ai/Kafka-WebApp                |
+| #26 | 2026-10-30 17:19 | 22m                | 1m                   | +37/-1 5f      | feat: run Kafka-WebApp in the stack on port 9095                                   |
+| #27 | 2026-10-30 17:27 | 7m                 | 1m                   | +565/-7 20f    | docs: add the documents required by the field guide                                |
+| #28 | 2026-10-30 17:41 | 14m                | 47m                  | +1/-1 1f       | docs: record why Milvus over other vector stores                                   |
+| #29 | 2026-10-30 17:42 | 1m                 | 19m                  | +47/-19 1f     | docs: rewrite the defense brief in the owner's words                               |
+| #30 | 2026-10-30 17:50 | 7m                 | 22m                  | +72/-13 10f    | fix: start producer-consumer on Python 3.14 and catch crash loops on deploy        |
+| #31 | 2026-10-30 18:09 | 19m                | 3m                   | +42/-32 3f     | fix: make enrolment and fresh installs work on this host                           |
+| #32 | 2026-10-30 18:26 | 16m                | 25m                  | +211/-25 14f   | feat: start the real datasets with checked enrolment                               |
+| #33 | 2026-10-30 18:34 | 8m                 | 7m                   | +24/-1 2f      | ci: re-run cancelled CI jobs once                                                  |
+| #34 | 2026-10-30 18:54 | 19m                | 12m                  | +2/-1 1f       | ci: treat a check with a conclusion as finished                                    |
+| #35 | 2026-10-30 19:03 | 9m                 | 3m                   | +71/-378 27f   | feat!: remove client names and the INSTITUTE setting                               |
+| #36 | 2026-10-30 19:23 | 19m                | 1m                   | +150/-1 4f     | fix(release): free runner disk and keep CHANGELOG.md updated                       |
+| #37 | 2026-10-30 19:48 | 25m                | 2m                   | +19/-1 2f      | ci: open an issue when a release fails                                             |
+| #38 | 2026-10-30 19:57 | 8m                 | 2m                   | +23/-4 5f      | fix: remove startup races between services                                         |
+| #39 | 2026-10-30 20:04 | 7m                 | 0m                   | +95/-0 2f      | Add Claude Code GitHub Workflow                                                    |
+| #40 | 2026-10-30 20:05 | 1m                 | 15m                  | +59/-19 3f     | fix: correct service dependencies and healthchecks, and add Kafbat UI              |
+| #41 | 2026-10-30 20:08 | 2m                 | 20m                  | +2/-1 1f       | ci: let a finished Claude review also trigger auto-merge                           |
+| #43 | 2026-10-30 20:39 | 30m                | 5m                   | +208/-91 8f    | fix: keep Kafka topics across restarts and store broker data on a volume           |
+| #44 | 2026-10-30 20:55 | 16m                | 3h 57m               | +99/-6 6f      | fix(ci): recover stuck merges and stale releases without a person                  |
+| #45 | 2026-10-31 01:02 | n/a                | 1m                   | +18/-2 3f      | fix: run Kafka-WebApp v0.1.2 so recognitions reach the display                     |
+| #46 | 2026-10-31 01:04 | 2m                 | 2m                   | +231/-40 13f   | feat: version face vectors with the dataset and serve Milvus through an alias      |
+| #47 | 2026-10-31 01:09 | 5m                 | 3m                   | +687/-578 50f  | feat: update InsightFace-REST to 0.9.5.0 on TensorRT 11                            |
+| #48 | 2026-10-31 03:29 | 2h 19m             | 15m                  | +6/-7 2f       | chore(data): add face vectors to the dataset                                       |
+| #49 | 2026-10-31 03:34 | 5m                 | 1m                   | +184/-184 15f  | docs: copy-edit the docs for US spelling, aligned tables and model names           |
+| #50 | 2026-10-31 03:46 | 11m                | 1m                   | +24/-0 1f      | ci: close release-failure issues once a later release is published                 |
+| #51 | 2026-10-31 03:52 | 6m                 | 5m                   | +65/-68 13f    | refactor: generic GPU defaults instead of the A100 MIG layout                      |
+| #52 | 2026-10-31 04:37 | 44m                | 38m                  | +339/-28 13f   | feat: ship deployable artifacts instead of source to deployment hosts              |
+| #53 | 2026-10-31 05:25 | 48m                | open                 | +389/-166 11f  | feat(deploy): deploy release bundles from the registry instead of a git clone      |
+| #55 | 2026-10-31 06:29 | 1h 04m             | open                 | +26/-1 1f      | ci: skip the image builds on PRs that only change docs                             |
+| #56 | 2026-10-31 06:47 | 17m                | open                 | +80/-13 8f     | feat: run the standalone scripts from a release bundle with a separate site folder |
+
+## Incidents that cost time
+
+| When (UTC)                                 | What                                                                                                | Time lost                                             | Basis                                      | Lesson                                                              |
+|--------------------------------------------|-----------------------------------------------------------------------------------------------------|-------------------------------------------------------|--------------------------------------------|---------------------------------------------------------------------|
+| 2026-10-30                                 | Stacked PR #2 closed when its base branch was deleted; #2 to #6 redone as #7 to #11                 | about 1 h                                             | estimate                                   | Never delete a branch other PRs are based on                        |
+| 2026-10-30 17:30                           | v1.3.0 shipped a producer that crashed on Python 3.14 (multiprocessing start method set too late)   | 53 min to v1.3.1                                      | measured (release times)                   | Check the start method in CI; the watcher now catches crash loops   |
+| 2026-10-30 19:03                           | v1.4.0 deploy and its rollback failed: host config changed before the release that needed it        | stack down until v2.0.0 deployed                      | measured start, end not logged             | Change host config only after the release that needs it is live     |
+| 2026-10-30 19:19                           | v2.0.0 release run failed: runner disk full while building 7 images                                 | about 20 min                                          | estimate                                   | Free runner disk before big builds                                  |
+| 2026-10-30 20:01                           | Kafka advertised 127.0.0.1 after a config reset; containers could not reach it                      | about 25 min                                          | estimate                                   | Watch for config files a script rewrites                            |
+| 2026-10-30 20:32                           | v2.0.2 tag refused (HTTP 403): main changed a workflow file mid-run                                 | 12 min, next run published                            | measured                                   | Stale runs now hand over to a release of main (#44)                 |
+| 2026-10-30                                 | PR #41 green but not merged by automerge; cause unknown                                             | about 30 min                                          | estimate                                   | Watcher nudge and skip log added (#44)                              |
+| 2026-10-30 about 17:30 to 2026-10-31 01:37 | Display showed no recognitions (Kafka-WebApp posted without a JSON content type, HTTP 422)          | about 8 h undetected                                  | from release and deploy times, approximate | End-to-end check of each user-visible path after a release          |
+| 2026-10-31 04:37 to 05:09                  | InsightFace CI image needed 4 runs: runner disk full twice, first push "denied" once                | 32 min                                                | measured                                   | Check disk before large builds; retry first pushes to a new package |
+| 2026-10-31 morning                         | Standalone start without HOST_PROFILE used A100 defaults on the laptop; InsightFace and Milvus down | about 30 min                                          | estimate                                   | Generic defaults (#51); scripts read HOST_PROFILE                   |
+| 2026-10-31 (v2.2.0 run)                    | v2.2.0 bundle push "denied" (first push to a new package)                                           | release blocked; the rerun then hit the Actions quota | time not logged                            | Retry first pushes (#53)                                            |
+| 2026-10-31 05:51 to 2026-11-01 00:00       | GitHub Actions minutes for the month used up (3,000 on GitHub Pro); CI, merges and releases stopped | about 18 h                                            | measured                                   | Skip image builds on docs-only PRs (#55); budget Actions minutes    |
+| 2026-10-30 and 2026-10-31                  | Claude usage limit reached twice; work and one Claude review run paused                             | several hours                                         | estimate                                   | Plan long work around usage resets                                  |
+
+## Estimating from this
+
+- The per-PR work figures understate real effort where several PRs were prepared together (for example #44 shows 16m but built on work done alongside #43), and they include no time for the incidents below. Quote from the median plus the incident budgets, not the median alone.
+- A small CI or workflow fix took minutes to under an hour of work, but its first real run often found a problem (registry, disk, quota). Budget one extra round for anything that runs only in a release.
+- Anything new to the registry (a new package, a large image) failed on its first try twice. Budget a retry.
+- A user-visible bug can sit unseen for hours without an end-to-end check; budget that check per release.
+- Shared limits stop all work at once: Actions minutes and AI usage limits. Track them like any other dependency.

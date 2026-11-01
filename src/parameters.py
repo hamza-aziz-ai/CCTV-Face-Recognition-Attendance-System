@@ -3,6 +3,8 @@ This module contains the default parameters used by the app
 """
 from dotenv import load_dotenv
 import os
+import re
+import sys
 
 
 ########################################################################################################################
@@ -10,6 +12,55 @@ import os
 ########################################################################################################################
 load_dotenv("master.env")
 IP_ADDRESS = os.getenv("IP_ADDRESS")
+
+# The client this stack serves (D-036). Required: without it the stack could read or write another client's data
+CLIENT_ID = os.getenv("CLIENT_ID", "")
+if not re.fullmatch(r"[a-z][a-z0-9]{2,29}", CLIENT_ID):
+    sys.exit(f"CLIENT_ID in master.env must be 3 to 30 lowercase letters or digits, starting with a letter; got {CLIENT_ID!r}")
+# The owner's site keeps the names it had before D-036
+OWNER_CLIENT_ID = "owner"
+
+
+def client_name(owner_name):
+    """This client's name for a database. IDs hold no underscore, so a prefixed name never equals another client's."""
+    return owner_name if CLIENT_ID == OWNER_CLIENT_ID else f"{CLIENT_ID}_{owner_name.lower()}"
+
+
+# Each client logs in to the shared services with its own accounts, made by deploy/provision.py (D-037). Until the
+# owner's cutover (step 3c), LEGACY_SHARED_SERVICES=1 in master.env keeps the owner's site as it was: the admin logins,
+# no Milvus or Kafka login, unprefixed topics, and databases and topics created at start. Only the owner may set it.
+LEGACY_SHARED_SERVICES = os.getenv("LEGACY_SHARED_SERVICES") == "1"
+if LEGACY_SHARED_SERVICES and CLIENT_ID != OWNER_CLIENT_ID:
+    sys.exit("LEGACY_SHARED_SERVICES=1 is for the owner's site only, until its step 3c cutover")
+
+
+def login(key):
+    """A login value from the site .env; missing means the client was never provisioned, so stop rather than guess."""
+    value = os.getenv(key, "")
+    if not value:
+        sys.exit(f"{key} is not set: run deploy/provision.py {CLIENT_ID} and pass its site .env to this service")
+    return value
+
+
+def postgres_login():
+    if LEGACY_SHARED_SERVICES:
+        return os.getenv("POSTGRES_USER"), os.getenv("POSTGRES_PASSWORD")
+    return login("PG_APP_USER"), login("PG_APP_PASSWORD")
+
+
+def milvus_login():
+    """(user, password); empty for the legacy owner, whose Milvus has no authentication yet."""
+    return ("", "") if LEGACY_SHARED_SERVICES else (login("MILVUS_APP_USER"), login("MILVUS_APP_PASSWORD"))
+
+
+def kafka_login():
+    """Extra Kafka client settings: SCRAM on 9092 for every client, nothing for the legacy owner."""
+    if LEGACY_SHARED_SERVICES:
+        return {}
+    return {"security.protocol": "SASL_PLAINTEXT", "sasl.mechanism": "SCRAM-SHA-512",
+            "sasl.username": login("KAFKA_APP_USER"), "sasl.password": login("KAFKA_APP_PASSWORD")}
+
+
 
 CAMERA_CONFIGURATION_FILE = "src/Camera-Configuration/camera_configuration.json"
 
@@ -123,6 +174,9 @@ MILVUS_HOST = IP_ADDRESS
 # Milvus port
 MILVUS_PORT = "19530"
 
+# Milvus database holding this client's collections; the names inside are the same for every client
+MILVUS_DATABASE = client_name("default")
+
 # Vector metric type and index type
 METRIC_TYPE = "COSINE"
 INDEX_TYPE = "GPU_IVF_FLAT"
@@ -156,10 +210,10 @@ ENROLMENT_MIN_CONFIDENCE = 0.7    # lowest face detection confidence accepted fo
 NUMBER_OF_PICTURES = 3
 
 # API address for dynamic facial dataset collection service
-DYNAMIC_FACE_DATA_COLLECTOR_API = f"http://{IP_ADDRESS}:8000"
+DYNAMIC_FACE_DATA_COLLECTOR_API = "http://dynamic-face-dataset-collector:8000"  # service name: this client's own collector (D-036)
 
 # PostgreSQL Database Name
-POSTGRESQL_DATABASE_NAME = "Face_Recognition_Database"
+POSTGRESQL_DATABASE_NAME = client_name("Face_Recognition_Database")
 
 # Timeout if not getting response from API
 TIMEOUT = 5 * 60
@@ -170,7 +224,7 @@ TIMEOUT = 5 * 60
 # Parameters specific to Database Server Which Connects to Database (REDIS)
 ########################################################################################################################
 # DATABASE Host
-DATABASE_HOST = IP_ADDRESS  # IP of the machine where the database is running
+DATABASE_HOST = "mfr-database-controller"  # service name: this client's own controller, not published on the host (D-036)
 
 # DATABASE port
 DATABASE_PORT = 20001
@@ -190,7 +244,7 @@ POSTGRESQL_HOST = IP_ADDRESS
 POSTGRESQL_PORT = int(os.getenv("POSTGRESQL_PORT", "5432"))
 
 # PostgreSQL Database Name
-POSTGRESQL_DATABASE = "CCTV_Camera_Surveillance"
+POSTGRESQL_DATABASE = client_name("CCTV_Camera_Surveillance")
 
 # If the person is recognized by the same camera within this time threshold, the entry will not be added to the database
 SAME_CAM_TIME_ENTRY_THRESHOLD = 5    # minutes
@@ -201,7 +255,7 @@ SAME_CAM_TIME_ENTRY_THRESHOLD = 5    # minutes
 # Parameters specific to Feedback Server Which Connects to Feedback Message Publisher (CONFLUENT-KAFKA)
 ########################################################################################################################
 # FEEDBACK Host
-FEEDBACK_HOST = IP_ADDRESS  # IP of the machine where the database is running
+FEEDBACK_HOST = "mfr-feedback-controller"  # service name: this client's own controller, not published on the host (D-036)
 
 # FEEDBACK port
 FEEDBACK_PORT = 20012
@@ -234,6 +288,8 @@ SEGMENT_RETENTION_TIME = 5 * 1000  # 5 seconds
 KAFKA_HOST = IP_ADDRESS
 # Kafka port
 KAFKA_PORT = "9092"
+# Topics are <prefix><location>_<point>. A dot ends the prefix: IDs hold none, so one client's prefix never covers another's topics
+KAFKA_TOPIC_PREFIX = "" if LEGACY_SHARED_SERVICES else f"{CLIENT_ID}."  # the owner too after its cutover (D-037)
 
 
 # Display face image server port
