@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.7.0 (2026-11-01)
+
+## What's Changed
+* chore(deploy): restart containers whose published ports die after a reboot by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/82
+* feat: add per-client accounts, sessions and machine tokens to the API (D-039) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/83
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.6.3...v2.7.0
+
 ## v2.6.3 (2026-11-01)
 
 ## What's Changed
