@@ -136,9 +136,24 @@ services:
       retries: 3
       start_period: 30s
 
+  # On-demand page to draw each camera's region of interest (D-035): docker compose --profile roi up -d roi-provisioning,
+  # then open http://localhost:8069. It saves into the camera configuration, so that folder is mounted read-write here
+  # only; it has no login and shows camera feeds, so it listens on this host only. Restart producer-consumer to apply.
+  roi-provisioning:
+    image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-roi:${IMAGE_TAG:-v-beta}
+    profiles: [roi]
+    environment:
+      CAM_USERNAME: ${CAM_USERNAME}
+      CAM_PASSWORD: ${CAM_PASSWORD}
+    volumes:
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration
+    ports:
+      - "127.0.0.1:${ROI_PORT:-8069}:8069"
+
   # Recognition display for this host (Raspberry Pis run the same image with its default ports); versioned in the Kafka-WebApp repository
   kafka-webapp:
-    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.1.2@sha256:1e478d2eb0aff5634a4f22461f6380853d4210db86e35778e84ef6478819b950
+    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.3.0@sha256:83cd06eb30d041c9723b19335da5049b357126e210378033afd12abe5e8819b6
     restart: unless-stopped
     env_file:
       - path: ./master.env

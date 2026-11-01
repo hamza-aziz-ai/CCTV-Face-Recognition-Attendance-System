@@ -48,3 +48,8 @@ services:
       dockerfile: display-image.Dockerfile
     volumes:
       - ./src:/Multi-Person-Face-Recognition/src
+
+  roi-provisioning:
+    build:
+      context: .
+      dockerfile: roi.Dockerfile

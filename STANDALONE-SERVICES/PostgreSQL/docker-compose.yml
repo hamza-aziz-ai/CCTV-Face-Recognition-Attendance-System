@@ -1,5 +1,5 @@
 # PostgreSQL shared by every client stack on this host; each client keeps its own databases here (D-036).
-# It ran inside the main stack before. The data folder is the same one (D-020), so moving it out moves no data.
+# It ran inside the main stack before. The named volume is the same one, so moving it out moves no data (D-038).
 services:
   postgresql:
     container_name: cctv-postgresql
@@ -8,8 +8,9 @@ services:
     ports:
       - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
-      # PostgreSQL 18 images keep data under /var/lib/postgresql/18; a new host folder leaves the PostgreSQL 12 data untouched (D-020)
-      - /workspace/database/postgresql18/cctv-face-recognition:/var/lib/postgresql
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/18 (D-020). A named volume: on Docker Desktop a bind
+      # path like /workspace/... lives in the VM and is gone after a restart (D-038)
+      - postgres-data:/var/lib/postgresql
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -18,3 +19,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+
+volumes:
+  postgres-data:
+    name: cctv-postgres-data
