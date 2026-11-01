@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.5.0 (2026-11-01)
+
+## What's Changed
+* docs: add the merged PRs and today's incidents to TIMELINES.md by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/75
+* feat: turn on per-client logins on the shared services, with the cutover runbook (D-036 step 3c) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/68
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.4.0...v2.5.0
+
 ## v2.4.0 (2026-11-01)
 
 ## What's Changed
