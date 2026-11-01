@@ -10,17 +10,18 @@ End-to-end test passed on a real RTSP camera: name and portrait on the display, 
 
 State: Claude Code Review is paused, at the owner's choice (`gh workflow enable claude-code-review.yml`). Small docs, Markdown and submodule chores go straight to `main` with `[skip ci]`, subject `docs:` or `chore:`. `kafka-ui` runs with `--profile ui`, on its read-only login. Rollback compose files are in `C:\deploy\hostollback-compose`, and the backup in `C:\deployackup`.
 
+Late update: v2.8.0 is deployed and D-036 step 4 is done (D-039, D-040). Accounts, sessions and machine tokens are in the API, and `?api_key=` is gone. `cctv-proxy` serves https://owner.localhost on 443, and the API, display and portrait ports are on 127.0.0.1 only. It was started by hand from the release folder with `PROXY_DIR` set, and `start_standalone_services.sh` starts it from now on. The watcher restarts healthy containers whose published ports die after a reboot (#82). The owner must trust the proxy's CA once; the commands are in the README. Nothing starts after a reboot until someone signs in to Windows. Raspberry Pi displays would need a route for portraits.
+
 Agreed order (owner, 2026-11-01). This replaces the list below.
 
 1. Accuracy check on a real camera in good light: scores were 0.55 against a 0.5 threshold. Needs the owner.
-2. D-036 step 4: accounts, sessions, machine tokens and per-client HTTPS.
-3. D-036 step 5: tiers and the two-client rehearsal.
-4. Live view (8b).
-5. Enrolment API (8c), then the Android app (8d).
-6. Deletion, isolation and recovery tests (8e).
-7. Compile the app code with Nuitka: app images still hold readable Python.
-8. Signed setup codes, required before the first outside client (Face-Dataset-Collector D-014).
-9. Later: ERP test with a real address, PTZ merge, DeepStream tier, Jetson arm64 plan. The Orin Nano has no NVENC, so annotated live view draws boxes in the viewer.
+2. D-036 step 5: tiers and the two-client rehearsal.
+3. Live view (8b).
+4. Enrolment API (8c), then the Android app (8d).
+5. Deletion, isolation and recovery tests (8e).
+6. Compile the app code with Nuitka: app images still hold readable Python.
+7. Signed setup codes, required before the first outside client (Face-Dataset-Collector D-014).
+8. Later: ERP test with a real address, PTZ merge, DeepStream tier, Jetson arm64 plan. The Orin Nano has no NVENC, so annotated live view draws boxes in the viewer.
 
 Dated: delete the old topics `maingate_entry` and `maingate_exit` after 2026-11-08.
 
