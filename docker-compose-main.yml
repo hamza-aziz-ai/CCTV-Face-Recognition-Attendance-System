@@ -1,10 +1,12 @@
-# Fixed project name: hosts run this file from a release bundle whose folder changes with each release (D-033)
+# Fixed project name: hosts run this file from a release bundle whose folder changes with each release (D-033).
+# Other clients on a central host run it as their own project, -p cctv-<client> (D-036). So no service has a fixed
+# container name, services reach each other by service name on the project's own network, data paths are relative
+# to the client's site folder, and the few published ports come from that site's .env.
 name: cctv
 
 services:
   mfr-cctv-producer-consumer:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-producer-consumer:${IMAGE_TAG:-v-beta}
-    container_name: cctv-face-recognition-producer-consumer
     restart: unless-stopped
     environment:
       CAM_USERNAME: ${CAM_USERNAME}
@@ -13,11 +15,9 @@ services:
       # Only config and data: the code comes from the image. Enrolment scripts that need the datasets run in their own container
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
-      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System/:/Multi-Person-Face-Recognition/logs/
-      - /workspace/CCTV-FACE-RECOGNITION-ATTENDANCE-SYSTEM/Recognition_Frames/:/Multi-Person-Face-Recognition/Recognition_Frames/
+      - ./logs:/Multi-Person-Face-Recognition/logs
+      - ./Recognition_Frames:/Multi-Person-Face-Recognition/Recognition_Frames
     depends_on:
-      postgresql-face-recognition:
-        condition: service_healthy
       mfr-database-controller:
         condition: service_healthy
       mfr-feedback-controller:
@@ -26,27 +26,8 @@ services:
         condition: service_healthy
     stop_grace_period: 30s
 
-  postgresql-face-recognition:
-    image: postgres:18.6-trixie
-    container_name: cctv-face-recognition-postgresql-database
-    restart: unless-stopped
-    ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
-    volumes:
-      # PostgreSQL 18 images keep data under /var/lib/postgresql/18; a new host folder leaves the PostgreSQL 12 data untouched (D-020)
-      - /workspace/database/postgresql18/cctv-face-recognition:/var/lib/postgresql
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-
   mfr-database-controller:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-database-controller:${IMAGE_TAG:-v-beta}
-    container_name: cctv-face-recognition-database-controller
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -55,12 +36,7 @@ services:
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
-      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
-    ports:
-      - "20001:20001"
-    depends_on:
-      postgresql-face-recognition:
-          condition: service_healthy
+      - ./logs:/Multi-Person-Face-Recognition/logs
     healthcheck:
       test: ["CMD", "./src/database_server/healthcheck_db_controller.sh"]
       interval: 10s
@@ -70,14 +46,11 @@ services:
 
   mfr-feedback-controller:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-feedback-controller:${IMAGE_TAG:-v-beta}
-    container_name: cctv-face-recognition-feedback-controller
     restart: unless-stopped
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
-      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
-    ports:
-      - "20012:20012"
+      - ./logs:/Multi-Person-Face-Recognition/logs
     healthcheck:
       test: [ "CMD", "./src/feedback_server/healthcheck_feedback_controller.sh" ]
       interval: 10s
@@ -87,7 +60,6 @@ services:
 
   mfr-api-service:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-api:${IMAGE_TAG:-v-beta}
-    container_name: cctv-face-recognition-api
     restart: unless-stopped
     environment:
       API_KEY: ${API_KEY}
@@ -97,14 +69,12 @@ services:
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
-      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
+      - ./logs:/Multi-Person-Face-Recognition/logs
     ports:
-      - "9090:8000"
+      - "${API_PORT:-9090}:8000"
     # database-controller creates CCTV_Camera_Surveillance, which the API reads
     depends_on:
       mfr-database-controller:
-        condition: service_healthy
-      postgresql-face-recognition:
         condition: service_healthy
     healthcheck:
       test: [ "CMD", "./src/api/healthcheck_api.sh" ]
@@ -115,18 +85,15 @@ services:
 
   dynamic-face-dataset-collector:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-dynamic-face-dataset-collector:${IMAGE_TAG:-v-beta}
-    container_name: cctv-face-recognition-dynamic-face-dataset-collector
     restart: unless-stopped
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
-      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
+      - ./logs:/Multi-Person-Face-Recognition/logs
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "8000:8000"
     init: true
     healthcheck:
       test: [ "CMD", "./src/dynamic_face_data_collector/healthcheck.sh" ]
@@ -134,19 +101,14 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
-    # It creates Face_Recognition_Database at start
-    depends_on:
-      postgresql-face-recognition:
-        condition: service_healthy
 
   automate-milvus-update:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-automate-milvus-update:${IMAGE_TAG:-v-beta}
-    container_name: cctv-face-recognition-automate-milvus-update
     restart: unless-stopped
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
-      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
+      - ./logs:/Multi-Person-Face-Recognition/logs
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
@@ -158,14 +120,14 @@ services:
 
   display-image-server:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-front-face-image-display:${IMAGE_TAG:-v-beta}
-    container_name: cctv-face-recognition-front-face-image-display
     restart: unless-stopped
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./DISPLAY-FACE-DATASET:/Multi-Person-Face-Recognition/DISPLAY-FACE-DATASET
-      - /workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/CCTV-Face-Attendance-System:/Multi-Person-Face-Recognition/logs
+      - ./logs:/Multi-Person-Face-Recognition/logs
     ports:
-      - "20013:20013"
+      # Displays on other machines fetch portraits here
+      - "${DISPLAY_IMAGE_PORT:-20013}:20013"
     init: true
     healthcheck:
       test: [ "CMD", "./src/fetch_face_image_server/healthcheck_display_image_server.sh" ]
@@ -174,10 +136,24 @@ services:
       retries: 3
       start_period: 30s
 
+  # On-demand page to draw each camera's region of interest (D-035): docker compose --profile roi up -d roi-provisioning,
+  # then open http://localhost:8069. It saves into the camera configuration, so that folder is mounted read-write here
+  # only; it has no login and shows camera feeds, so it listens on this host only. Restart producer-consumer to apply.
+  roi-provisioning:
+    image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-roi:${IMAGE_TAG:-v-beta}
+    profiles: [roi]
+    environment:
+      CAM_USERNAME: ${CAM_USERNAME}
+      CAM_PASSWORD: ${CAM_PASSWORD}
+    volumes:
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration
+    ports:
+      - "127.0.0.1:${ROI_PORT:-8069}:8069"
+
   # Recognition display for this host (Raspberry Pis run the same image with its default ports); versioned in the Kafka-WebApp repository
   kafka-webapp:
-    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.1.2@sha256:1e478d2eb0aff5634a4f22461f6380853d4210db86e35778e84ef6478819b950
-    container_name: cctv-face-recognition-kafka-webapp
+    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.3.0@sha256:83cd06eb30d041c9723b19335da5049b357126e210378033afd12abe5e8819b6
     restart: unless-stopped
     env_file:
       - path: ./master.env
@@ -185,10 +161,16 @@ services:
     environment:
       # This host has no SSH, Redis or liveness service, so the client waits only for the services that run here
       HOST_CHECK_PORT: 9092
-      PROJECT_SERVICES_PORT: 6385,19000,19001,19530,9092,20001,20012,20013
+      # One InsightFace-REST container (D-032): nothing listens on 19001, so checking it kept the display waiting (#67)
+      PROJECT_SERVICES_PORT: 6385,19000,19530,9092,${DISPLAY_IMAGE_PORT:-20013}
+      # Newer Kafka-WebApp images check these instead, so failures of the internal services, which publish no host port,
+      # still show on the display; older images ignore it
+      PROJECT_SERVICES: 6385,19000,19530,9092,mfr-database-controller:20001,mfr-feedback-controller:20012,display-image-server:20013
+      # This client's own portrait server, by service name (Kafka-WebApp reads it from v0.2; older images use IP_ADDRESS:20013)
+      IMAGE_SERVER_ADDRESS: http://display-image-server:20013/post_images
     ports:
       # 9090 is the reporting API on this host
-      - "9095:9090"
+      - "${DISPLAY_PORT:-9095}:9090"
     depends_on:
       display-image-server:
         condition: service_healthy

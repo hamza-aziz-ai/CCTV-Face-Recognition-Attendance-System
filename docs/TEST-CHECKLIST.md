@@ -15,6 +15,8 @@ A change is done when these pass and the real output is pasted in the PR. CI run
 
 Each of the 8 images builds, `pip check` is clean, `cv2` and `numpy` import, entrypoints and health checks exist, and no `master.env`, `.env`, `.git` or `src/Camera-Configuration` is inside.
 
+In `producer-consumer`, `python3 src/util/client_checks.py` prints `clients ok (bad IDs refused, owner names kept, two clients share no name, Milvus bound to the client's database)` (D-036).
+
 ## Client isolation (CI job `isolation`, on PRs that touch provisioning or the shared services)
 
 `python -I deploy/test_isolation.py` prints `isolation ok (2 clients: own access on 4 services, cross-client and admin actions refused, Kafka plaintext unreachable, reruns and interruptions safe, lost password stops, Milvus root replaced, holds after restart)` (D-037). It runs throwaway copies of PostgreSQL, Kafka, Milvus and MinIO and never touches the live ones.
