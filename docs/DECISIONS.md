@@ -513,6 +513,19 @@ Why: It removes the clone, its history and the owner's credentials from hosts wi
 Trade-off: Not 3: the images still hold readable Python, which a host administrator can copy out until the images are compiled (step 4), and compiled code is still our logic on their machine. The bundle's compose files and ops scripts are ours too; the owner accepts them on client hosts. The InsightFace pretrained models are for non-commercial research per the InsightFace README: rights must be settled before a paid client deployment. Client biometric data must stay out of this repository; a dataset store on the same host is not a backup.
 Revisit if: the watcher and credential PRs land (record them here), compiled images exist (new package names, so client tokens cannot pull the old Python images), or a client needs the logic off their premises (option 3).
 
+## D-034: The watcher deploys bundles from the registry, with no git and no GitHub login
+Date: 2026-10-31   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
+Context: Second step of D-033. `deploy/watch.py` found releases with `gh release list`, fetched with the owner's `gh` login and deployed with `git checkout` in a full clone; it also nudged automerge with `gh`. Client hosts must have neither the repository nor that login.
+Options:
+
+1. a GitHub Release asset per release (needs a GitHub API token on the host)
+2. a containerised watcher with the Docker socket
+3. the host watcher pulls the bundle image's `:stable` tag with the registry login it already needs for the app images
+
+Chosen: 3. The watcher reads the release from the bundle's version label, copies the bundle out with `docker create` and `docker cp` without running it, refuses it unless `release-manifest.json` is for that release and pins only our images by digest, stages it atomically in `releases/<tag>`, and runs compose from it with `-p cctv --project-directory site`. Smoke test, 90-second stability check, rollback, failed-release suppression and the stopped-stack rule are kept. The watcher never updates itself: the owner installs `watch.py` from a bundle. A registry or site-config problem stops deploys with one notification, not one every poll. The automerge nudge moved to `deploy/nudge_automerge.py`, scheduled only on the owner's laptop.
+Why: One credential, for the registry, serves both the images and the bundle; no API token and no socket mount. Option 2 needs bind sources as host paths from inside a container, which is fragile on Docker Desktop. A watcher that replaced itself could disable every later deploy and rollback.
+Trade-off: Python 3 is needed on the host. Trust moved from "the tag is on main" to "only release.yml can move :stable", which holds while only the workflow and the owner can write the packages. The standalone services' scripts still assume the repository layout; switching this host (next PR) has to account for that. Until then, on this host: once the old watcher deploys a release with this change, its checkout replaces the scheduled watch.py with this one, which finds no site folder and stops deploying with one message, so the switch should follow straight after.
+Revisit if: a host cannot have Python, or watcher updates become frequent enough to need a safe self-update (previous version kept, atomic switch, recovery tests).
 ## D-035: The ROI page draws polygons into the camera configuration
 Date: 2026-10-31   Model: Claude Opus 5.5
 Context: `Custom-ROI-Provisioning/app.py` could not start: it imported `IP_CAMS`, `create_mask` and `roi_coordinates`, which no longer exist, and it saved a rectangle by rewriting `src/parameters.py` inside the image. The producer has since moved to per-camera polygons in `camera_configuration.json` (`masking-coordinates`, applied by `crop_and_mask_roi` to the full-resolution frame). The owner chose repair over deletion.

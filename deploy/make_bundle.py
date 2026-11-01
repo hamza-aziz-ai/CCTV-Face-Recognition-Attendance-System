@@ -33,6 +33,8 @@ FILES = [
     "master.env.example",
     ".env.example",
     "src/Camera-Configuration/camera_configuration.example.json",
+    # Deployment tooling, no app logic: installed by hand on a host, never replaced by a release (D-033)
+    "deploy/watch.py",
 ]
 APP_IMAGE = re.compile(r"(ghcr\.io/hamza-aziz-ai/cctv-face-recognition-[a-z-]+):\$\{IMAGE_TAG:-v-beta\}")
 SCHEMA = 1
@@ -104,7 +106,7 @@ def demo(keep=None):
         assert "INSIGHTFACE_IMAGE='ghcr.io/hamza-aziz-ai/cctv-face-recognition-insightface-rest@sha256:" in \
             (Path(out) / "STANDALONE-SERVICES/standalone-services.env").read_text(encoding="utf-8")
         assert manifest["release"] == tag and len(manifest["images"]) == 9
-        assert not [p for p in Path(out).rglob("*.py")], "no Python in the bundle"
+        assert [p.relative_to(out).as_posix() for p in Path(out).rglob("*.py")] == ["deploy/watch.py"], "no app code"
         (Path(out) / "src/main.py").write_text("x")
         try:
             check(out)

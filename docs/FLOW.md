@@ -38,4 +38,4 @@ Kafka topic <location>_<point>
 - Reports: client -> `src/api/app.py` -> PostgreSQL.
 - ERP: `src/api/app.py` scheduler, every minute -> ERP.
 - Nightly, 01:00: `milvus_updater.py` -> PostgreSQL for new crops -> InsightFace-REST for embeddings -> Milvus staging, and the embeddings pickle.
-- Release: PR -> `ci` -> `automerge` -> `release` -> ghcr.io images, tag, GitHub Release -> `deploy/watch.py` every 10 minutes -> `compose up --pull missing --wait` -> smoke test on `:9090/docs`.
+- Release: PR -> `ci` -> `automerge` -> `release` -> ghcr.io images, deploy bundle, tag, GitHub Release, bundle `:stable` -> `watch.py` every 10 minutes pulls `:stable` and stages the bundle -> `compose up --pull missing --wait` from the bundle with `site\` -> smoke test on `:9090/docs`.
