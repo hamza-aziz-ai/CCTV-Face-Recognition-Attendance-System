@@ -72,7 +72,7 @@ Broken or risky:
 - This machine is both the dev and the deployment server (from 2026-10-30): Windows 11, Docker Desktop, RTX 4050 Laptop 6 GB. The repo defaults are generic and fit it: every GPU service on GPU 0, one InsightFace container with batch sizes 8 and 16 (D-032). Speed and memory under real camera load are not measured.
   - InsightFace TAG `v0.9.5.0` is built by `deploy_trt_multi-gpu.sh` itself. Keep the old `v0.9.0.0` image until the switch is proven, for a rollback.
   - Milvus `v2.5.1-gpu` in the repo; `v3.0.0` is the local image.
-  - Compose `/workspace/...` paths land inside the Docker Desktop VM.
+  - Compose paths like `/workspace/...` land inside the Docker Desktop VM and are emptied by a restart, so stateful services use named volumes (D-038).
   - No TensorRT engines are built yet. The stack has not been started here.
 - `src/main.py` deletes Kafka topics at startup. Pending feedback may be lost on restart (unverified).
 - `src/automatic-vector-db-updation/milvus_updater.py` deletes old vectors, swallows insert failures and still marks the rows processed. This loses vectors silently.

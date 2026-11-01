@@ -598,3 +598,17 @@ Trade-off:
 - The CPU Milvus in the test proves authorisation only, not GPU indexes.
 - After the cutover, releases before 3b are no longer valid rollback targets.
 Revisit if: real client traffic crosses networks (SASL_SSL and TLS for Postgres and Milvus), anything other than the broker must reach its plaintext listeners (named SCRAM admin instead of ANONYMOUS), or individual displays must be revoked (one Kafka login per display).
+
+## D-038: Stateful services use named volumes
+Date: 2026-11-01   Model: Claude Opus 5.5
+Context: Postgres and Milvus (with its etcd and MinIO) used bind mounts to Linux paths. On Docker Desktop those paths are inside the VM and are emptied by a restart, which lost their data on 2026-11-01 (docs/bugs/2026-11-01-data-lost-on-restart.md). The owner directed mounted volumes for persistent storage.
+Options:
+
+1. keep the Linux paths, and run a restore after every restart
+2. bind mount Windows folders
+3. named Docker volumes
+
+Chosen: 3. PostgreSQL uses `cctv-postgres-data`; Milvus uses `milvus-data`, `milvus-etcd` and `milvus-minio`. Each has an explicit `name`, so the data stays with the service if its compose project changes (#62 moves PostgreSQL to a shared service). `DOCKER_VOLUME_DIRECTORY` is removed.
+Why: named volumes work the same on Docker Desktop and Linux and persist on Docker's own disk; Kafka's named volume survived this same restart (D-028). Option 2 depends on the host's folder layout, and POSIX ownership and fsync behave poorly on Windows mounts, which databases rely on.
+Trade-off: the data is inside Docker's disk, so copying it needs `docker run` or `pg_dump`, not a file manager, and removing Docker Desktop's data or running `docker volume prune` deletes it. Off-host backups are still missing (D-036).
+Revisit if: a host needs its data on a specific disk (a bind mount or a volume driver).
