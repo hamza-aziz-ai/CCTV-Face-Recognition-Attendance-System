@@ -181,7 +181,7 @@ sequenceDiagram
 2. A payload with an empty field is refused with 400.
 3. Otherwise the controller schedules the insert as a background task and answers `{"status": "OK"}` at once. The caller never learns whether the insert worked.
 4. For each record the task decodes the frame, draws the box, ID and score on it, reduces an `http` camera address to its host name, and takes the location as the part of the camera name before the first underscore.
-5. It looks for a record of the same person, location and camera in the last `SAME_CAM_TIME_ENTRY_THRESHOLD = 5` minutes.
+5. It takes a lock on the person until the commit, so parallel batches cannot both pass the next check, then looks for a record of the same person, location and camera in the last `SAME_CAM_TIME_ENTRY_THRESHOLD = 5` minutes.
 6. A recent record means a duplicate: this record is skipped.
 7. No recent record: the insert goes ahead.
 8. The task creates the partition `recognition_results_<year>` (by date range) and its child `recognition_results_<year>_<location>` (by list) if they are missing.
