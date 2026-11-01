@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.6.2 (2026-11-01)
+
+## What's Changed
+* fix: save one record when a person's batches run in parallel by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/80
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.6.1...v2.6.2
+
 ## v2.6.1 (2026-11-01)
 
 ## What's Changed
