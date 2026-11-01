@@ -7,7 +7,7 @@ PY=$(command -v python3 || command -v python)
 T=$(mktemp -d)
 mkdir -p "$T/bin" "$T/site" "$T/host/releases"
 for cmd in docker docker-compose; do
-  printf '#!/bin/bash\necho "%s [$(pwd)] $*" >> "%s/calls.log"\n[ "$1" = image ] && exit 0\nexit 0\n' "$cmd" "$T" > "$T/bin/$cmd"
+  printf '#!/bin/bash\necho "%s [$(pwd)] $*" >> "%s/calls.log"\n[ "$1" = image ] && exit 0\n[ "$1" = ps ] && case "$*" in *kafka-ui*) ;; *) echo abc123 ;; esac\nexit 0\n' "$cmd" "$T" > "$T/bin/$cmd"
   chmod +x "$T/bin/$cmd"
 done
 export PATH="$T/bin:$PATH"
@@ -24,6 +24,7 @@ check "bundle's standalone-services.env not edited" "cmp -s '$T/env.before' '$T/
 check "Kafka and Milvus get the site master.env last" "[ \$(grep -c -- 'up -d' '$T/calls.log') -ge 3 ] && grep 'Confluent-Kafka' '$T/calls.log' | grep -q -- \"--env-file $T/site/master.env up\""
 check "dataset store gets the site .env" "grep 'Dataset-Store' '$T/calls.log' | grep -q -- \"--env-file $T/site/.env up\""
 check "images pulled by digest get their tags" "grep -q 'docker .* tag milvusdb/milvus@sha256:[0-9a-f]* milvusdb/milvus:' '$T/calls.log'"
+check "digest name dropped only while a container uses the image" "grep -q 'docker .* rmi -f milvusdb/milvus@sha256:' '$T/calls.log' && ! grep -q 'rmi -f ghcr.io/kafbat' '$T/calls.log'"
 check "models folder in the site, with models.json" "[ -f '$T/site/insightface-models/models.json' ]"
 check "InsightFace runs the bundle's pinned digest, models from the site" "grep 'docker \[.*\] run ' '$T/calls.log' | grep -q 'insightface-rest@sha256:' && grep 'docker \[.*\] run ' '$T/calls.log' | grep -q 'insightface-models:/models'"
 check "no models folder created inside the bundle" "[ ! -d '$T/host/releases/v1/STANDALONE-SERVICES/InsightFace-REST/models/onnx' ] && [ \$(ls '$T/host/releases/v1/STANDALONE-SERVICES/InsightFace-REST/models' | wc -l) -eq 1 ]"
