@@ -17,6 +17,7 @@ Each client is its own compose project: cctv for the owner, cctv-<client> for th
 rollback or stopped stack never touches another's. Only the main compose stack is managed; the standalone services
 (InsightFace-REST, Milvus, Kafka, PostgreSQL) must already run.
 """
+import http.client
 import json
 import os
 import re
@@ -24,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -157,6 +159,26 @@ def stable(site):
         raise RuntimeError(f"not stable after {STABLE_SECONDS}s: {', '.join(down.split())}")
 
 
+def port_answers(port):
+    """Whether something behind a published port speaks HTTP; any status counts, because the page may not exist."""
+    try:
+        with urllib.request.urlopen(f"http://localhost:{port}/", timeout=5):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except (OSError, http.client.HTTPException):
+        return False
+
+
+def heal_ports(site):
+    """After a reboot Docker Desktop can leave a healthy container with a dead published port, so restart that container. Only healthy ones: a container still starting or failing is not a port problem."""
+    lines = project_containers(site, "--filter", "health=healthy", fmt="{{.ID}} {{.Ports}}").splitlines()
+    dead = [line.split()[0] for line in lines if not all(port_answers(p) for p in set(re.findall(r":(\d+)->", line)))]
+    if dead:
+        run("docker", "restart", *dead)
+        log(f"[{site.name}] Restarted {len(dead)} healthy containers whose published ports were dead")
+
+
 def tag_images(tag):
     """Give a release's images their tag and drop their digest name, which Docker Desktop lists as a <none> row. Runs
     every poll, so an image that was not running last time is retried. Cosmetic: a failure never fails a deploy."""
@@ -264,6 +286,7 @@ def watch_site(site, tag, ref, enroll=False):
         if tag == state["current"] or tag in state["failed"]:
             save(site, state)
             tag_images(state["current"])
+            heal_ports(site)
             return 0
         # The owner stopped the stack on purpose; never start it behind their back.
         if state["current"] and not project_containers(site, "--filter", "status=running"):
