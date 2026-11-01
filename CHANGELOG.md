@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.6.0 (2026-11-01)
+
+## What's Changed
+* chore: bump the Kafka-WebApp submodule to c1c6550 by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/76
+* feat(deploy): tag images pulled by digest by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/77
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.5.0...v2.6.0
+
 ## v2.5.0 (2026-11-01)
 
 ## What's Changed
