@@ -539,3 +539,62 @@ Chosen: 3. The page lists the cameras from the configuration, opens each one wit
 Why: The configuration is already the one place the producer reads regions from, so the page writes exactly what is used; editing source files from a container cannot work with images (D-001) and breaks with compiled code (step 4).
 Trade-off: The producer reads regions at start, so a saved region applies after a restart of `producer-consumer`. No login: anyone on the host can change regions while the page runs. The desktop tool stays for use without Docker.
 Revisit if: regions must apply without a restart, or the page must be reachable from another machine (add a login first).
+## D-036: Client separation: shared infrastructure, one app stack per client, local logins
+Date: 2026-10-31   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
+Context: One codebase must serve a dedicated deployment on a client's own host and a central deployment for several clients on ours, with a standard tier and an optional DeepStream tier (owner, 2026-10-31). Today everything is single-site: fixed container names, host ports and compose project; one Postgres role for all services; Milvus with its default root login; Kafka without authentication; one shared API key in the URL; display and collector endpoints with no login; databases and Kafka topics created at runtime by the app. This host has one 6 GB GPU. This is a rehearsal; nothing is sold.
+Options:
+
+1. separate everything per client, including InsightFace and Milvus
+2. share the infrastructure and run a separate app stack per client
+3. one app process serving all clients, with a tenant ID on every query
+
+Chosen: 2. Shared per host: InsightFace (stateless, the GPU), Milvus, Postgres, Kafka, the MinIO dataset store. Per client: an app stack from the same images and bundle, its own site folder (configuration, logs, photos, vectors), and inside the shared servers its own Milvus database and login (collection names inside unchanged, D-030 alias included), its own Postgres databases and a role that reaches nothing else, its own Kafka topic and consumer-group prefix enforced by SCRAM logins and deny-by-default ACLs, its own MinIO bucket and access key. A dedicated deployment is the infrastructure plus one client stack.
+- Identity: a required, immutable, validated `CLIENT_ID` per stack; missing configuration fails, never falls back; today's names survive only through an explicit mapping for the owner's site.
+- Provisioning: a provisioning command with admin credentials that never enter app containers creates databases, logins, grants, buckets, topics and partitions; the app only checks they exist at start and fails clearly if not. Exception: the face-vector publisher (D-030) may create numbered collections and switch the alias inside its own Milvus database only.
+- Logins: local accounts per client in its Postgres; roles `client_admin`, `enrolment_operator`, `viewer`. Passwords hashed with stdlib `hashlib.scrypt` (OWASP parameters, explicit `maxmem`, unique salts, constant-time comparison). Random session tokens stored only as hashes; secure host-only cookies over HTTPS, CSRF protection, expiry, revocation, login throttling, bounded password length. Machines (ERP pulls, collector, displays, Kafka-WebApp) get scoped tokens; the shared API key leaves the URL. Owner support uses explicit per-client accounts; no login bypasses clients.
+- Tiers: central clients' tier is owner-set configuration the client cannot edit, checked server-side, selecting exactly one recognition image; bundles reference only enabled images. Dedicated clients are gated by which packages their pull token can download, which cannot revoke an image already on their host.
+- Biometric data: each client's photos and vectors stay in its folders and bucket, never in our repository, CI or images. Each Milvus version records the dataset snapshot it was built from; bucket versioning alone is neither a snapshot nor a backup. The owner's own test photos stay as DVC data for development only.
+Why: settings are global per process today, so a process serving one client needs no tenant filtering, and it fits one GPU. Option 3 needs a tenant filter on every query, queue and cache, where one miss exposes another client's biometric data; option 1 does not fit a 6 GB GPU.
+Trade-off: clients still share administrators, failures and GPU capacity; separation is enforced by permissions, not hardware, with no performance guarantee. Unproven until steps 3 and 5: Milvus per-database permission enforcement in practice, and how many clients one shared GPU carries.
+Plan, five PRs, each with its tests:
+
+1. names and configuration: required `CLIENT_ID`, owner mapping, per-client databases, topics and consumer groups (missing or invalid configuration refused; identical camera or person IDs in two clients never collide)
+2. deployment layout: no fixed container names, separate compose projects, per-client data and log folders, networks, watcher state and locks, image cleanup that keeps every client's rollback images or none on central hosts (A's stop, upgrade or rollback leaves B running with its rollback images)
+3. provisioning and credentials: restricted logins in Postgres, Milvus, Kafka, MinIO, publisher exception (A's credentials refused on all four for B's data; publishing succeeds with client-only credentials)
+4. accounts and protected callers: HTTPS hostnames per client behind a reverse proxy (secure cookies need it), logins, roles, sessions, machine tokens, protection on the API, feedback intake and Kafka-WebApp pages and WebSockets (role matrix, cross-client sessions, login bypass, CSRF, throttling, revocation)
+5. tiers and recovery: tier selection, then a two-client synthetic rehearsal: snapshot, publish, restore one client without touching the other, remove a client
+
+Enrolment (8c), the live view (8b), the Android app (8d) and deletion (8e) build on these boundaries.
+Revisit if: a real client is signed. Then also: model licences; DPDP Act lawful basis, notices, retention and erasure, breach notification, children's data and a processor agreement for central mode; an audit log of views, enrolments and deletions; off-host backups with restore tests; encryption between hosts; credential rotation; MFA or SSO through OIDC where required.
+
+## D-037: Per-client logins on the shared services, and how they are switched on
+Date: 2026-10-31   Model: Claude Opus 5.5 with Codex GPT-6.1 Sol (council)
+Context: D-036 step 3 gives each client logins that reach only its own data in PostgreSQL, Milvus, Kafka and the MinIO dataset store. Today the app uses the PostgreSQL superuser, Milvus has no authentication (`root:Milvus` in the code), Kafka is PLAINTEXT on 9092 for app producers and displays, and the dataset store has only its root login. D-036 left one point unproven: whether Milvus enforces per-database permissions. Throwaway spikes on 2026-10-31 showed it does on 3.0.5: a user granted the privilege groups `DatabaseReadWrite`, `DatabaseAdmin` and `CollectionAdmin` on its own database could create, insert, alias, query and drop there. The same user was refused on other databases and on admin actions. Kafka SCRAM users with prefixed ACLs were likewise confined to their own topics and groups.
+Options:
+
+1. one admin login per service, shared by every client stack, with isolation by names only
+2. per-client logins created at runtime by the app
+3. per-client logins created by a provisioning command that holds the admin rights; the app only uses its own
+
+Chosen: 3.
+- Provisioning: `deploy/provision.py` runs on the host.
+  - Clients: it creates, for each one, a Postgres role owning the client's two databases, with `CONNECT` revoked from `PUBLIC`. It also creates a Milvus user and role over the client's database only, Kafka users `<c>_app` (Write and Describe) and `<c>_display` (Read on topics and groups) on the prefix `<c>.`, and a MinIO bucket `<c>-enrolment` with an access key whose policy covers that bucket only.
+  - Passwords: they are generated once and saved atomically to the client's site `.env` before any service is touched, and reruns reuse them. An account whose password is no longer saved stops provisioning instead of being reset.
+  - Milvus root: `--init-milvus-root` replaces root's default password, saving the new one first.
+- Shared settings: the Kafka listener and authorizer settings and the Milvus `user.yaml` live in `STANDALONE-SERVICES/auth/`. The production compose files and `deploy/test_isolation.py` both read them.
+- Kafka: the plaintext listeners (inter-broker, controller) bind to the broker's loopback. `User:ANONYMOUS` is the superuser on every listener, but only tools inside the broker container reach those listeners. All other traffic uses SCRAM on 9092.
+- Kafka add-ons: Schema Registry, Connect, ksqlDB, REST Proxy and Flink go at the cutover. REST Proxy and Connect were published, unauthenticated routes through the internal listener to every topic, and the app uses none of them.
+- Owner topics: the owner's topics become `owner.*` at the cutover, so every client is covered by the same prefix rules. Owner database and collection names stay.
+- Rollout in three PRs:
+  1. 3a: provisioning and the isolation test, with no runtime effect.
+  2. 3b: the app and Kafka-WebApp use the per-client logins and stop creating databases and topics themselves. `LEGACY_SHARED_SERVICES=1` keeps the owner on today's behaviour until the cutover, honoured only with `CLIENT_ID=owner`. The watcher is paused before 3b merges.
+  3. 3c: a manual cutover. Turn on auth, move the owner's app tables, partitions and sequences to `owner_app` one by one (never `REASSIGN OWNED`, which also moves databases and tablespaces), switch the producers and displays together, deploy, verify, then resume the watcher.
+
+Why: only option 3 keeps admin rights out of every client stack, so a stack, or anyone holding its `.env`, cannot reach another client's data; option 1 relies on names, which nothing enforces. Option 2 needs admin rights in the app. Generating the passwords before touching any service, and refusing to reset an unknown one, makes a failed or interrupted run safe to repeat.
+Trade-off:
+- Kafka encryption: SASL_PLAINTEXT authenticates but does not encrypt.
+- Passwords in argv: they appear briefly on command lines inside the Kafka and MinIO containers.
+- Provisioning is per host, by hand.
+- The CPU Milvus in the test proves authorisation only, not GPU indexes.
+- After the cutover, releases before 3b are no longer valid rollback targets.
+Revisit if: real client traffic crosses networks (SASL_SSL and TLS for Postgres and Milvus), anything other than the broker must reach its plaintext listeners (named SCRAM admin instead of ANONYMOUS), or individual displays must be revoked (one Kafka login per display).
