@@ -15,6 +15,8 @@ A change is done when these pass and the real output is pasted in the PR. CI run
 
 Each of the 8 images builds, `pip check` is clean, `cv2` and `numpy` import, entrypoints and health checks exist, and no `master.env`, `.env`, `.git` or `src/Camera-Configuration` is inside.
 
+In `producer-consumer`, `python3 src/util/client_checks.py` prints `clients ok (bad IDs refused, owner names kept, two clients share no name, Milvus bound to the client's database)` (D-036).
+
 ## Secrets
 
 gitleaks on the branch: `no leaks found`.
