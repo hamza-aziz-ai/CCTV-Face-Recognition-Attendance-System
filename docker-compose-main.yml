@@ -33,8 +33,9 @@ services:
     ports:
       - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
-      # PostgreSQL 18 images keep data under /var/lib/postgresql/18; a new host folder leaves the PostgreSQL 12 data untouched (D-020)
-      - /workspace/database/postgresql18/cctv-face-recognition:/var/lib/postgresql
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/18 (D-020). A named volume: on Docker Desktop a bind
+      # path like /workspace/... lives in the VM and is gone after a restart (D-038)
+      - postgres-data:/var/lib/postgresql
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -192,7 +193,7 @@ services:
 
   # Recognition display for this host (Raspberry Pis run the same image with its default ports); versioned in the Kafka-WebApp repository
   kafka-webapp:
-    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.1.2@sha256:1e478d2eb0aff5634a4f22461f6380853d4210db86e35778e84ef6478819b950
+    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.3.0@sha256:83cd06eb30d041c9723b19335da5049b357126e210378033afd12abe5e8819b6
     container_name: cctv-face-recognition-kafka-webapp
     restart: unless-stopped
     env_file:
@@ -209,3 +210,8 @@ services:
     depends_on:
       display-image-server:
         condition: service_healthy
+
+volumes:
+  # A fixed name, so the data stays with PostgreSQL if it moves to another compose project
+  postgres-data:
+    name: cctv-postgres-data
