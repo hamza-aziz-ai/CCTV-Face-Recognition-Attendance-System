@@ -477,19 +477,19 @@ flowchart TB
         GHCR[("`ghcr.io: app images, bundle by tag and stable`")]:::store
     end
     NUDGE["`(21) Owner's laptop: nudge_automerge.py starts automerge for PRs green over 15 minutes`"]:::step
-    subgraph HOST["`Deployment host, deploy folder`"]
+    subgraph HOST["`Deployment host, deploy folder, one site folder per client`"]
         TICK["`(11) Task Scheduler runs watch.py every 10 minutes`"]:::entry
-        ENR{"`(12) Enrolled and Docker running?`"}:::decision
+        ENR{"`(12) Any client enrolled, and Docker running?`"}:::decision
         IDLE["`Nothing to do`"]:::outcome
-        PULL["`(13) Pull the bundle's stable tag, read the release from its label`"]:::step
-        SITEOK{"`(14) Registry readable and site files present?`"}:::decision
-        PROB["`One message per new problem, deploys stop`"]:::error
-        NEW{"`(15) Release neither current nor failed, stack not stopped?`"}:::decision
+        PULL["`(13) Pull the bundle's stable tag once for every client, read the release from its label`"]:::step
+        SITEOK{"`(14) Registry readable; for this client, folder name equals its CLIENT_ID and site files present?`"}:::decision
+        PROB["`One message per new problem, deploys stop for that client`"]:::error
+        NEW{"`(15) Client enrolled, release neither its current nor failed, its stack not stopped?`"}:::decision
         STAGE{"`(16) Bundle copied into releases: manifest for this release, our images pinned by digest?`"}:::decision
-        UP["`(17) compose -p cctv with the site folder, up from the bundle`"]:::step
-        HEALTH{"`(18) :9090/docs answers within 5 minutes and nothing restarting after 90 s?`"}:::decision
-        DONE["`(19) Record as current, delete bundles and images of older releases except the previous`"]:::outcome
-        BACK["`(20) Mark failed, start the previous release or stop the stack, Windows message`"]:::error
+        UP["`(17) compose -p cctv or cctv-client with sites/client, up from the bundle`"]:::step
+        HEALTH{"`(18) The client's API_PORT/docs answers within 5 minutes and nothing restarting after 90 s?`"}:::decision
+        DONE["`(19) Record current and previous for the client, delete bundles and images no client keeps`"]:::outcome
+        BACK["`(20) Mark failed for this client only, start its previous release or stop its stack, Windows message`"]:::error
     end
 
     PR --> CI
@@ -525,7 +525,7 @@ flowchart TB
     classDef store fill:#f1f5f9,stroke:#475569,color:#0f172a
 ```
 
-**Key:** workflows are in `.github/workflows/`: `ci.yml`, `automerge.yml`, `release.yml` and `insightface-image.yml`. The bundle is `deploy/make_bundle.py` and `deploy/bundle.Dockerfile`; the manifest check is `mlops/check_manifest.py`. The watcher is `deploy/watch.py`, tested by `deploy/test_watch.py`; the automerge nudge is `deploy/nudge_automerge.py`. On the host, the deploy folder (for example `C:\deploy\cctv`) holds `watch.py`, `state.json`, `watch.log`, `site\` and `releases\`.
+**Key:** workflows are in `.github/workflows/`: `ci.yml`, `automerge.yml`, `release.yml` and `insightface-image.yml`. The bundle is `deploy/make_bundle.py` and `deploy/bundle.Dockerfile`; the manifest check is `mlops/check_manifest.py`. The watcher is `deploy/watch.py`, tested by `deploy/test_watch.py`; the automerge nudge is `deploy/nudge_automerge.py`. On the host, the deploy folder (for example `C:\deploy\cctv`) holds `watch.py`, `watch.log`, `releases\` and `sites\<client>\`, one folder per client with its config, data and `state.json` (D-036). Steps 14 to 20 run for each client in turn.
 
 1. Every pull request into main starts `ci.yml`, plus `insightface-image.yml` when InsightFace-REST source or `standalone-services.env` changed.
 2. `ci` is the aggregate check of five jobs. Lint runs ruff for syntax errors and undefined names, `check_manifest.py`, `test_watch.py`, `nudge_automerge.py demo` and `enrolment_checks.py`. Then come the gitleaks secret scan, and compose validation with a sample bundle from `make_bundle.py demo` and `deploy/test_standalone_scripts.sh`. A `changes` job decides whether images are built: a pull request that changes only `docs/` or Markdown files skips them; pushes and release runs always build. The eight image builds have smoke tests, including the start method and `face_vectors.py demo` in the producer-consumer image, the face-saver test in the collector image and the ROI page test in the ROI image.
@@ -538,13 +538,13 @@ flowchart TB
 9. `publish` runs `check_manifest.py`, then creates the tag. If tagging fails and main has moved on, it starts a release of main instead and stops. Any failed job opens an issue assigned to the owner.
 10. It creates the GitHub Release with `mlops/model-manifest.json` attached, moves the bundle's `stable` tag unless it already points at a newer release, and adds the notes to `CHANGELOG.md`. Release-failure issues opened earlier are closed. Only this workflow moves `stable`, so hosts trust it for what to deploy.
 11. On the host, Task Scheduler runs `pythonw watch.py` in the deploy folder every 10 minutes while the owner is signed in. A lock file stops overlapping runs. The host holds no repository and no GitHub login, only a pull-only registry login (D-034).
-12. The watcher does nothing until `state.json` exists (the owner ran `--enroll`) and Docker answers.
-13. It pulls `ghcr.io/hamza-aziz-ai/cctv-face-recognition-deploy:stable` and reads the release tag from the image's `org.opencontainers.image.version` label, and the bundle's digest.
-14. If the pull fails, most often because the registry token expired, or a site file is missing (`site\.env`, `site\master.env` or `site\src\Camera-Configuration\camera_configuration.json`), deploys stop and the owner gets one Windows message per new problem, not one every 10 minutes.
-15. It deploys only a release that is neither current nor in the failed list, and never one while the owner has stopped the stack. `--enroll` skips these checks; `--check` stops after step 16 and deploys nothing.
+12. The watcher does nothing until at least one client has a `sites\<client>\state.json` (the owner ran `--enroll <client>`) and Docker answers. `--enroll <client>` deploys that client alone.
+13. One pull serves every client: it pulls `ghcr.io/hamza-aziz-ai/cctv-face-recognition-deploy:stable` and reads the release tag from the image's `org.opencontainers.image.version` label, and the bundle's digest.
+14. If the pull fails, most often because the registry token expired, every client gets the problem. For each client, the folder name must be a valid ID and equal `CLIENT_ID` in its `master.env`, since the folder decides the state, data and project name; and `.env`, `master.env` and `src\Camera-Configuration\camera_configuration.json` must exist in it. Otherwise deploys stop for that client, and the owner gets one Windows message per new problem, not one every 10 minutes.
+15. A client without `state.json` is skipped unless it is being enrolled. It deploys only a release that is neither that client's current one nor in its failed list, and never while the owner has stopped that client's stack. `--enroll` skips these checks; `--check` stops after step 16 and deploys nothing.
 16. It copies the bundle out of the image with `docker create` and `docker cp`, never running it, into a temporary folder. It refuses the bundle unless `release-manifest.json` is schema 1 for this release and pins every image to `ghcr.io/hamza-aziz-ai/cctv-face-recognition-*` by digest, and the compose file has no build, no checkout mount and no `IMAGE_TAG`. Then it renames the folder to `releases\<tag>`. A refused bundle counts as a failed deploy.
-17. It runs `docker compose -p cctv --project-directory site -f releases\<tag>\docker-compose-main.yml up -d --pull missing --no-build --wait --wait-timeout 600`, so every release runs as the same stack with this site's config and data.
-18. It waits up to 5 minutes for HTTP 200 from `http://localhost:9090/docs`, then 90 seconds, and fails if any container of project `cctv` is restarting or exited.
-19. On success the tag becomes current. Bundles and our images that neither the current nor the previous release uses are deleted; the InsightFace-REST image and local dev builds stay.
-20. On any failure the tag is added to the failed list and never retried unattended. The previous release is started again from its bundle and images, which are still on the host, or the stack is stopped if there is none, and a Windows message is shown. Details are in [ROLLBACK.md](ROLLBACK.md).
+17. It runs `docker compose -p <project> --project-directory sites\<client> -f releases\<tag>\docker-compose-main.yml up -d --pull missing --no-build --wait --wait-timeout 600`, where the project is `cctv` for the owner and `cctv-<client>` otherwise, so every release runs as the same stack for that client, with its config and data.
+18. It waits up to 5 minutes for HTTP 200 from `http://localhost:<API_PORT>/docs`, with `API_PORT` read alone from the client's `.env` (9090 if unset), then 90 seconds, and fails if any container of the client's project is restarting or exited.
+19. On success the tag becomes the client's current release and the old one its previous. Bundles and our images that no client's current or previous release uses are deleted, so one client's deploy never removes another's rollback; the InsightFace-REST image and local dev builds stay.
+20. On any failure the tag is added to that client's failed list and never retried unattended. That client alone goes back to its previous release, from the bundle and images still on the host, or its stack is stopped if there is none, and a Windows message is shown. Other clients are not touched. Details are in [ROLLBACK.md](ROLLBACK.md).
 21. Starting automerge for a green pull request left open needs the owner's `gh` login, so `deploy/nudge_automerge.py` runs every 10 minutes on the owner's laptop from the dev checkout, never on a deployment host. It starts `automerge.yml` for any open pull request whose checks all passed more than 15 minutes ago (D-029).
