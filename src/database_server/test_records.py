@@ -34,6 +34,11 @@ def test():
     save("alone", "10:06:00")
     assert rows("alone") == 2, "a record after the window must save"
 
+    db.insert_recognition_data(DAY, "10:00:00", {"named": [("maingate_entry_cctv-camera-2", "http://localhost:8080/video", 0.9, RECORD[3], RECORD[4])]})
+    assert rows("named") == 1, "a camera set by host name must save"
+    db.insert_recognition_data(DAY, "10:00:00", {"gone": [("maingate_entry_cctv-camera-3", "no-such-camera.invalid", 0.9, RECORD[3], RECORD[4])]})
+    assert rows("gone") == 1, "a camera that no longer resolves must keep its record"
+
     start = threading.Barrier(8)
 
     def parallel():
@@ -46,7 +51,7 @@ def test():
     for thread in threads:
         thread.join()
     assert rows("parallel") == 1, f"parallel batches saved {rows('parallel')} rows, not 1"
-    print("records ok (saved, repeat skipped, saved after the window, 8 parallel batches saved once)")
+    print("records ok (saved, repeat skipped, saved after the window, host names saved, 8 parallel batches saved once)")
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ from parameters import FRAME_HEIGHT, \
     IP_CAM_REINIT_WAIT_DURATION, \
     FRAME_RATE_FACTOR, \
     DARKNESS_DETECTION, \
-    LOW_LIGHT_INTENSITY_DETECTION_BUFFER_SIZE, \
+    LIGHTING_ALERT_SECONDS,     LOW_LIGHT_INTENSITY_DETECTION_BUFFER_SIZE, \
     MAXIMUM_DARK_FRAMES, \
     RESIZE_FRAME, \
     CAMERA_CONFIGURATION_FILE
@@ -116,6 +116,7 @@ class IPCamera:
         self.darkness_buffer = []
         # initial darkness status
         self.too_dark = False
+        self.last_lighting_alert = 0.0
         # Flag to track if adequate lighting message is sent
         self.adequate_lighting_message_sent = True
         # Flag to track if inadequate lighting message is logged
@@ -216,9 +217,12 @@ class IPCamera:
                         # print(f"3) Dark Frames Buffer Status: {darkness_count}")
                         if darkness_count[True] >= MAXIMUM_DARK_FRAMES:
                             self.too_dark = True
-                            self.send_kafka_message(
-                                message=f"ERROR {self.cam_name}: Inadequate lighting condition detected at {self.cam_name}. Halting recognition temporarily for {self.cam_name}."
-                            )
+                            # Once a frame was thousands of messages a minute; this pace keeps the alert on the display
+                            if time.time() - self.last_lighting_alert >= LIGHTING_ALERT_SECONDS:
+                                self.last_lighting_alert = time.time()
+                                self.send_kafka_message(
+                                    message=f"ERROR {self.cam_name}: Inadequate lighting condition detected at {self.cam_name}. Halting recognition temporarily for {self.cam_name}."
+                                )
                             self.adequate_lighting_message_sent = False
                             # print(f"4) Darkness Status: {self.too_dark}")
                             if not self.inadequate_lighting_message_logged:
@@ -231,6 +235,7 @@ class IPCamera:
                         elif darkness_count[False] >= MAXIMUM_DARK_FRAMES and not self.adequate_lighting_message_sent:
                             multicam_server_logger.info(f"Lighting condition becomes adequate at {self.cam_name}. Recognition process resumed for {self.cam_name}.")
                             self.too_dark = False
+                            self.last_lighting_alert = 0.0
                             self.send_kafka_message(
                                 message=f"SUCCESS {self.cam_name}: Lighting condition becomes adequate at {self.cam_name}. Recognition process resumed for {self.cam_name}."
                             )

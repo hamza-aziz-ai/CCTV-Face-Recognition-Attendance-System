@@ -15,7 +15,9 @@ A change is done when these pass and the real output is pasted in the PR. CI run
 
 Each of the 8 images builds, `pip check` is clean, `cv2` and `numpy` import, entrypoints and health checks exist, and no `master.env`, `.env`, `.git` or `src/Camera-Configuration` is inside.
 
-In `database-controller`, against a throwaway PostgreSQL, `python3 src/database_server/test_records.py` prints `records ok (saved, repeat skipped, saved after the window, 8 parallel batches saved once)`.
+In `database-controller`, against a throwaway PostgreSQL, `python3 src/database_server/test_records.py` prints `records ok (saved, repeat skipped, saved after the window, host names saved, 8 parallel batches saved once)`.
+
+In `producer-consumer`, `python3 src/util/test_camera.py` prints `camera ok (region at the frame edge crops, 2 alerts for 500 dark frames, recovery announced once)`.
 
 In `producer-consumer`, `python3 src/util/client_checks.py` prints `clients ok (bad IDs refused, owner names kept, two clients share no name, Milvus bound to the client's database)` (D-036).
 

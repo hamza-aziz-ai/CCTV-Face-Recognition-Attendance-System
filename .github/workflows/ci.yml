@@ -59,6 +59,8 @@ jobs:
           docker compose -f docker-compose-main.yml -f docker-compose.dev.yml config --quiet
           DATASET_STORE_USER=ci DATASET_STORE_PASSWORD=ci DATASET_STORE_DIR=/tmp/store docker compose -f STANDALONE-SERVICES/Dataset-Store/docker-compose.yml config --quiet
           POSTGRES_USER=ci POSTGRES_PASSWORD=ci docker compose -f STANDALONE-SERVICES/PostgreSQL/docker-compose.yml config --quiet
+      # GitHub and Compose reject duplicate keys, which git merges can add and config --quiet can miss
+      - run: python3 -I deploy/yaml_strict.py .github/workflows/*.yml docker-compose*.yml STANDALONE-SERVICES/*/docker-compose*.yml
       # Two clients' stacks on one host: no fixed names, own ports, own site folder, internal services by name (D-036)
       - run: python3 -I deploy/test_layout.py
       # The deployment bundle: only allow-listed files, every image pinned, and its compose file still valid (D-033)
@@ -182,6 +184,10 @@ jobs:
           docker run -d --name records-db --network records -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci postgres:18.6-trixie
           until docker exec records-db pg_isready -h records-db -U ci; do sleep 1; done
           docker run --rm --network records --entrypoint python3 -e CLIENT_ID=owner -e LEGACY_SHARED_SERVICES=1 -e IP_ADDRESS=records-db -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci ci/${{ matrix.service }}:test src/database_server/test_records.py
+      # A region at the frame's edge crops, and a dark camera alerts at a steady pace
+      - name: Camera
+        if: matrix.service == 'producer-consumer'
+        run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner -e LEGACY_SHARED_SERVICES=1 ci/${{ matrix.service }}:test src/util/test_camera.py
       # A worse crop on a full cluster used to loop forever and block the collector
       - name: Face saver
         if: matrix.service == 'dynamic-face-dataset-collector'
