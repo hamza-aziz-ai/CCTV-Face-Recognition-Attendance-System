@@ -34,6 +34,7 @@ from parameters import (
     POSTGRESQL_HOST,
     POSTGRESQL_PORT,
     POSTGRESQL_DATABASE,
+    postgres_login,
     CAMERA_CONFIGURATION_FILE,
     METRIC_TYPE
 )
@@ -43,8 +44,7 @@ from custom_logging import api_logger
 
 CAMERA_TO_API_MAP = map_camera_to_api_endpoint()
 
-POSTGRESQL_USERNAME = os.environ.get("POSTGRESQL_USERNAME")
-POSTGRESQL_PASSWORD = os.environ.get("POSTGRESQL_PASSWORD")
+POSTGRESQL_USERNAME, POSTGRESQL_PASSWORD = postgres_login()  # this client's own role (D-037)
 DB_CONFIG = {
     "dbname": POSTGRESQL_DATABASE,
     "user": POSTGRESQL_USERNAME,

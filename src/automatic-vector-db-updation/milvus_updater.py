@@ -38,7 +38,8 @@ from parameters import (
     MILVUS_PORT,
     POSTGRESQL_DATABASE_NAME,
     POSTGRESQL_HOST,
-    POSTGRESQL_PORT
+    POSTGRESQL_PORT,
+    postgres_login,
 )
 from insightface_face_detection import IFRClient
 from milvus_server import (
@@ -49,8 +50,7 @@ from custom_logging import dynamic_face_data_collector_logger as logger
 
 
 # Read credentials from the environment.
-POSTGRESQL_USERNAME = os.environ.get("POSTGRES_USER")
-POSTGRESQL_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
+POSTGRESQL_USERNAME, POSTGRESQL_PASSWORD = postgres_login()  # this client's own role (D-037)
 
 # == Database Configuration ==
 # # Main database configuration.

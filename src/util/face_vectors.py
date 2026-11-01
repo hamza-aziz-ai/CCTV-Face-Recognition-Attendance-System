@@ -25,7 +25,7 @@ current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
 
-from milvus_server import create_collection, create_connection, insert_data
+from milvus_server import create_collection, create_connection, insert_data, milvus_token
 from parameters import FACIAL_RECOGNITION_DATASET_PATH, MILVUS_COLLECTION_NAME, MILVUS_DATABASE, MILVUS_HOST, MILVUS_PORT
 
 VECTORS_FILE = "vectors.parquet"
@@ -53,7 +53,7 @@ def versions(collection_names, alias):
 
 def connect():
     create_connection(host=MILVUS_HOST, port=MILVUS_PORT)
-    return MilvusClient(uri=f"http://{MILVUS_HOST}:{MILVUS_PORT}", token="root:Milvus", db_name=MILVUS_DATABASE)
+    return MilvusClient(uri=f"http://{MILVUS_HOST}:{MILVUS_PORT}", token=milvus_token(), db_name=MILVUS_DATABASE)
 
 
 def in_use(client, alias):

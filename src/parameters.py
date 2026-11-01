@@ -26,6 +26,41 @@ def client_name(owner_name):
     return owner_name if CLIENT_ID == OWNER_CLIENT_ID else f"{CLIENT_ID}_{owner_name.lower()}"
 
 
+# Each client logs in to the shared services with its own accounts, made by deploy/provision.py (D-037). Until the
+# owner's cutover (step 3c), LEGACY_SHARED_SERVICES=1 in master.env keeps the owner's site as it was: the admin logins,
+# no Milvus or Kafka login, unprefixed topics, and databases and topics created at start. Only the owner may set it.
+LEGACY_SHARED_SERVICES = os.getenv("LEGACY_SHARED_SERVICES") == "1"
+if LEGACY_SHARED_SERVICES and CLIENT_ID != OWNER_CLIENT_ID:
+    sys.exit("LEGACY_SHARED_SERVICES=1 is for the owner's site only, until its step 3c cutover")
+
+
+def login(key):
+    """A login value from the site .env; missing means the client was never provisioned, so stop rather than guess."""
+    value = os.getenv(key, "")
+    if not value:
+        sys.exit(f"{key} is not set: run deploy/provision.py {CLIENT_ID} and pass its site .env to this service")
+    return value
+
+
+def postgres_login():
+    if LEGACY_SHARED_SERVICES:
+        return os.getenv("POSTGRES_USER"), os.getenv("POSTGRES_PASSWORD")
+    return login("PG_APP_USER"), login("PG_APP_PASSWORD")
+
+
+def milvus_login():
+    """(user, password); empty for the legacy owner, whose Milvus has no authentication yet."""
+    return ("", "") if LEGACY_SHARED_SERVICES else (login("MILVUS_APP_USER"), login("MILVUS_APP_PASSWORD"))
+
+
+def kafka_login():
+    """Extra Kafka client settings: SCRAM on 9092 for every client, nothing for the legacy owner."""
+    if LEGACY_SHARED_SERVICES:
+        return {}
+    return {"security.protocol": "SASL_PLAINTEXT", "sasl.mechanism": "SCRAM-SHA-512",
+            "sasl.username": login("KAFKA_APP_USER"), "sasl.password": login("KAFKA_APP_PASSWORD")}
+
+
 
 CAMERA_CONFIGURATION_FILE = "src/Camera-Configuration/camera_configuration.json"
 
@@ -254,7 +289,7 @@ KAFKA_HOST = IP_ADDRESS
 # Kafka port
 KAFKA_PORT = "9092"
 # Topics are <prefix><location>_<point>. A dot ends the prefix: IDs hold none, so one client's prefix never covers another's topics
-KAFKA_TOPIC_PREFIX = "" if CLIENT_ID == OWNER_CLIENT_ID else f"{CLIENT_ID}."
+KAFKA_TOPIC_PREFIX = "" if LEGACY_SHARED_SERVICES else f"{CLIENT_ID}."  # the owner too after its cutover (D-037)
 
 
 # Display face image server port
