@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.8.0 (2026-11-01)
+
+## What's Changed
+* feat: serve each client over HTTPS behind a shared proxy (D-040) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/84
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.7.0...v2.8.0
+
 ## v2.7.0 (2026-11-01)
 
 ## What's Changed
