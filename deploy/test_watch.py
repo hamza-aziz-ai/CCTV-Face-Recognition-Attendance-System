@@ -127,7 +127,7 @@ def refused(folder, tag):
 def test_check_bundle():
     """Only a bundle for this release, with our images pinned by digest, is accepted."""
     folder = sample_bundle(Path(tempfile.mkdtemp()) / "b")
-    assert len(watch.check_bundle(folder, "v9.9.9")["images"]) == 8
+    assert len(watch.check_bundle(folder, "v9.9.9")["images"]) == 9  # 8 app images + InsightFace
     assert refused(folder, "v1.0.0")
     manifest = folder / "release-manifest.json"
     good = manifest.read_text()

@@ -526,3 +526,16 @@ Chosen: 3. The watcher reads the release from the bundle's version label, copies
 Why: One credential, for the registry, serves both the images and the bundle; no API token and no socket mount. Option 2 needs bind sources as host paths from inside a container, which is fragile on Docker Desktop. A watcher that replaced itself could disable every later deploy and rollback.
 Trade-off: Python 3 is needed on the host. Trust moved from "the tag is on main" to "only release.yml can move :stable", which holds while only the workflow and the owner can write the packages. The standalone services' scripts still assume the repository layout; switching this host (next PR) has to account for that. Until then, on this host: once the old watcher deploys a release with this change, its checkout replaces the scheduled watch.py with this one, which finds no site folder and stops deploying with one message, so the switch should follow straight after.
 Revisit if: a host cannot have Python, or watcher updates become frequent enough to need a safe self-update (previous version kept, atomic switch, recovery tests).
+## D-035: The ROI page draws polygons into the camera configuration
+Date: 2026-10-31   Model: Claude Opus 5.5
+Context: `Custom-ROI-Provisioning/app.py` could not start: it imported `IP_CAMS`, `create_mask` and `roi_coordinates`, which no longer exist, and it saved a rectangle by rewriting `src/parameters.py` inside the image. The producer has since moved to per-camera polygons in `camera_configuration.json` (`masking-coordinates`, applied by `crop_and_mask_roi` to the full-resolution frame). The owner chose repair over deletion.
+Options:
+
+1. delete the page and keep only the desktop tool `crop_rectangle.py`
+2. repair the rectangle page against `parameters.py`
+3. rebuild the page around the camera configuration: polygon on a full-resolution snapshot, saved into `masking-coordinates`
+
+Chosen: 3. The page lists the cameras from the configuration, opens each one with `camera_stream_url` (now shared with the producer, so both connect the same way), shows a full-resolution snapshot, takes clicked points, previews with the producer's `crop_and_mask_roi`, and saves into that camera's `masking-coordinates` with validation and an atomic write. It runs as `roi-provisioning` behind the compose profile `roi`: off by default, on 127.0.0.1 only, with the camera configuration mounted read-write for this service only. Releases build and pin its image with the others.
+Why: The configuration is already the one place the producer reads regions from, so the page writes exactly what is used; editing source files from a container cannot work with images (D-001) and breaks with compiled code (step 4).
+Trade-off: The producer reads regions at start, so a saved region applies after a restart of `producer-consumer`. No login: anyone on the host can change regions while the page runs. The desktop tool stays for use without Docker.
+Revisit if: regions must apply without a restart, or the page must be reachable from another machine (add a login first).

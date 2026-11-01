@@ -81,6 +81,8 @@ jobs:
     env:
       IMAGE_TAG: ${{ needs.plan.outputs.tag }}
       TOKEN: ${{ github.token }}
+      # The ROI page is behind a compose profile; build and publish it with the rest
+      COMPOSE_PROFILES: roi
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # All 7 images on one runner hit "No space left on device"; these preinstalled toolchains are unused here
