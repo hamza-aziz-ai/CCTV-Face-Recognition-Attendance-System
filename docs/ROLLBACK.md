@@ -2,12 +2,12 @@
 
 ## App stack
 
-Automatic: if a deployment fails, the API smoke test fails, or a service is restarting 90 seconds later, `deploy/watch.py` starts the previous release, records the failed tag and shows a Windows message. It never retries that tag on its own. The current and previous release images stay on disk.
+Automatic: if a deployment fails, the API smoke test fails, or a service is restarting 90 seconds later, `deploy/watch.py` starts the previous release from its bundle in `releases\`, records the failed tag and shows a Windows message. It never retries that tag on its own. The current and previous bundles and images stay on disk, so a rollback needs no network.
 
 By hand, to leave a release that passed its checks but behaves badly:
 
 1. Revert its squash commit in a PR. Green CI merges it and a new release deploys.
-2. To retry a failed tag: `python deploy\watch.py --enroll` in `C:\deploy\cctv`.
+2. To retry a failed tag: `python watch.py --enroll` in `C:\deploy\cctv`.
 
 To stop automatic deploys: `schtasks /Change /TN "CCTV deploy watcher" /DISABLE`.
 
