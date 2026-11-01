@@ -23,7 +23,7 @@ services:
           chown "$${uid}:$${gid}" "$${marker}"
         fi
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
+      - milvus-data:/var/lib/milvus
 
   etcd:
     container_name: milvus-etcd
@@ -35,7 +35,7 @@ services:
       - ETCD_QUOTA_BACKEND_BYTES=4294967296
       - ETCD_SNAPSHOT_COUNT=50000
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/etcd:/etcd
+      - milvus-etcd:/etcd
     command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
     healthcheck:
       test: ["CMD", "etcdctl", "endpoint", "health"]
@@ -54,7 +54,7 @@ services:
       - "9001:9001"
       - "9000:9000"
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/minio:/minio_data
+      - milvus-minio:/minio_data
     command: minio server /minio_data --console-address ":9001"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
@@ -73,7 +73,7 @@ services:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus
+      - milvus-data:/var/lib/milvus
     ports:
       - "19530:19530"
       - "9091:9091"
@@ -97,6 +97,15 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+
+# Named volumes: on Docker Desktop a bind path like /usr/local/... lives in the VM and is gone after a restart (D-038)
+volumes:
+  milvus-data:
+    name: milvus-data
+  milvus-etcd:
+    name: milvus-etcd
+  milvus-minio:
+    name: milvus-minio
 
 networks:
   default:

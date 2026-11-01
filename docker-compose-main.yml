@@ -33,8 +33,9 @@ services:
     ports:
       - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
-      # PostgreSQL 18 images keep data under /var/lib/postgresql/18; a new host folder leaves the PostgreSQL 12 data untouched (D-020)
-      - /workspace/database/postgresql18/cctv-face-recognition:/var/lib/postgresql
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/18 (D-020). A named volume: on Docker Desktop a bind
+      # path like /workspace/... lives in the VM and is gone after a restart (D-038)
+      - postgres-data:/var/lib/postgresql
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -209,3 +210,8 @@ services:
     depends_on:
       display-image-server:
         condition: service_healthy
+
+volumes:
+  # A fixed name, so the data stays with PostgreSQL if it moves to another compose project
+  postgres-data:
+    name: cctv-postgres-data
