@@ -2,6 +2,30 @@
 
 Read first: docs/ARCHITECTURE.md, docs/CONSTRAINTS.md, docs/DECISIONS.md. Newest entry on top.
 
+## Session summary: 2026-11-01 (model: Claude Opus 5.5)
+
+Done: every open PR merged (#53 to #81) and v2.6.3 deployed by the watcher. This host runs from the bundle layout in `C:\deploy\host`, with no git clone. D-037 cutover done: the owner's stack uses its own logins, Kafka and Milvus require them, and the unused Kafka add-ons are gone. PostgreSQL and Milvus are on named volumes, and a full laptop restart was tested after the cutover. Images are tagged and digest rows cleared on every watcher run.
+
+End-to-end test passed on a real RTSP camera: name and portrait on the display, record saved, API returned it. The ERP is untested, because its address is a placeholder. That test found records had never saved on a fresh table (#79), duplicates from parallel batches (#80), and three smaller bugs (#81).
+
+State: Claude Code Review is paused, at the owner's choice (`gh workflow enable claude-code-review.yml`). Small docs, Markdown and submodule chores go straight to `main` with `[skip ci]`, subject `docs:` or `chore:`. `kafka-ui` runs with `--profile ui`, on its read-only login. Rollback compose files are in `C:\deploy\hostollback-compose`, and the backup in `C:\deployackup`.
+
+Agreed order (owner, 2026-11-01). This replaces the list below.
+
+1. Accuracy check on a real camera in good light: scores were 0.55 against a 0.5 threshold. Needs the owner.
+2. D-036 step 4: accounts, sessions, machine tokens and per-client HTTPS.
+3. D-036 step 5: tiers and the two-client rehearsal.
+4. Live view (8b).
+5. Enrolment API (8c), then the Android app (8d).
+6. Deletion, isolation and recovery tests (8e).
+7. Compile the app code with Nuitka: app images still hold readable Python.
+8. Signed setup codes, required before the first outside client (Face-Dataset-Collector D-014).
+9. Later: ERP test with a real address, PTZ merge, DeepStream tier, Jetson arm64 plan. The Orin Nano has no NVENC, so annotated live view draws boxes in the viewer.
+
+Dated: delete the old topics `maingate_entry` and `maingate_exit` after 2026-11-08.
+
+Owner, before any real people are enrolled: sign off the notice, legal basis, consent per re-enrolment and ML Kit disclosure. Also the InsightFace licence email and Dependabot triage. Off-host backups do not exist yet.
+
 ## Session summary: 2026-10-31 (model: Claude Opus 5.5, councils with Codex GPT-6.1 Sol)
 
 Context: this project is a rehearsal of real-world deployment, not a sold product. Durations and incidents go into docs/TIMELINES.md so later promises can be kept.

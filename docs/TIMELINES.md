@@ -99,7 +99,8 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #77 | 2026-11-01 05:19 | 43m                | 2m                   | +56/-6 6f      | feat(deploy): tag images pulled by digest                                                                |
 | #78 | 2026-11-01 05:37 | 18m                | 3m                   | +34/-13 5f     | chore(deploy): drop digest names after tagging images                                                    |
 | #79 | 2026-11-01 05:54 | 17m                | 2m                   | +12/-14 4f     | fix: save recognition records on the table the code creates                                              |
-| #80 | 2026-11-01 12:51 | overnight          | 2m                   | +68/-3 5f      | fix: save one record when a person's batches run in parallel                                             |
+| #80 | 2026-11-01 12:51 | same-day gap       | 2m                   | +68/-3 5f      | fix: save one record when a person's batches run in parallel                                             |
+| #81 | 2026-11-01 14:48 | 1h 57m             | 8m                   | +127/-12 10f   | fix: pace lighting alerts and handle camera edge cases                                                   |
 
 ## Incidents that cost time
 
