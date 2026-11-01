@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.6.1 (2026-11-01)
+
+## What's Changed
+* chore(deploy): drop digest names after tagging images by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/78
+* fix: save recognition records on the table the code creates by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/79
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.6.0...v2.6.1
+
 ## v2.6.0 (2026-11-01)
 
 ## What's Changed
