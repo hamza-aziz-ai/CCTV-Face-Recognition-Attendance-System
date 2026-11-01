@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.4.0 (2026-11-01)
+
+## What's Changed
+* feat: run the standalone scripts from a release bundle with a separate site folder by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/56
+* fix: repair the ROI page so it draws regions into the camera configuration by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/59
+* docs: record the client separation and login design (D-036) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/60
+* fix: face collector loop and display health check found in the docs review by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/67
+* feat: pin Kafka-WebApp v0.3.0 so the display shows every camera by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/69
+* fix: keep Postgres and Milvus data across restarts with named volumes by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/70
+* docs: restyle README, FLOW.md and ARCHITECTURE.md to the documentation standard by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/66
+* feat: require CLIENT_ID and give each client its own databases and topics (D-036 step 1) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/61
+* ci: retry the release image push when ghcr.io refuses it by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/72
+* Add Claude Code GitHub Workflow by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/73
+* feat: run each client's stack as its own compose project on a shared PostgreSQL (D-036 step 2a) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/62
+* feat(deploy): watch one site folder per client, each its own compose project (D-036 step 2b) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/74
+* feat(deploy): provision per-client logins on the shared services, with an isolation test (D-036 step 3a) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/64
+* feat: log in to the shared services with the client's own accounts (D-036 step 3b) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/65
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.3.0...v2.4.0
+
 ## v2.3.0 (2026-11-01)
 
 ## What's Changed
