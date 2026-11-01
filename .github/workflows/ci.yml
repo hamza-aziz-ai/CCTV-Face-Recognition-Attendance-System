@@ -61,6 +61,8 @@ jobs:
           POSTGRES_USER=ci POSTGRES_PASSWORD=ci docker compose -f STANDALONE-SERVICES/PostgreSQL/docker-compose.yml config --quiet
       # GitHub and Compose reject duplicate keys, which git merges can add and config --quiet can miss
       - run: python3 -I deploy/yaml_strict.py .github/workflows/*.yml docker-compose*.yml STANDALONE-SERVICES/*/docker-compose*.yml
+      # The HTTPS route on a real Caddy: sign-in redirect, guarded display, closed API docs (D-040)
+      - run: python3 -I deploy/test_proxy.py
       # Two clients' stacks on one host: no fixed names, own ports, own site folder, internal services by name (D-036)
       - run: python3 -I deploy/test_layout.py
       # The deployment bundle: only allow-listed files, every image pinned, and its compose file still valid (D-033)

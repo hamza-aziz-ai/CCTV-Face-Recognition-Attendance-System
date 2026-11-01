@@ -16,6 +16,7 @@ behind the running stack's back: provisioning stops and says how to recover. Not
                                           after changing the client's cameras (topics and partitions follow them)
   python provision.py --init-milvus-root  once per host, before Milvus authorisation is on: replace root's default password
   python provision.py --init-kafbat       once per host: a read-only Kafka login for the Kafbat UI
+  python provision.py CLIENT --proxy      only write the client's HTTPS route, to the deploy folder's proxy folder
 Options: --sites DIR, --admin-env FILE (holds MILVUS_ROOT_PASSWORD), --postgres/--kafka/--store CONTAINER, --milvus URL.
 Stdlib only, like watch.py: the services' own command-line tools run inside their containers through docker exec.
 """
@@ -306,8 +307,6 @@ def proxy_route(client, host):
 	handle {{
 		forward_auth {api} {{
 			uri /auth/check
-			header_up -Connection
-			header_up -Upgrade
 			@signed_out status 401
 			handle_response @signed_out {{
 				redir * /auth/sign-in
@@ -325,8 +324,7 @@ def write_proxy_route(client, sites):
         raise Stop(f"SITE_HOST {host!r} is not a host name")
     folder = sites.parent / "proxy"
     folder.mkdir(exist_ok=True)
-    (folder / f"{client}.caddy").write_text(proxy_route(client, host), encoding="utf-8", newline="
-")
+    (folder / f"{client}.caddy").write_bytes(proxy_route(client, host).encode())
     return host
 
 
@@ -361,6 +359,7 @@ def provision(client, sites, admin_env, pg, kafka_container, store_container, mi
     kafka(kafka_container, env)
     kafka_topics(kafka_container, wanted_topics)
     store(store_container, env)
+    write_proxy_route(client, sites)
     print(f"{client}: provisioned (PostgreSQL, Milvus, Kafka with {len(wanted_topics)} topics, dataset store); "
           f"credentials in {site_env}")
 

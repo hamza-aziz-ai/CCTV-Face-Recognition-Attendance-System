@@ -1,0 +1,97 @@
+"""The HTTPS route of deploy/provision.py on a real Caddy, with stand-ins for the API and display: signed-out visitors go to the sign-in page, and the API's docs stay closed. Needs Docker. Run: python3 -I deploy/test_proxy.py"""
+import os
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "deploy"))
+import provision  # noqa: E402
+
+IMAGE = "caddy:2.10-alpine"
+NETWORK = "proxytest"
+PORT = "18443"
+HOST = "acme.localhost"
+API = """:8000 {
+	@signed_in header Cookie *good*
+	handle /auth/check {
+		respond @signed_in 204
+		respond 401
+	}
+	respond "api {path}" 200
+}
+"""
+DISPLAY = """:9090 {
+	respond "display {path}" 200
+}
+"""
+
+
+def docker(*args, check=True):
+    return subprocess.run(["docker", *args], capture_output=True, text=True, check=check)
+
+
+def stand_in(name, config, folder):
+    path = Path(folder) / f"{name}.Caddyfile"
+    path.write_text(config, encoding="utf-8")
+    docker("run", "-d", "--name", name, "--network", NETWORK, "-v", f"{path}:/etc/caddy/Caddyfile:ro", IMAGE)
+
+
+def fetch(path, cookie=None, *extra):
+    """(status, redirect target, body), through the proxy, with the private CA unchecked."""
+    command = ["curl", "-sk", "-m", "8", "--resolve", f"{HOST}:{PORT}:127.0.0.1", "-w", "\n%{http_code} %{redirect_url}", *extra]
+    if cookie:
+        command += ["-H", f"Cookie: {cookie}"]
+    out = subprocess.run([*command, f"https://{HOST}:{PORT}{path}"], capture_output=True, text=True).stdout
+    body, _, tail = out.rpartition("\n")
+    status, _, redirect = tail.partition(" ")
+    return status, redirect, body
+
+
+def test():
+    assert "cctv-mfr-api-service-1:8000" in provision.proxy_route("owner", "owner.localhost")
+    with tempfile.TemporaryDirectory(dir=os.environ.get("RUNNER_TEMP")) as folder:
+        sites = Path(folder) / "sites"
+        (sites / "acme").mkdir(parents=True)
+        (sites / "acme" / ".env").write_text(f"SITE_HOST={HOST}\n", encoding="utf-8")
+        assert provision.write_proxy_route("acme", sites) == HOST
+        (sites / "evil").mkdir()
+        (sites / "evil" / ".env").write_text("SITE_HOST=x { respond hacked }\n", encoding="utf-8")
+        try:
+            provision.write_proxy_route("evil", sites)
+        except provision.Stop:
+            pass
+        else:
+            raise AssertionError("a host name with Caddy syntax was accepted")
+        names = ("cctv-acme-mfr-api-service-1", "cctv-acme-kafka-webapp-1", "proxytest-caddy")
+        docker("network", "create", NETWORK)
+        try:
+            stand_in(names[0], API, folder)
+            stand_in(names[1], DISPLAY, folder)
+            docker("run", "-d", "--name", names[2], "--network", NETWORK, "-p", f"127.0.0.1:{PORT}:443", "-v", f"{ROOT / 'STANDALONE-SERVICES/Proxy/Caddyfile'}:/etc/caddy/Caddyfile:ro", "-v", f"{sites.parent / 'proxy'}:/routes:ro", IMAGE)
+            for _ in range(40):
+                if fetch("/auth/sign-in")[0] == "200":
+                    break
+                time.sleep(0.5)
+            status, redirect, _ = fetch("/")
+            assert status == "302" and redirect.endswith("/auth/sign-in"), (status, redirect)
+            assert fetch("/socket.io/?EIO=4")[0] == "302"
+            assert fetch("/", "session=bad")[0] == "302"
+            assert fetch("/", "session=good")[::2] == ("200", "display /")
+            socket = fetch("/socket.io/", "session=good", "-H", "Connection: Upgrade", "-H", "Upgrade: websocket", "--http1.1")
+            assert socket[0] == "200" and socket[2].startswith("display"), socket
+            assert fetch("/auth/sign-in")[::2] == ("200", "api /auth/sign-in")
+            assert fetch("/api/fetch_module_data")[::2] == ("200", "api /fetch_module_data")
+            for closed in ("/api/docs", "/api/redoc", "/api/openapi.json"):
+                assert fetch(closed)[0] == "404", closed
+            assert fetch("/docs")[0] == "302"
+        finally:
+            docker("rm", "-f", *names, check=False)
+            docker("network", "rm", NETWORK, check=False)
+    print("proxy ok (signed-out visitors sent to sign-in, display and WebSockets need a session, API routes reachable, API docs closed, bad host names refused)")
+
+
+if __name__ == "__main__":
+    test()

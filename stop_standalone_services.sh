@@ -14,6 +14,8 @@ export CONFIG_DIR
 # The shared PostgreSQL's admin login: in the deploy folder's admin.env once a host has moved it there, away from every client's site (CUTOVER-D037.md); otherwise in this site's .env
 ADMIN_ENV=$CONFIG_DIR/.env
 grep -qs '^POSTGRES_USER=' ../../admin.env && ADMIN_ENV=$(cd ../.. && pwd)/admin.env
+# The HTTPS proxy runs on a deployment host, once the deploy folder has its route files (D-040)
+[ -d ../../proxy ] && PROXY_DIR=$(cd ../../proxy && { pwd -W 2>/dev/null || pwd; }) && export PROXY_DIR
 
 NETWORK_NAME="insightface-network"
 
@@ -92,6 +94,14 @@ cd STANDALONE-SERVICES/PostgreSQL
 echo "shutdown PostgreSQL"
 docker-compose --env-file "$ADMIN_ENV" down
 cd ../..
+
+if [ -n "${PROXY_DIR:-}" ]; then
+    echo "shutdown the HTTPS proxy"
+    # shellcheck disable=SC2164
+    cd STANDALONE-SERVICES/Proxy
+    docker-compose down
+    cd ../..
+fi
 
 # Dataset store (DVC remote) cleanup; its data folder (DATASET_STORE_DIR) is kept
 # shellcheck disable=SC2164

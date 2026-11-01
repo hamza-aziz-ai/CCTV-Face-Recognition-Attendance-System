@@ -626,3 +626,17 @@ Chosen: 3, built in `src/api/accounts.py`. Tables `accounts`, `sessions`, `machi
 Why: no new image, service or dependency, and the API already has a connection pool and FastAPI. Sensitive pages are few, so a small module is enough.
 Trade-off: throttling by name lets someone lock a known name out for 15 minutes. `/docs` stays open until the proxy can close it, and the watcher's smoke test uses it. Until the proxy arrives the API is plain HTTP, so the cookie works only on localhost, and credentials and tokens cross the LAN in clear. Accounts are managed by command line; there is no admin page yet.
 Revisit if: a client needs single sign-on, or enrolment (8c) needs per-person permissions.
+
+## D-040: One Caddy per host in front of every client stack
+Date: 2026-11-01   Model: Claude Opus 5.5
+Context: D-036 step 4 puts HTTPS per client behind a reverse proxy, because secure cookies need it. Kafka-WebApp's pages and WebSockets have no login of their own, and it lives in another repository.
+Options:
+
+1. one proxy per client stack: each needs its own public port
+2. nginx: certificates and auth requests need more configuration and tooling
+3. one Caddy per host, with a private CA and a route file per client
+
+Chosen: 3. `STANDALONE-SERVICES/Proxy` publishes only 443 and keeps its CA in the named volume `cctv-proxy-data`. `deploy/provision.py` writes each client's route to the deploy folder's `proxy` folder, away from `sites`, which holds secrets. The proxy reaches stacks over the shared network `cctv-edge`, by the container names compose derives from the project. Pages go through the API's `/auth/check` with `forward_auth`, so Kafka-WebApp needs no change and its WebSockets are guarded too. `/api/*` goes to the API with its docs closed, and `/auth/*` carries the sign-in page. A client's host name is `SITE_HOST` in its site `.env`, by default `<client>.localhost`.
+Why: Caddy issues and renews its own certificates, and `forward_auth` guards a page without touching the app behind it. The API, display and portrait ports stay on 127.0.0.1, because the watcher's smoke test and port checks use them.
+Trade-off: each device must trust the private CA once. Someone with a login on the host can reach those ports without a session, the same as Kafbat. A proxy outage takes every client on the host offline. Raspberry Pi displays are not covered yet: they read portraits from port 20013, which no longer reaches the LAN. There is no sign-out button on the display yet, only 8-hour expiry and revocation by command.
+Revisit if: a client needs a public certificate, or Pi displays return.
