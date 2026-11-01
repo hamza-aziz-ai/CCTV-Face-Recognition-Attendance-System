@@ -102,6 +102,7 @@ def test():
     test_stage()
     test_prune()
     test_tag_images()
+    test_heal_ports()
     test_stable()
     print("watch decisions ok (13 scenarios, 2 clients kept apart, registry failure notified once, images tagged, bundles checked "
           "and staged, old releases pruned, crash loops caught)")
@@ -284,6 +285,30 @@ def test_tag_images():
     with mock.patch.object(watch, "run", fake_inspect):
         watch.latest_release()
     assert tagged[-1] == ("docker", "tag", watch.CHANNEL, f"{watch.CHANNEL.rsplit(':', 1)[0]}:v9.9.9")
+
+
+def test_heal_ports():
+    """A healthy container with a dead published port is restarted; one with live ports, or no port, is left alone."""
+    calls = []
+    listing = "aaa 0.0.0.0:9090->8000/tcp, [::]:9090->8000/tcp\nbbb 0.0.0.0:9095->9090/tcp\nccc "
+
+    def fake_run(*cmd):
+        calls.append(cmd)
+        return listing if cmd[1] == "ps" else ""
+
+    with mock.patch.multiple(watch, run=fake_run, log=lambda msg: None, port_answers=lambda port: port != "9090"):
+        watch.heal_ports(Path("sites/owner"))
+    assert ("docker", "restart", "aaa") in calls and len(calls) == 2, calls
+    assert "health=healthy" in calls[0]
+    calls.clear()
+    with mock.patch.multiple(watch, run=fake_run, log=lambda msg: None, port_answers=lambda port: True):
+        watch.heal_ports(Path("sites/owner"))
+    assert len(calls) == 1, calls
+    # An HTTP error still proves the port is live; a closed port does not
+    with mock.patch.object(watch.urllib.request, "urlopen", side_effect=watch.urllib.error.HTTPError("u", 404, "no", {}, None)):
+        assert watch.port_answers("1")
+    with mock.patch.object(watch.urllib.request, "urlopen", side_effect=watch.http.client.RemoteDisconnected("empty")):
+        assert not watch.port_answers("1")
 
 
 def test_stable():
