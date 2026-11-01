@@ -1,0 +1,5 @@
+# Milvus authentication, shared by STANDALONE-SERVICES/Milvus-Vector-Database and deploy/test_isolation.py (D-036 step 3).
+# Each client has a user confined to its own database; provision.py --init-milvus-root replaces the default root password.
+common:
+  security:
+    authorizationEnabled: true

@@ -179,10 +179,29 @@ jobs:
         if: matrix.service == 'dynamic-face-dataset-collector'
         run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test src/dynamic_face_data_collector/test_face_saver.py
 
+  # Client isolation on throwaway copies of the shared services (D-036). About 5 minutes and 3.5 GB of images, so only
+  # pull requests that touch provisioning, the services' settings or the code that logs in to them run it
+  isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: changed
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE" ] && git diff --name-only "origin/$BASE...HEAD" | grep -qE '^(deploy/(provision|test_isolation)\.py|STANDALONE-SERVICES/|src/(parameters|milvus_server)\.py|src/util/face_vectors\.py)'; then
+            echo run=true >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.changed.outputs.run == 'true'
+        run: python3 -I deploy/test_isolation.py
+
   # Single required status check for branch rules; fails if any job failed or was cancelled
   ci:
     if: always()
-    needs: [lint, secrets, compose, changes, images]
+    needs: [lint, secrets, compose, changes, images, isolation]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
