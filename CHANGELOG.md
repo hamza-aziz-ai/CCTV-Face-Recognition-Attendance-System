@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.6.3 (2026-11-01)
+
+## What's Changed
+* fix: pace lighting alerts and handle camera edge cases by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/81
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.6.2...v2.6.3
+
 ## v2.6.2 (2026-11-01)
 
 ## What's Changed
