@@ -201,7 +201,8 @@ services:
     environment:
       # This host has no SSH, Redis or liveness service, so the client waits only for the services that run here
       HOST_CHECK_PORT: 9092
-      PROJECT_SERVICES_PORT: 6385,19000,19001,19530,9092,20001,20012,20013
+      # One InsightFace-REST container (D-032): 19001 is published only with a second one, so checking it kept the display waiting
+      PROJECT_SERVICES_PORT: 6385,19000,19530,9092,20001,20012,20013
     ports:
       # 9090 is the reporting API on this host
       - "9095:9090"
