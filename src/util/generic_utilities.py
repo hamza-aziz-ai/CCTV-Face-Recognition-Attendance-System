@@ -107,8 +107,8 @@ def crop_and_mask_roi(frame, polygon_points):
     # --- 1. Crop the bounding rectangle from the frame ---
     roi_cropped = frame[y_min:y_max, x_min:x_max]
 
-    # --- 2. Create a mask the size of the bounding rectangle ---
-    mask = np.zeros((h, w), dtype=np.uint8)
+    # --- 2. Create a mask the size of the crop: boundingRect is a pixel larger than a frame the polygon reaches the edge of ---
+    mask = np.zeros(roi_cropped.shape[:2], dtype=np.uint8)
 
     # --- 3. Shift polygon coords so that (x_min, y_min) is at (0, 0) ---
     shifted_polygon = polygon_points_np - np.array([x_min, y_min])

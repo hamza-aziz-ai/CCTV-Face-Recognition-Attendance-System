@@ -250,8 +250,6 @@ This also stops the standalone stacks: InsightFace-REST, Milvus, Kafka, PostgreS
 
 ## Known issues and limitations
 
-- `crop_and_mask_roi()` fails on a region that reaches the frame's right or bottom edge: `cv2.boundingRect` is one pixel larger than the crop. Keep regions a pixel inside the frame.
-- `camera_ip` is an `inet` column, so a camera addressed by host name is recognized and shown but its record is not saved. Use IP addresses.
 - nginx forwards to one InsightFace-REST container only; more containers from `INSIGHTFACE_GPUS` start but are not balanced (D-032).
 - Face liveness detection is off, so a printed photo can be recognized.
 - The nightly updater replaces all of a person's staging vectors with only that night's new crops, and still marks crops processed when the Milvus insert fails.

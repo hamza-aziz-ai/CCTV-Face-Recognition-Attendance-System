@@ -127,6 +127,9 @@ LOW_LIGHT_INTENSITY_DETECTION_BUFFER_SIZE = 100
 
 # Majority size to decide whether it is getting dark
 MAXIMUM_DARK_FRAMES = 80
+
+# How often a dark camera repeats its alert; below STATUS_THRESHOLD, so the display keeps showing it
+LIGHTING_ALERT_SECONDS = 30
 ########################################################################################################################
 
 

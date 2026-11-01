@@ -1,4 +1,5 @@
 import os
+import socket
 import sys
 from typing import Optional
 
@@ -224,6 +225,15 @@ def base64_to_image(base64_frame: str) -> Optional[np.ndarray]:
         return None
 
 
+def camera_address(address: str) -> str:
+    """The IP address for the `camera_ip` inet column. A camera can be set by URL or host name; one that no longer resolves still keeps its record."""
+    host = urlparse(address).hostname if address.startswith("http") else address
+    try:
+        return socket.gethostbyname(host)
+    except OSError:
+        return "0.0.0.0"
+
+
 def insert_recognition_data(current_date: str, current_time: str, results: dict):
     """
     Insert recognition data into the PostgreSQL database while avoiding duplicate
@@ -254,8 +264,7 @@ def insert_recognition_data(current_date: str, current_time: str, results: dict)
                     for record in records:
                         camera_name, camera_ip, confidence_score, frame_base64, bbox = record
                         frame = base64_to_image(frame_base64)
-                        if camera_ip.startswith("http"):
-                            camera_ip = urlparse(camera_ip).hostname
+                        camera_ip = camera_address(camera_ip)
                         recognition_frame = plot_bbox(frame, bbox, person_id, confidence_score)
 
                         # Determine location from camera_name (assuming the first part denotes location).
