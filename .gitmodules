@@ -1,3 +1,6 @@
 [submodule "Kafka-WebApp"]
 	path = Kafka-WebApp
 	url = https://github.com/hamza-aziz-ai/Kafka-WebApp.git
+[submodule "Face-Dataset-Collector"]
+	path = Face-Dataset-Collector
+	url = https://github.com/hamza-aziz-ai/Face-Dataset-Collector.git

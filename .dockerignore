@@ -27,3 +27,4 @@ logs
 # Built separately or not part of the application images
 STANDALONE-SERVICES
 Kafka-WebApp
+Face-Dataset-Collector
