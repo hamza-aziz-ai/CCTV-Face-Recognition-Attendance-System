@@ -81,6 +81,8 @@ jobs:
     env:
       IMAGE_TAG: ${{ needs.plan.outputs.tag }}
       TOKEN: ${{ github.token }}
+      # The ROI page is behind a compose profile; build and publish it with the rest
+      COMPOSE_PROFILES: roi
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # All 7 images on one runner hit "No space left on device"; these preinstalled toolchains are unused here
@@ -92,8 +94,13 @@ jobs:
           echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker compose -f docker-compose-main.yml -f docker-compose.dev.yml build
           # Compose pushes only services with a build section, so postgres is skipped. One at a time: parallel
-          # pushes of the shared base layers into new ghcr.io packages were refused ("denied") at random.
-          docker compose --parallel 1 -f docker-compose-main.yml -f docker-compose.dev.yml push
+          # pushes of the shared base layers into new ghcr.io packages were refused ("denied") at random. The first push
+          # into a new package can still be refused (the roi image, v2.4.0, #71); a retry skips layers already there.
+          for attempt in 1 2 3; do
+            docker compose --parallel 1 -f docker-compose-main.yml -f docker-compose.dev.yml push && break
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep 20
+          done
 
   # Our InsightFace-REST image, built only when its source changed (insightface-image.yml)
   insightface:
@@ -135,7 +142,8 @@ jobs:
           cat bundle/release-manifest.json
           image=ghcr.io/hamza-aziz-ai/cctv-face-recognition-deploy:$TAG
           docker build -f deploy/bundle.Dockerfile --label org.opencontainers.image.version="$TAG" -t "$image" bundle
-          docker push "$image"
+          # ghcr.io refuses the first pushes into a new package at random ("denied"); a retry skips layers already there
+          for attempt in 1 2 3; do docker push "$image" && break; [ "$attempt" -lt 3 ] || exit 1; sleep 20; done
 
   publish:
     needs: [plan, ci, images, insightface, bundle]

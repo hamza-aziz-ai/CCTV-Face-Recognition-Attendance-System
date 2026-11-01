@@ -180,6 +180,11 @@ def save_face_if_better(
                         )
                 )
 
+                if not better:
+                    # The kept crops all beat this one; looping again would never end and block the collector
+                    logger.debug(f"Kept the {len(metadata)} better crops of {person_id} in {cluster_name}")
+                    return
+
                 if better:
                     worst_path = os.path.join(save_dir, worst_entry["filename"])
                     if os.path.exists(worst_path):

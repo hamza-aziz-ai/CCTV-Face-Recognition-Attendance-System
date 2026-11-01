@@ -2,6 +2,37 @@
 
 Read first: docs/ARCHITECTURE.md, docs/CONSTRAINTS.md, docs/DECISIONS.md. Newest entry on top.
 
+## Session summary: 2026-10-31 (model: Claude Opus 5.5, councils with Codex GPT-6.1 Sol)
+
+Context: this project is a rehearsal of real-world deployment, not a sold product. Durations and incidents go into docs/TIMELINES.md so later promises can be kept.
+
+Done: InsightFace-REST 0.9.5 on TensorRT 11, built by CI and running as one container (D-031, D-032); generic GPU defaults instead of the A100 MIG layout; face vectors versioned with the dataset and Milvus served through an alias (D-030, migrated); the display fixed (Kafka-WebApp v0.1.2); Kafka topics kept on a volume (D-028); merge and release self-recovery (D-029); deployment hosts get images and a source-free bundle instead of the repository (D-033, PR #52); former client names removed from every local file, log and config (they remain in git history, left as is); Docker on this host logged in to ghcr.io with a read:packages-only token.
+
+Blocked until 2026-11-01 00:00 UTC (05:30 IST): the month's GitHub Actions minutes are used up, so CI, merges and releases do not run.
+
+Agreed order (owner, 2026-10-31). This replaces the older "Next" lists below.
+
+1. Merge #55 (skip image builds on docs-only PRs).
+2. Re-run the failed v2.2.0 release (issue #54): publishes the first bundle and `:stable`.
+3. #53 registry watcher: `watch.py --check` against the real `:stable`, take out of draft, release.
+4. Let #56 (standalone scripts from a bundle), #57 (TIMELINES.md), this PR and Kafka-WebApp #4 merge.
+5. Switch this host to the bundle and `site\` layout and retire the deploy clone (D-033 step 3; planned short outage).
+6. Repair the ROI provisioning service (owner: repair, not delete). It imports names that no longer exist (`IP_CAMS`, `create_mask`, `roi_coordinates`) and rewrites `src/parameters.py` at runtime; it is not deployed today.
+7. Real camera test of the whole path (owner).
+8. Multi-tenant design: client-dedicated and multi-client central deployments from one codebase, including where each client's data lives and staff login (council, decision record). Pull tokens only gate which images a dedicated host can download; central tiers need server-side entitlements.
+   - 8b. Standard live view: camera video passed through a media server (e.g. MediaMTX) beside a per-camera "recent events" panel; no overlays.
+   - 8c. Enrolment API on synthetic data: staff login, client taken from the login, server-side photo checks (real head pose and blur), jobs in Postgres, Milvus publish only after validation.
+   - 8d. Android app `hamza-aziz-ai/Face-Dataset-Collector`: login, consent record, guided 5 or 10-pose auto-capture, review and retake, upload to 8c. Its capture screens can start now against a mock.
+   - 8e. Person deletion (photos, vectors, camera crops, old Milvus versions, stored object versions, backups, with a deletion record), plus client isolation and recovery tests.
+9. Step 4: compile the app code (Nuitka module mode, Cython fallback, `-rt` packages; plan agreed with Codex). Dedicated tier only.
+10. Merge the PTZ project in as a second app (Python 3.14, CI, no secrets in images first).
+11. DeepStream as an optional paid recognition image, including the live annotated stream. It starts with a capacity spike: timestamped clips, then 1 to N streams, measuring p95 latency, frame rate, drops, GPU memory, encoder sessions and viewer fan-out. Risks: hardware decoding under WSL2 on RTX 40-series, and consumer GPUs capped at 8 encoder sessions.
+12. Jetson Orin edge node. The Orin Nano has no hardware video encoder.
+
+Any time: draft the InsightFace model licence request (owner sends); triage Dependabot alerts; delete `insightface-rest:v0.9.0.0` after a few days of real use; budget Actions minutes for the large builds in items 9 to 12.
+
+Stale in the older entries below: `src/main.py` no longer deletes Kafka topics (#43); the producer no longer mounts the whole checkout (#52); `HOST_PROFILE=laptop-rtx4050` and its profile are gone (#51).
+
 ## Session summary: 2026-10-30, late (model: Claude Opus 5.5)
 
 Done: CI/CD end to end; the watcher deploys releases to this host; PostgreSQL 18.6, Kafka 8.4, Milvus 3.0.5, Python 3.14; Kafka-WebApp as a submodule with its own CI and releases; the guide's docs written.
@@ -41,7 +72,7 @@ Broken or risky:
 - This machine is both the dev and the deployment server (from 2026-10-30): Windows 11, Docker Desktop, RTX 4050 Laptop 6 GB. The repo defaults are generic and fit it: every GPU service on GPU 0, one InsightFace container with batch sizes 8 and 16 (D-032). Speed and memory under real camera load are not measured.
   - InsightFace TAG `v0.9.5.0` is built by `deploy_trt_multi-gpu.sh` itself. Keep the old `v0.9.0.0` image until the switch is proven, for a rollback.
   - Milvus `v2.5.1-gpu` in the repo; `v3.0.0` is the local image.
-  - Compose `/workspace/...` paths land inside the Docker Desktop VM.
+  - Compose paths like `/workspace/...` land inside the Docker Desktop VM and are emptied by a restart, so stateful services use named volumes (D-038).
   - No TensorRT engines are built yet. The stack has not been started here.
 - `src/main.py` deletes Kafka topics at startup. Pending feedback may be lost on restart (unverified).
 - `src/automatic-vector-db-updation/milvus_updater.py` deletes old vectors, swallows insert failures and still marks the rows processed. This loses vectors silently.

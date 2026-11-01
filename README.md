@@ -2,120 +2,141 @@
 
 Real-time, multi-camera face recognition that turns CCTV footage at campus gates, hostels and libraries into attendance records and posts them to each institution's ERP.
 
-- **Detection and recognition:** [InsightFace-REST](https://github.com/SthPhoenix/InsightFace-REST) on a TensorRT backend: SCRFD (`scrfd_10g_gnkps`) for detection and ArcFace (`w600k_r50`) for 512-d embeddings, FP16, run as two replicas on separate NVIDIA MIG slices behind an nginx load balancer.
+- **Detection and recognition:** [InsightFace-REST](https://github.com/SthPhoenix/InsightFace-REST) on a TensorRT backend: SCRFD (`scrfd_10g_gnkps`) for detection and ArcFace (`w600k_r50`) for 512-d embeddings, FP16. By default one container runs on GPU 0 behind an nginx proxy on port 6385 (D-032).
 - **Identity search:** Milvus (GPU, `GPU_IVF_FLAT`, cosine) with a primary *enrolled* collection and a *staging* collection of faces captured from CCTV, used as a fallback to reduce the domain gap between enrollment photos and elevated-angle cameras.
 - **Self-improving gallery:** a collector keeps each person's best face crops per camera cluster (pupil distance, match score), and a nightly job refreshes the staging vectors.
-- **Outputs:** recognitions are stored in PostgreSQL (year/location partitioned), synced to the institution ERP every minute, exposed through a reporting API, and pushed over Kafka to on-site Raspberry Pi displays.
+- **Outputs:** recognitions are stored in PostgreSQL (year and location partitions), synced to the institution's ERP every minute, exposed through a reporting API, and pushed over Kafka to on-site displays.
 
-One deployment serves one site.
+One deployment serves one or more clients, each with its own site folder and compose project (D-036).
 
-## Architecture
+## System Design
+
+How to read it: solid arrows are the path every recognition takes; dotted arrows are optional, cached or written on the side. Colors follow [docs/FLOW.md](docs/FLOW.md#how-to-read-the-diagrams): blue the way in, green a code step, amber a decision, purple an outcome, grey a data store or outside service.
 
 ```mermaid
-flowchart LR
-    CAM["IP cameras<br/>RTSP / HTTP"] -->|"1 reader thread per camera"| PC["Producer-consumer<br/>src/main.py"]
-    PC -->|"batches of 32 frames"| NGX["nginx :6385"]
-    NGX --> IFR0["InsightFace-REST TRT<br/>GPU 0"]
-    PC -->|"top-5 search"| MV[("Milvus :19530<br/>primary + staging")]
-    PC -->|"POST /ingest"| DBC["DB controller :20001"] --> PG[("PostgreSQL :5432")]
-    PC -->|"TCP JSON"| FBC["Feedback controller :20012"] --> K["Kafka :9092"]
-    K -.-> PI["Raspberry Pi display<br/>(Kafka-WebApp)"]
-    PI -.->|"POST /post_images"| DISP["Display server :20013"]
-    PC -->|"POST /faces"| COL["Face collector :8000"] --> PG
-    UPD["Nightly updater<br/>01:00"] --> PG
-    UPD --> NGX
-    UPD -->|"refresh staging"| MV
-    API["Reporting API :9090"] --> PG
-    API -->|"every minute"| ERP["ERP"]
+flowchart TB
+    CAM["`IP camera, RTSP or HTTP`"]:::entry
+    PROD["`(1) Camera thread: ROI crop or resize, darkness check`"]:::step
+    Q[("`In-memory frame queue`")]:::store
+    CONS["`(2) Recognition thread: batch of 32 frames`"]:::step
+    IFR["`InsightFace-REST via nginx :6385`"]:::store
+    MV[("`Milvus :19530, primary and staging collections`")]:::store
+    DEC{"`(3) Primary match at least 0.5, or staging fallback at least 0.45?`"}:::decision
+    NOPE["`No match: face ignored`"]:::outcome
+    LIVE{"`(4) Liveness check enabled?`"}:::decision
+    LV["`Liveness service :6386, off by default`"]:::store
+    DBC["`(5) DB controller, internal :20001`"]:::step
+    PG[("`Shared PostgreSQL: recognition_results, partitioned by year and location`")]:::store
+    FBC["`(6) Feedback controller, internal :20012`"]:::step
+    K[("`Kafka topic per entry point, one partition per camera`")]:::store
+    KW["`Kafka-WebApp display`"]:::outcome
+    DISP["`Display image server :20013`"]:::step
+    API["`(7) ERP sync job in the reporting API, every minute`"]:::step
+    ERP["`Institution ERP`"]:::outcome
+    COL["`(8) Face collector, internal :8000`"]:::step
+    DYN[("`Face crops and face_images table`")]:::store
+    UPD["`Nightly updater, 01:00`"]:::step
+
+    CAM --> PROD --> Q --> CONS
+    CONS -->|"`POST /extract`"| IFR
+    IFR -->|"`embeddings, boxes, crops`"| CONS
+    CONS -->|"`top 5 from each collection`"| MV
+    MV --> DEC
+    DEC -->|"`no`"| NOPE
+    DEC -->|"`yes`"| LIVE
+    LIVE -.->|"`only when enabled`"| LV
+    LIVE --> DBC
+    DBC --> PG
+    DEC -->|"`strict primary matches`"| FBC
+    FBC --> K --> KW
+    KW -->|"`POST /post_images`"| DISP
+    DISP -->|"`portraits`"| KW
+    PROD -.->|"`ERROR and SUCCESS camera status`"| K
+    PG --> API --> ERP
+    DEC -.->|"`strict primary matches, face crops`"| COL
+    COL -.-> DYN
+    DYN -.-> UPD
+    UPD -.->|"`refresh staging vectors`"| MV
+
+    classDef entry fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+    classDef step fill:#dcfce7,stroke:#15803d,color:#0f172a
+    classDef decision fill:#fef3c7,stroke:#b45309,color:#0f172a
+    classDef outcome fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+    classDef error fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+    classDef store fill:#f1f5f9,stroke:#475569,color:#0f172a
 ```
 
-Frames travel from the camera threads to the recognition threads through an in-memory `multiprocessing.Queue`. Kafka carries only recognition feedback and camera status messages, never frames.
+1. **Camera input.** The producer process starts one thread per configured camera. Each thread reads frames, crops the camera's ROI polygon or resizes the frame to 640x360, and queues it with the camera name. When 80 of the last 100 frames are dark, the thread stops queueing and sends an `ERROR` message straight to the camera's Kafka partition, so the display can tell people why nothing is recognized.
+2. **Detection and embeddings.** Four recognition threads take 32 frames at a time from the in-memory queue and send them to InsightFace-REST through nginx. The queue keeps frames off the network and out of Kafka; it is lost on restart.
+3. **Identity search.** Every face is searched against both Milvus collections. A face is accepted when its best primary hit scores at least 0.5 (cosine). Otherwise, with `STAGING = True`, the best primary hit that also appears in the staging top 5 is accepted at 0.45 or more. Staging vectors come from CCTV crops, so they help people whose enrollment photos differ from how the cameras see them.
+4. **Liveness.** Anti-spoofing exists but is off (`ENABLE_FACE_LIVENESS_DETECTION = False`). When on, a person whose crops look spoofed more often than real is dropped from the attendance records; the display and the collector still receive that person.
+5. **Attendance record.** Accepted faces, with the annotated frame, go to the DB controller, which answers at once and writes to PostgreSQL in the background. Each record lands in a partition for its year and location.
+6. **Display.** Strict primary matches go over TCP to the feedback controller, which publishes each person ID to the entry point's Kafka topic, on the camera's partition. Kafka-WebApp (v0.3.0) reads every partition of the topic, so every camera of the entry point, asks the display image server for portraits, and shows them. Camera `ERROR` and `SUCCESS` messages go to a per-camera status strip on the display instead. Staging matches are recorded but not displayed.
+7. **ERP.** Every minute the reporting API posts the day's unacknowledged records to the location's ERP endpoint, and marks each one acknowledged when the ERP confirms it. The same service answers report queries.
+8. **Gallery refresh.** Strict primary matches also send their face crops to the collector, which keeps the best three per person and camera cluster. At 01:00 the nightly updater embeds new crops and replaces that person's vectors in the staging collection.
 
-### Recognition flow
+Each step is traced in detail in [docs/FLOW.md](docs/FLOW.md).
 
-1. Each camera thread reads a frame, crops the configured ROI polygon (or resizes to 640×360), skips it when the scene is too dark, and queues it.
-2. A recognition thread takes 32 frames and sends them to InsightFace-REST `/extract`.
-3. Every face embedding is searched against both Milvus collections (top 5).
-4. A face is accepted when the top primary hit has cosine similarity ≥ 0.5. Failing that, when `STAGING = True`, the best primary hit that also appears in the staging top 5 is accepted at ≥ 0.45.
-5. Accepted results go to the DB controller. Strict primary matches also go to the feedback controller (Kafka → displays) and to the face collector.
+## Solution Architecture
 
-## Services
+How to read it: solid arrows are what happens on every release; dotted arrows are optional or happen by hand.
 
-### Main stack (`docker-compose-main.yml`)
+```mermaid
+flowchart TB
+    DEV["`Developer opens a pull request`"]:::entry
+    CI{"`(1) ci.yml: lint, secret scan, compose, bundle and script checks, manifest check, 8 image builds unless docs only`"}:::decision
+    AM{"`(2) automerge.yml: every check green on the head commit?`"}:::decision
+    MAIN["`Squash merge into main`"]:::step
+    REL{"`(3) release.yml: feat, fix, perf or breaking change since the last tag?`"}:::decision
+    NOREL["`No release`"]:::outcome
+    BUILD["`(3) CI again on the merged commit, then images and the deploy bundle`"]:::step
+    GHCR[("`ghcr.io: 8 app images by release tag, InsightFace-REST image, deploy bundle and its stable tag`")]:::store
+    GHR["`GitHub Release with the model manifest, CHANGELOG entry`"]:::outcome
+    W["`(4) watch.py in the deploy folder on the host, every 10 minutes`"]:::step
+    WD{"`(5) Per client: compose up, smoke test on its API_PORT, stable after 90 s?`"}:::decision
+    STACK["`(6) One compose stack per client, cctv or cctv-client, config and data from sites/client`"]:::outcome
+    RB["`Roll back to the previous release, Windows message`"]:::error
+    SA[("`(7) Shared standalone services: PostgreSQL, InsightFace-REST and nginx, Milvus, Kafka, dataset store`")]:::store
 
-| Service | Entry point | Port (host:container) |
-|---|---|---|
-| Producer-consumer | `src/main.py` | — |
-| Database controller | `src/database_server/postgresql_server_controller.py` | not published (20001 inside the stack) |
-| Feedback controller (Kafka publisher) | `src/feedback_server/feedback_msg_server_controller.py` | not published (20012 inside the stack) |
-| Reporting API + ERP sync | `src/api/app.py` | `API_PORT` (9090):8000 |
-| Dynamic face data collector | `src/dynamic_face_data_collector/api.py` | not published (8000 inside the stack) |
-| Nightly Milvus updater | `src/automatic-vector-db-updation/milvus_updater.py` | — |
-| Display image server | `src/fetch_face_image_server/app.py` | `DISPLAY_IMAGE_PORT` (20013):20013 |
+    DEV --> CI --> AM
+    AM -->|"`yes`"| MAIN --> REL
+    REL -->|"`no`"| NOREL
+    REL -->|"`yes`"| BUILD
+    BUILD --> GHCR
+    BUILD --> GHR
+    GHCR -->|"`pull the deploy bundle by its stable tag`"| W
+    W -->|"`bundle copied into releases, manifest checked`"| WD
+    GHCR -->|"`app images by digest`"| WD
+    WD -->|"`yes`"| STACK
+    WD -->|"`no`"| RB
+    GHCR -.->|"`InsightFace-REST image, pulled by start_standalone_services.sh`"| SA
+    STACK -->|"`shared services by host IP`"| SA
 
-`kafka-webapp` (`ghcr.io/hamza-aziz-ai/kafka-webapp`, port `DISPLAY_PORT`, 9095) is the recognition display for this host. It is versioned in the `Kafka-WebApp` submodule's repository.
-
-Each client on a host runs this stack as its own compose project, `cctv` for the owner and `cctv-<client>` for the others (D-036). Containers have no fixed names, each project has its own network, and services reach the DB controller, feedback controller and face collector by service name, so those ports are not published. Logs and recognition frames go to `logs/` and `Recognition_Frames/` in the client's site folder. Published ports default to the values above; a second client on the same host sets its own in its site `.env`.
-
-Upgrading a host from a release that ran PostgreSQL inside this stack: the old container keeps running as an orphan of project `cctv`, and the stack keeps using it. To move it to the shared service, run `docker rm -f cctv-face-recognition-postgresql-database`, then `./start_standalone_services.sh`. The data folder is the same. Older logs stay in `/workspace/FACE_RECOGNITION_ATTENDANCE_SYSTEM_LOGS/` inside the Docker Desktop VM.
-
-### Standalone stacks (`STANDALONE-SERVICES/`)
-
-| Service | Image | Ports | GPU (default) |
-|---|---|---|---|
-| InsightFace-REST | `insightface-rest` (TensorRT) | 19000 → 18080 | 0 |
-| nginx load balancer | `nginx` | 6385 → 18080 | — |
-| Milvus standalone | `milvusdb/milvus:v3.0.5-gpu` (+ etcd 3.5.25, Milvus-tested MinIO) | 19530, 9091, 9000, 9001 | 0 |
-| Kafka broker (KRaft) | `confluentinc/cp-kafka:8.4.0` (+ Schema Registry, Connect, ksqlDB, REST Proxy, Flink: cp-all-in-one community 8.4.0) | 9092, 9101 | — |
-| Dataset store (DVC remote) | `pgsty/minio` (MinIO) | 9010 (S3 API), 9011 (console) | — |
-| PostgreSQL 18, shared by every client stack | `postgres:18.6-trixie` | `POSTGRES_HOST_PORT` (5432) | — |
-| Face liveness detection (disabled) | `face-liveness-detection:v-beta` + nginx | 6970, 6971, 6386 | 0, 0 |
-
-Liveness detection (MiniFASNet anti-spoofing) is switched off by `ENABLE_FACE_LIVENESS_DETECTION = False` in `src/parameters.py`, and its start command is commented out.
-
-## Configuration
-
-### Secrets
-
-Secrets are not stored in this repository. Copy the template and fill in the values; `docker-compose` reads `.env` from the project root automatically.
-
-```bash
-cp .env.example .env
+    classDef entry fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+    classDef step fill:#dcfce7,stroke:#15803d,color:#0f172a
+    classDef decision fill:#fef3c7,stroke:#b45309,color:#0f172a
+    classDef outcome fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+    classDef error fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+    classDef store fill:#f1f5f9,stroke:#475569,color:#0f172a
 ```
 
-| Variable | Used by |
-|---|---|
-| `POSTGRES_USER`, `POSTGRES_PASSWORD` | PostgreSQL and every service that connects to it |
-| `API_KEY` | Reporting API (`?api_key=` query parameter) |
-| `CAM_USERNAME`, `CAM_PASSWORD` | Default camera credentials |
-| `PG_APP_USER`, `PG_APP_PASSWORD`, `MILVUS_APP_USER`, `MILVUS_APP_PASSWORD`, `KAFKA_APP_USER`, `KAFKA_APP_PASSWORD` | This client's own logins on the shared services, written by `deploy/provision.py` (D-037); each service gets only those it uses. Until its step 3c cutover the owner's site sets `LEGACY_SHARED_SERVICES=1` in `master.env` and keeps using `POSTGRES_USER` and `POSTGRES_PASSWORD` |
-| `API_PORT`, `DISPLAY_IMAGE_PORT`, `DISPLAY_PORT` | Published ports of this client's stack (9090, 20013, 9095 if unset); only a second client on the same host needs them |
-| `DATASET_STORE_USER`, `DATASET_STORE_PASSWORD`, `DATASET_STORE_DIR` | Dataset store (MinIO DVC remote): root login and the host folder holding the data, outside the repo |
+1. **Continuous integration.** Every pull request runs `ci.yml`. The aggregate `ci` check passes only when lint, the gitleaks scan, the compose, bundle, layout and standalone-script checks, the model-manifest drift check and all eight image builds with their smoke tests pass. A pull request that changes only `docs/` or Markdown files skips the image builds, to save Actions minutes. A pull request that touches provisioning, the shared services' settings or the code that logs in to them also runs the client-isolation test on throwaway copies of the shared services. Beyond these self-checks and tests there are no unit tests (D-006).
+2. **Auto-merge.** `automerge.yml` runs from main's copy after `ci` or the code-review workflow finishes. It squash-merges a non-draft pull request from this repository, and deletes its branch, only when every check on the latest commit passed (D-013, D-025). Green CI is the merge and ship gate; there is no human review step.
+3. **Build and release.** After a merge, `release.yml` reads the merged pull request titles as Conventional Commits: `type!:` or a `BREAKING CHANGE` footer gives a major bump, `feat:` a minor one, `fix:` or `perf:` a patch, and anything else no release. It re-runs CI on the exact commit, pushes the eight app images, including the ROI page, to `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, builds the InsightFace-REST image if its source changed, and publishes the deploy bundle (D-033). Only then does it tag, create the GitHub Release with `mlops/model-manifest.json`, move the bundle's `stable` tag and add the notes to `CHANGELOG.md`. A failed release opens an issue for the owner (D-014, D-017, D-029). **Pull request titles must follow this convention.**
+4. **Watcher.** `watch.py` runs through Windows Task Scheduler from a deploy folder that holds no repository and no GitHub login, only a pull-only registry login (D-033, D-034). It pulls the deploy bundle's `stable` tag, which only `release.yml` moves, and reads the release from the image label. It serves every client folder under `sites\`, and deploys the release to a client only if it is not that client's current one and has not failed for it before. The owner installs `watch.py` by hand from a bundle; it never replaces itself. Starting automerge for green pull requests left open is a separate script, `deploy/nudge_automerge.py`, which runs only on the owner's laptop (D-029).
+5. **Deploy check.** The watcher copies the bundle out of its image with `docker create` and `docker cp`, without running it, into `releases\<tag>\`, and refuses it unless its manifest is for that release and pins every image to one of ours by digest. For each client it then runs `docker compose -p <project> --project-directory sites\<client> up --pull missing --no-build --wait` with the bundle's compose file, waits for the client's API (`API_PORT` in its `.env`, 9090 by default) to answer, then checks that no service is restarting or exited 90 seconds later. On failure it starts that client's previous release from its bundle, records the failed tag for that client so it is never retried unattended, and shows a Windows message; other clients are not touched. A registry login problem, a site-config problem, or a folder whose `master.env` names a different `CLIENT_ID`, stops deploys with a single message. See [docs/ROLLBACK.md](docs/ROLLBACK.md).
+6. **Live stack.** The main compose stack runs seven application containers and Kafka-WebApp, plus the ROI page on demand. It is compose project `cctv` for the owner and `cctv-<client>` for any other client, with no fixed container names and its own network: the DB controller, feedback controller and face collector are reached by service name and not published on the host (D-036). Config and data come from the client's folder `sites\<client>\` in the deploy folder, so a new release changes only images and compose files. The watcher never starts a stack the owner stopped, and keeps only the bundles and images of each client's current and previous releases.
+7. **Standalone services.** PostgreSQL, InsightFace-REST, Milvus, Kafka and the dataset store are shared by every client stack on the host and run as separate compose stacks or containers, started by `start_standalone_services.sh`. The watcher does not manage them; they change only when someone runs that script. On a deployment host the script runs from a release bundle, with `CONFIG_DIR` pointing at the site folder.
 
-### Cameras
+Who owns which part, and the runtime ports, are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-The real camera configuration is git-ignored. Create it from the template:
-
-```bash
-cp src/Camera-Configuration/camera_configuration.example.json \
-   src/Camera-Configuration/camera_configuration.json
-```
-
-Each location has an ERP `api-endpoint` and a set of `cctv-cameras` grouped by point (for example `entry` and `exit`). Each camera has `ip_address`, `port`, `endpoint`, `username`, `password` and an optional ROI polygon in `masking-coordinates`. A camera whose `username` or `password` is `null` falls back to `CAM_USERNAME` / `CAM_PASSWORD`. Kafka topics are named `<location>_<point>`, with one partition per camera.
-
-To draw an ROI polygon on a live stream, run `Custom-ROI-Provisioning/crop_rectangle.py` with `RTSP_URL` set, then copy the printed points into `masking-coordinates`.
-
-### Parameters
-
-Runtime parameters such as batch size, thresholds, ports, staging and liveness flags live in [`src/parameters.py`](src/parameters.py). The host IP is written to `master.env` (created from `master.env.example` on first run, not tracked) and `STANDALONE-SERVICES/standalone-services.env` by `set_configuration.sh` at startup. `master.env` also names the client the site serves, `CLIENT_ID` (D-036): every service refuses to start without a valid one, and `CLIENT_ID=owner` keeps the database, collection and topic names used before. InsightFace-REST models, batch sizes and GPU devices are set in `STANDALONE-SERVICES/standalone-services.env`.
-
-## Getting started
+## Quick start
 
 ### Prerequisites
 
-- Linux host with Docker, Docker Compose and the NVIDIA Container Toolkit
-- An NVIDIA GPU. The defaults in `standalone-services.env` put every service on GPU 0 with small batches (tested on a 6 GB laptop GPU); a larger or multi-GPU host sets its own GPUs and batch sizes in a profile under `STANDALONE-SERVICES/hosts/`, chosen by `HOST_PROFILE` in `.env`
-- [DVC](https://dvc.org/doc/install) access to the face datasets
+- A Linux host, or Windows with Docker Desktop, with Docker Compose and the NVIDIA Container Toolkit.
+- An NVIDIA GPU. The defaults in `STANDALONE-SERVICES/standalone-services.env` put every GPU service on GPU 0 with small batches (tested on a 6 GB laptop GPU). A larger or multi-GPU host sets its own GPUs and batch sizes in a profile file under `STANDALONE-SERVICES/hosts/`, chosen by `HOST_PROFILE` in `.env` (D-015, D-032). No profile is committed today.
+- [DVC](https://dvc.org/doc/install) access to the face datasets.
 
 ### 1. Clone
 
@@ -127,61 +148,75 @@ find . -type f -name "*.sh" -exec chmod +x {} \;
 
 ### 2. Configure
 
-Create `.env` and the camera configuration as described in [Configuration](#configuration).
+Secrets are not stored in this repository. Copy the template and fill in the values; Docker Compose reads `.env` from the project root.
+
+```bash
+cp .env.example .env
+```
+
+| Variable                                                                                                                                                           | Used by                                                                                                                                                     |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`                                                                                                                               | Admin login of the shared PostgreSQL. App services use it only on the owner's site while `LEGACY_SHARED_SERVICES=1`                                         |
+| `PG_APP_USER`, `PG_APP_PASSWORD`, `MILVUS_APP_USER`, `MILVUS_APP_PASSWORD`, `KAFKA_APP_USER`, `KAFKA_APP_PASSWORD`, `KAFKA_DISPLAY_USER`, `KAFKA_DISPLAY_PASSWORD` | This client's own logins on the shared services, written by `deploy/provision.py` (D-037); each service gets only those it uses, and a missing one stops it |
+| `POSTGRES_HOST_PORT`                                                                                                                                               | Host port for PostgreSQL when 5432 is taken; default 5432                                                                                                   |
+| `API_KEY`                                                                                                                                                          | Reporting API (`?api_key=` query parameter)                                                                                                                 |
+| `CAM_USERNAME`, `CAM_PASSWORD`                                                                                                                                     | Default camera credentials                                                                                                                                  |
+| `API_PORT`, `DISPLAY_IMAGE_PORT`, `DISPLAY_PORT`, `ROI_PORT`                                                                                                       | Published ports of this client's stack, defaults 9090, 20013, 9095 and 8069; only a second client on the same host needs them                               |
+| `HOST_PROFILE`                                                                                                                                                     | Optional GPU profile under `STANDALONE-SERVICES/hosts/`                                                                                                     |
+| `DATASET_STORE_USER`, `DATASET_STORE_PASSWORD`, `DATASET_STORE_DIR`                                                                                                | Dataset store (MinIO DVC remote): root login and the host folder holding the data, outside the repo                                                         |
+
+The camera configuration is git-ignored. Create it from the template:
+
+```bash
+cp src/Camera-Configuration/camera_configuration.example.json src/Camera-Configuration/camera_configuration.json
+```
+
+Each location has an ERP `api-endpoint` and a set of `cctv-cameras` grouped by entry point (for example `entry` and `exit`). Each camera has `ip_address`, `port`, `endpoint`, `username`, `password` and an optional ROI polygon in `masking-coordinates`. A camera whose `username` or `password` is `null` falls back to `CAM_USERNAME` and `CAM_PASSWORD`. Camera keys end in a number (`cctv-camera-1`), which sets the camera's Kafka partition. To draw a camera's ROI polygon, start the ROI page with `docker compose -f docker-compose-main.yml --profile roi up -d roi-provisioning` and open http://localhost:8069 (`ROI_PORT` if set). Pick a camera, load a full-resolution snapshot, click around the area to keep, preview the crop (made with the producer's own `crop_and_mask_roi`), and save: the points go into that camera's `masking-coordinates`. Restart the producer-consumer to apply them, and stop the page afterwards (`docker compose -f docker-compose-main.yml --profile roi stop roi-provisioning`). It listens on this host only and has no login (D-035). Without Docker, `Custom-ROI-Provisioning/crop_rectangle.py` with `RTSP_URL` set prints the same kind of points to copy in by hand.
+
+Runtime parameters such as batch size, thresholds, ports and the staging and liveness flags live in [`src/parameters.py`](src/parameters.py). At startup `set_configuration.sh` writes the host IP to `master.env` (created from `master.env.example`, not tracked). The standalone stacks read it from there too, so no tracked file changes. InsightFace-REST models, batch sizes and GPU devices are set in `standalone-services.env`. `master.env` also names the client the site serves, `CLIENT_ID` (D-036): every service refuses to start without a valid one, and `CLIENT_ID=owner` keeps the database and collection names used before; other clients get their own ([DATA.md](docs/DATA.md)). Each client logs in to the shared services with its own accounts from its `.env`. Until its cutover (D-037), the owner's site sets `LEGACY_SHARED_SERVICES=1` in `master.env`, which keeps the admin PostgreSQL login, no Milvus or Kafka login, unprefixed topics, and databases and topics created at start; any other client that sets it is refused.
 
 ### 3. Get the datasets
 
-The face datasets are versioned with DVC and are not stored in git. The default remote `minio` is the dataset store started by `start_standalone_services.sh` (bucket `dvc`, S3 API on port 9010, D-019). The datasets were restarted from scratch in October 2026 (D-026):
+The face datasets are versioned with DVC, not git. The default remote `minio` is the dataset store started by `start_standalone_services.sh` (bucket `dvc`, S3 API on port 9010, D-019). The datasets were restarted from scratch in October 2026 (D-026).
 
-| DVC file | Contents |
-|---|---|
-| `FACIAL-RECOGNITION-DATASET.dvc` | Enrollment photos and embedding pickles |
-| `DISPLAY-FACE-DATASET.dvc` | Portraits shown on the displays (`<id>/front_face.jpg`) |
+| DVC file                         | Contents                                                |
+|----------------------------------|---------------------------------------------------------|
+| `FACIAL-RECOGNITION-DATASET.dvc` | Enrollment photos and each person's `vectors.parquet`   |
+| `DISPLAY-FACE-DATASET.dvc`       | Portraits shown on the displays (`<id>/front_face.jpg`) |
 
 ```bash
 # Credentials stay in .dvc/config.local (git-ignored); use the DATASET_STORE_* values from .env
 dvc remote modify --local minio access_key_id <DATASET_STORE_USER>
 dvc remote modify --local minio secret_access_key <DATASET_STORE_PASSWORD>
 # On any machine other than the dataset store host, point at that host
-dvc remote modify --local minio endpointurl http://<store-host-ip>:9010
+dvc remote modify --local minio endpointurl http://<store-host>:9010
 dvc pull
 ```
 
-To add new data, run `dvc add FACIAL-RECOGNITION-DATASET`, commit the updated `.dvc` file, then `dvc push`.
-
-
+To add data, run `dvc add FACIAL-RECOGNITION-DATASET`, commit the updated `.dvc` file, then `dvc push`.
 
 ### 4. Build and start
 
 ```bash
 docker compose -f docker-compose-main.yml -f docker-compose.dev.yml build   # build the application images
-./start_complete_project.sh     # standalone stacks, then the main compose stack
+./start_complete_project.sh     # shared standalone stacks, including PostgreSQL, then the main compose stack
 ```
 
 To start in two steps instead, run `./start_standalone_services.sh`, then `docker-compose -f docker-compose-main.yml up -d`.
 
-The images contain the application source, so rebuild them after code changes. For development, start with both files (`docker compose -f docker-compose-main.yml -f docker-compose.dev.yml up -d`): `docker-compose.dev.yml` mounts `./src` over the baked copy, so edits apply on restart without a rebuild.
+The standalone scripts also run from a release bundle, with the site's config in a separate folder: `CONFIG_DIR=<site folder> bash <bundle>/start_standalone_services.sh`. They then read `.env` and `master.env` from that folder and keep the InsightFace-REST models and TensorRT engines in `<site folder>/insightface-models`, so a new release does not rebuild them.
+
+The images contain the application source, so rebuild them after code changes. For development, start with both files (`docker compose -f docker-compose-main.yml -f docker-compose.dev.yml up -d`): `docker-compose.dev.yml` mounts `./src` over the baked copy in every service except the producer-consumer and the ROI page, so edits to those services apply on restart without a rebuild. Those two always run the code in their image.
 
 ### 5. Enroll faces
 
-Put each person's photos in `FACIAL-RECOGNITION-DATASET/<person_id>/`: `front.jpg`, `chin_up.jpg`, `chin_down.jpg`, `left_30.jpg` and `right_30.jpg`, plus the same five with `_glasses` for someone who wears spectacles. Get each person's written consent first: these are biometric data.
+Put each person's photos in `FACIAL-RECOGNITION-DATASET/<person_id>/`: `front.jpg`, `chin_up.jpg`, `chin_down.jpg`, `left_30.jpg` and `right_30.jpg`, plus the same five with `_glasses` for someone who wears glasses. Get each person's written consent first: these are biometric data.
 
 ```bash
 python3 src/util/enrol_person.py FACIAL-RECOGNITION-DATASET/<person_id>
 ```
 
-It saves the vectors to `vectors.parquet` in the person's folder and publishes a new version of the primary collection (D-030). Then version the dataset: `dvc add FACIAL-RECOGNITION-DATASET`, commit the `.dvc` file, `dvc push`. `python3 src/util/face_vectors.py use <n>` switches back to an earlier version. Run `python3 src/util/face_vectors.py migrate` once before the first enrolment on an existing install.
-
-Nothing is enrolled unless every photo passes: the full set is present, each has exactly one face with confidence of at least 0.7 and pupils at least 28 px apart, each matches the person's other photos, and none matches someone already enrolled.
-
-Whole groups can still go through these scripts, without the photo checks:
-
-```bash
-python3 src/util/insightface_embeddings.py <folder> <embeddings.pkl>   # build an embeddings pickle for a group
-python3 src/util/upload_embeddings.py <embeddings.pkl>                  # save a pickle to the dataset and publish
-```
-
-`upload_embeddings.py` replaces the vectors of the people in the pickle and keeps everyone else.
+Nothing is enrolled unless every photo passes the checks. The script saves the vectors next to the photos and publishes a new version of the primary collection (D-026, D-030). Then version the dataset: `dvc add FACIAL-RECOGNITION-DATASET`, commit the `.dvc` file, `dvc push`. Run `python3 src/util/face_vectors.py migrate` once before the first enrollment on an existing install. The checks, version switching and the scripts for whole groups are described in [docs/FLOW.md](docs/FLOW.md#7-enrollment-and-face-vector-publishing).
 
 ### Stop
 
@@ -189,116 +224,43 @@ python3 src/util/upload_embeddings.py <embeddings.pkl>                  # save a
 ./stop_complete_project.sh
 ```
 
-This also stops the standalone stacks: InsightFace-REST, Milvus and Kafka.
+This also stops the standalone stacks: InsightFace-REST, Milvus, Kafka, PostgreSQL and the dataset store.
 
-## CI/CD
+## Documentation
 
-- **CI** (`.github/workflows/ci.yml`) runs on every PR: lint, secret scan, compose validation, model-manifest drift check, watcher tests, and builds and smoke-tests all 8 images. The aggregate check is `ci`.
-- **Auto-merge** (`automerge.yml`): a PR into `main` is squash-merged, and its branch deleted, once `ci` and every other check passed on its latest commit. A run with a cancelled job is re-run once; a real failure stays failed.
-- **Auto-release** (`release.yml`): after a merge, the PR titles since the last tag decide the version as Conventional Commits. `feat:` gives a minor bump, `fix:`/`perf:` a patch, and `type!:` or a `BREAKING CHANGE` footer a major; anything else gives no release. CI then re-runs on the exact commit, the 7 service images are pushed to GitHub Packages as `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, the tag and GitHub Release are created with `mlops/model-manifest.json` attached, and the release notes are added to `CHANGELOG.md`. **PR titles must follow this convention.**
-- **Auto-deploy** (`deploy/watch.py`): a poller on the deployment host deploys each new release and rolls back on failure.
+| Document                                    | What it covers                                                                                                        |
+|---------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md)     | Modules and what they own; runtime topology with ports; how a change reaches production; where data lives; deployment |
+| [FLOW.md](docs/FLOW.md)                     | Each flow step by step: startup, recognition, records, display, ERP and reports, gallery, enrollment, release         |
+| [DATA.md](docs/DATA.md)                     | Every data store: shape, size, writers, readers and trade-offs                                                        |
+| [DECISIONS.md](docs/DECISIONS.md)           | Decision records, D-001 onward                                                                                        |
+| [ALTERNATIVES.md](docs/ALTERNATIVES.md)     | Options considered and not taken                                                                                      |
+| [THREAT.md](docs/THREAT.md)                 | Threat model: entry points, abuse, gaps and what to close first                                                       |
+| [FAILURE.md](docs/FAILURE.md)               | How each component fails and what happens then                                                                        |
+| [ROLLBACK.md](docs/ROLLBACK.md)             | How to undo a release, a data change or a standalone service change                                                   |
+| [TEST-CHECKLIST.md](docs/TEST-CHECKLIST.md) | Live checks after a deploy or rollback                                                                                |
+| [CONSTRAINTS.md](docs/CONSTRAINTS.md)       | Fixed limits the design works within                                                                                  |
+| [ALLOW-POLICY.md](docs/ALLOW-POLICY.md)     | What automation may do without asking                                                                                 |
+| [ASSUMPTIONS.md](docs/ASSUMPTIONS.md)       | Assumptions not yet proven                                                                                            |
+| [DEPENDENCIES.md](docs/DEPENDENCIES.md)     | External dependencies and secrets                                                                                     |
+| [DEFENSE.md](docs/DEFENSE.md)               | Defense brief                                                                                                         |
+| [HANDOVER.md](docs/HANDOVER.md)             | Session handover notes, newest first                                                                                  |
+| [Kafka-WebApp](Kafka-WebApp/README.md)      | Display client setup, kept in its own repository                                                                      |
 
-### Deployment watcher setup (Windows deployment host)
-
-Run once, after a release with images exists (v0.3.0 or later). The watcher manages only the main compose stack; start the standalone services first (`./start_standalone_services.sh`). The images are private, so Docker signs in to ghcr.io with your `gh` login, which needs the `read:packages` scope.
-
-```powershell
-gh auth refresh -s read:packages
-gh auth token | docker login ghcr.io -u hamza-aziz-ai --password-stdin
-gh repo clone hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System C:\deploy\cctv
-Copy-Item .env C:\deploy\cctv\.env      # from the dev checkout; the clone needs the same secrets
-cd C:\deploy\cctv
-python deploy\watch.py --enroll         # deploys the newest release now and starts watching
-schtasks /Create /TN "CCTV deploy watcher" /SC MINUTE /MO 10 /IT /F `
-  /TR "\"C:\ProgramData\anaconda3\pythonw.exe\" \"C:\deploy\cctv\deploy\watch.py\""
-```
-
-Every 10 minutes, while you are signed in and Docker Desktop is running, the watcher does the following:
-- It reads the newest published release, skipping drafts and pre-releases. It deploys it only if the tag is on `main`, the release is not the current one, and it has not failed before.
-- It checks the tag out in the deploy clone, pulls that release's images (only once; a rollback reuses them), and runs `up --wait`. It records the release as current only after `http://localhost:9090/docs` answers.
-- On failure it rolls back to the last good release, marks the failed one so it is never retried, and shows a Windows message.
-- It never starts a stack you stopped.
-- After a successful deploy it deletes the release images of every tag except the current and previous one.
-
-Its log is in `C:\deploy\cctv\deploy\watch.log`. To retry a failed release, run `python deploy\watch.py --enroll`. To stop watching, run `schtasks /Delete /TN "CCTV deploy watcher" /F`.
-
-## Reporting API
-
-All routes need `api_key` as a query parameter. Dates use `DD-MM-YYYY`.
-
-| Method | Route | Returns |
-|---|---|---|
-| GET | `/fetch_person_data?date&person_id[&camera_name]` | Recognitions for a person on a date |
-| GET | `/fetch_camera_data?date&camera_name` | Recognitions from one camera |
-| GET | `/fetch_module_data?date&module` | Recognitions for one location |
-| GET | `/fetch_tiled_frames?date&person_id` | PNG of the person's annotated frames |
-| GET | `/fetch_frames_by_time?date&module[&start_time&end_time]` | PNG of frames in a time window (`HH:MM AM/PM`) |
-| POST | `/manual_post?date&location` | Re-sends a day's records for a location to the ERP |
-
-A background job posts the current day's unacknowledged recognitions to the ERP every minute and marks each one acknowledged on success.
-
-## Data
-
-| Store | Contents |
-|---|---|
-| PostgreSQL `CCTV_Camera_Surveillance` | `recognition_results`, partitioned by year and location, with the annotated frame |
-| PostgreSQL `Face_Recognition_Database` | `person_summary` and `face_images` from the face collector |
-| Milvus `FACE_DATA_COLLECTION_FOR_COSINE` | Enrolled embeddings (512-d) |
-| Milvus `FACE_DATA_STAGING_COLLECTION_FOR_COSINE` | CCTV-captured embeddings |
-| `DYNAMIC-FACIAL-RECOGNITION-DATASET/` | Collected face crops and `meta.json` per person and cluster |
-| `logs/<year>/<month>/<logger>/` | Per-service logs, rotated at midnight, 31 kept |
-
-The names above are the owner's (`CLIENT_ID=owner`). Any other client gets its own: PostgreSQL `<client>_cctv_camera_surveillance` and `<client>_face_recognition_database`, the Milvus database `<client>_default` with the same collection names inside, and Kafka topics `<client>.<location>_<point>` (D-036).
-
-The system stores biometric data (face images and embeddings) in several places. Apply your organisation's access, retention and deletion policy to all of them.
-
-## Project structure
-
-```text
-├── src/
-│   ├── main.py                          # producer-consumer entry point
-│   ├── parameters.py                    # runtime configuration
-│   ├── multicam_stream_producer.py      # camera reader threads
-│   ├── multicam_stream_consumer.py      # batching and recognition threads
-│   ├── insightface_face_detection.py    # InsightFace-REST client
-│   ├── insightface_face_recognition.py  # search, decision and dispatch
-│   ├── inference_data_cleaner.py        # match rules
-│   ├── milvus_server.py                 # Milvus helpers
-│   ├── api/                             # reporting API and ERP sync
-│   ├── database_server/                 # recognition ingest service
-│   ├── feedback_server/                 # TCP to Kafka publisher
-│   ├── dynamic_face_data_collector/     # face crop collector
-│   ├── automatic-vector-db-updation/    # nightly staging updater
-│   ├── fetch_face_image_server/         # portraits for the displays
-│   ├── Camera-Configuration/            # camera config template
-│   └── util/                            # enrollment, dataset and development scripts
-├── STANDALONE-SERVICES/                 # InsightFace-REST, Milvus, Kafka, face liveness
-├── Custom-ROI-Provisioning/             # ROI drawing tool (crop_rectangle.py)
-├── docker-compose-main.yml
-├── *.Dockerfile
-└── start_* / stop_* / set_configuration.sh
-```
-
-`Custom-ROI-Provisioning/app.py` is a legacy Flask tool that no longer runs against the current code.
-
-## Raspberry Pi display
-
-The display client lives in the `Kafka-WebApp` submodule. See [Kafka-WebApp/README.md](Kafka-WebApp/README.md) for first-time setup and [Kafka-WebApp/Configure-Parameters-for-Raspberry.md](Kafka-WebApp/Configure-Parameters-for-Raspberry.md) for changing parameters.
-
-## Project documents
-
-How the system works, why it looks this way and where it breaks: [architecture](docs/ARCHITECTURE.md), [flow](docs/FLOW.md), [data](docs/DATA.md), [decisions](docs/DECISIONS.md), [alternatives](docs/ALTERNATIVES.md), [threats](docs/THREAT.md), [failures](docs/FAILURE.md), [rollback](docs/ROLLBACK.md), [test checklist](docs/TEST-CHECKLIST.md), [constraints](docs/CONSTRAINTS.md), [allow policy](docs/ALLOW-POLICY.md), [assumptions](docs/ASSUMPTIONS.md), [dependencies](docs/DEPENDENCIES.md), [defense brief](docs/DEFENSE.md), [handover](docs/HANDOVER.md).
-
-## Known issues
+## Known issues and limitations
 
 - The duplicate check in `src/database_server/postgresql_database.py` queries a `recognition_timestamp` column that the table does not define, and puts a `%s` placeholder inside a quoted interval. Recognition inserts fail unless the live table was migrated by hand.
-- The nightly updater replaces all of a person's staging vectors with only that night's new crops.
-- Face clusters are defined only for the main-gate cameras, so the face collector rejects crops from other cameras.
+- nginx forwards to one InsightFace-REST container only; more containers from `INSIGHTFACE_GPUS` start but are not balanced (D-032).
+- Face liveness detection is off, so a printed photo can be recognized.
+- The nightly updater replaces all of a person's staging vectors with only that night's new crops, and still marks crops processed when the Milvus insert fails.
+- Face clusters are defined only for the `maingate` entry and exit cameras, so the face collector rejects crops from other cameras.
 - Most internal services have no authentication: see [docs/THREAT.md](docs/THREAT.md).
+- Client separation (D-036): steps 1 and 2 are built, so each client has its own `CLIENT_ID`, names in the shared services, compose project and site folder. Of step 3 (D-037), provisioning and the stacks' use of per-client logins are built; a client stack no longer creates databases or topics and stops if its logins are missing. The owner's site still runs with `LEGACY_SHARED_SERVICES=1` until the cutover turns on authentication on the shared services. User accounts and protected callers (step 4), and tiers and recovery (step 5) are planned.
+- The ROI page has no login; it is bound to 127.0.0.1 and runs only when started with the `roi` profile (D-035).
 
 ## Authors
 
-Developed at Global InfoVentures Pvt. Ltd. by **Hamza Aziz**.
+Developed by **Hamza Aziz**.
 
 Third-party components:
 
