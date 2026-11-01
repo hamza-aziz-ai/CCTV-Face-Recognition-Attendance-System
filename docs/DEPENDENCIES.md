@@ -42,7 +42,6 @@ Names only, never values.
 | Secret                                         | Lives in                                 | Used by                                               |
 |------------------------------------------------|------------------------------------------|-------------------------------------------------------|
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`           | `.env`; `admin.env` after the cutover    | Postgres and its clients                              |
-| `API_KEY`                                      | `.env`                                   | Reporting API                                         |
 | `CAM_USERNAME`, `CAM_PASSWORD`                 | `.env`                                   | Cameras                                               |
 | `DATASET_STORE_USER`, `DATASET_STORE_PASSWORD` | `.env`                                   | Dataset store, DVC                                    |
 | DVC credentials                                | `.dvc/config.local`                      | DVC                                                   |

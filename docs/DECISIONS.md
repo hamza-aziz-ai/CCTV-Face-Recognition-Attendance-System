@@ -612,3 +612,17 @@ Chosen: 3. PostgreSQL uses `cctv-postgres-data`; Milvus uses `milvus-data`, `mil
 Why: named volumes work the same on Docker Desktop and Linux and persist on Docker's own disk; Kafka's named volume survived this same restart (D-028). Option 2 depends on the host's folder layout, and POSIX ownership and fsync behave poorly on Windows mounts, which databases rely on.
 Trade-off: the data is inside Docker's disk, so copying it needs `docker run` or `pg_dump`, not a file manager, and removing Docker Desktop's data or running `docker volume prune` deletes it. Off-host backups are still missing (D-036).
 Revisit if: a host needs its data on a specific disk (a bind mount or a volume driver).
+
+## D-039: Accounts live in the API, in each client's database
+Date: 2026-11-01   Model: Claude Opus 5.5
+Context: D-036 step 4 needs logins, roles, sessions and machine tokens per client, with the shared API key out of the URL. It does not say where they run.
+Options:
+
+1. a new authentication service per client
+2. a hosted or open-source identity provider
+3. inside the existing API service, in the client's own database
+
+Chosen: 3, built in `src/api/accounts.py`. Tables `accounts`, `sessions`, `machine_tokens` and `login_failures` sit in the client's database, so an account cannot reach another client. The roles, `hashlib.scrypt` passwords, hashed session tokens, `__Host-` cookies, CSRF tokens, 8-hour expiry and throttling follow D-036. Throttling is 5 failures in 15 minutes per name. `GET /auth/check` lets the reverse proxy of the next PR guard pages that have no login of their own, such as Kafka-WebApp and its WebSockets, with no change to them.
+Why: no new image, service or dependency, and the API already has a connection pool and FastAPI. Sensitive pages are few, so a small module is enough.
+Trade-off: throttling by name lets someone lock a known name out for 15 minutes. `/docs` stays open until the proxy can close it, and the watcher's smoke test uses it. Until the proxy arrives the API is plain HTTP, so the cookie works only on localhost, and credentials and tokens cross the LAN in clear. Accounts are managed by command line; there is no admin page yet.
+Revisit if: a client needs single sign-on, or enrolment (8c) needs per-person permissions.

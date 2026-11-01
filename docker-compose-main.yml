@@ -73,7 +73,6 @@ services:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-api:${IMAGE_TAG:-v-beta}
     restart: unless-stopped
     environment:
-      API_KEY: ${API_KEY}
       POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
       PG_APP_USER: ${PG_APP_USER:-}
       PG_APP_PASSWORD: ${PG_APP_PASSWORD:-}

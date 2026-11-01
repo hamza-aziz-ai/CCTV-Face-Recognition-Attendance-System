@@ -184,6 +184,14 @@ jobs:
           docker run -d --name records-db --network records -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci postgres:18.6-trixie
           until docker exec records-db pg_isready -h records-db -U ci; do sleep 1; done
           docker run --rm --network records --entrypoint python3 -e CLIENT_ID=owner -e LEGACY_SHARED_SERVICES=1 -e IP_ADDRESS=records-db -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci ci/${{ matrix.service }}:test src/database_server/test_records.py
+      # Logins, roles, CSRF, throttling and revocation, through the running API on a real PostgreSQL (D-039)
+      - name: Accounts
+        if: matrix.service == 'api'
+        run: |
+          docker network create accounts
+          docker run -d --name accounts-db --network accounts -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci postgres:18.6-trixie
+          until docker exec accounts-db pg_isready -h accounts-db -U ci; do sleep 1; done
+          docker run --rm --network accounts --entrypoint python3 -e CLIENT_ID=owner -e LEGACY_SHARED_SERVICES=1 -e IP_ADDRESS=accounts-db -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci ci/${{ matrix.service }}:test src/api/test_accounts.py
       # A region at the frame's edge crops, and a dark camera alerts at a steady pace
       - name: Camera
         if: matrix.service == 'producer-consumer'

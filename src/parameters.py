@@ -295,6 +295,11 @@ KAFKA_PORT = "9092"
 KAFKA_TOPIC_PREFIX = "" if LEGACY_SHARED_SERVICES else f"{CLIENT_ID}."  # the owner too after its cutover (D-037)
 
 
+# Sessions and login throttling (D-036 step 4)
+SESSION_HOURS = 8
+LOGIN_ATTEMPTS = 5  # failed logins for one name within the window before it is refused
+LOGIN_WINDOW_MINUTES = 15
+
 # Display face image server port
 DISPLAY_FACE_IMAGE_SERVER_PORT = 20013
 ########################################################################################################################

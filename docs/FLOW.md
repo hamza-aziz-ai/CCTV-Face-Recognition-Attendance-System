@@ -267,15 +267,15 @@ sequenceDiagram
             end
         end
     end
-    CL->>API: GET a report route with api_key in the query
-    alt api_key does not match API_KEY
-        API-->>CL: 403
-    else key matches
+    CL->>API: GET a report route with a session cookie or a bearer token
+    alt not signed in
+        API-->>CL: 401
+    else any role
         API->>PG: SELECT from the year or year-location partition
         PG-->>API: rows and annotated frames
         API-->>CL: JSON, or a PNG of tiled frames
     end
-    CL->>API: POST /manual_post with date, location and api_key
+    CL->>API: POST /manual_post as client_admin, with the CSRF token if using a session
     API->>PG: SELECT that day's records from recognition_results_YEAR_LOCATION
     API->>ERP: one batched POST with all of them
     ERP-->>API: status
@@ -293,7 +293,7 @@ sequenceDiagram
 6. Only then is the row marked `api_acknowledged = true`.
 7. Any other status, an empty `data`, an HTTP error or a timeout.
 8. The error is logged and the row is tried again a minute later, until midnight.
-9. Report routes take `api_key` as a query parameter. Dates use `DD-MM-YYYY`.
+9. Report routes need a session from `POST /auth/login` or a machine token as `Authorization: Bearer` (D-039). Dates use `DD-MM-YYYY`.
 10. A wrong key gets 403. The key is compared with `==` (THREAT.md).
 11. Person, camera and tiled-frame routes select from the year partition `recognition_results_<year>`; location and time-window routes from `recognition_results_<year>_<location>`.
 12. Rows come back with their annotated frames where the route needs them.
