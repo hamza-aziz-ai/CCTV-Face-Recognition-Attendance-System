@@ -238,6 +238,7 @@ This also stops the standalone stacks: InsightFace-REST, Milvus, Kafka, PostgreS
 | [THREAT.md](docs/THREAT.md)                 | Threat model: entry points, abuse, gaps and what to close first                                                       |
 | [FAILURE.md](docs/FAILURE.md)               | How each component fails and what happens then                                                                        |
 | [ROLLBACK.md](docs/ROLLBACK.md)             | How to undo a release, a data change or a standalone service change                                                   |
+| [CUTOVER-D037.md](docs/CUTOVER-D037.md)     | Runbook: switching a host to per-client logins on the shared services, and rolling it back                            |
 | [TEST-CHECKLIST.md](docs/TEST-CHECKLIST.md) | Live checks after a deploy or rollback                                                                                |
 | [CONSTRAINTS.md](docs/CONSTRAINTS.md)       | Fixed limits the design works within                                                                                  |
 | [ALLOW-POLICY.md](docs/ALLOW-POLICY.md)     | What automation may do without asking                                                                                 |
@@ -254,8 +255,8 @@ This also stops the standalone stacks: InsightFace-REST, Milvus, Kafka, PostgreS
 - Face liveness detection is off, so a printed photo can be recognized.
 - The nightly updater replaces all of a person's staging vectors with only that night's new crops, and still marks crops processed when the Milvus insert fails.
 - Face clusters are defined only for the `maingate` entry and exit cameras, so the face collector rejects crops from other cameras.
-- Most internal services have no authentication: see [docs/THREAT.md](docs/THREAT.md).
-- Client separation (D-036): steps 1 and 2 are built, so each client has its own `CLIENT_ID`, names in the shared services, compose project and site folder. Of step 3 (D-037), provisioning and the stacks' use of per-client logins are built; a client stack no longer creates databases or topics and stops if its logins are missing. The owner's site still runs with `LEGACY_SHARED_SERVICES=1` until the cutover turns on authentication on the shared services. User accounts and protected callers (step 4), and tiers and recovery (step 5) are planned.
+- The app's own services (DB controller, feedback controller, face collector, display image server and display) and InsightFace-REST have no login, and the reporting API's single key travels in the query string; the shared PostgreSQL, Milvus, Kafka and dataset store have per-client logins since D-037. See [docs/THREAT.md](docs/THREAT.md).
+- Client separation (D-036): steps 1 to 3 are built. Each client has its own `CLIENT_ID`, names in the shared services, compose project, site folder, and logins on PostgreSQL, Milvus, Kafka and the dataset store, made by `deploy/provision.py` (D-037). Each host switches once, by hand, with the runbook [docs/CUTOVER-D037.md](docs/CUTOVER-D037.md); until then the owner's site keeps `LEGACY_SHARED_SERVICES=1`. User accounts and protected callers (step 4), and tiers and recovery (step 5) are planned.
 - The ROI page has no login; it is bound to 127.0.0.1 and runs only when started with the `roi` profile (D-035).
 
 ## Authors

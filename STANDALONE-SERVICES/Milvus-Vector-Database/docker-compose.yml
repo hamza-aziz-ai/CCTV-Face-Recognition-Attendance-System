@@ -1,5 +1,5 @@
 # Milvus 3.0.5 GPU standalone: follows milvus-standalone-docker-compose-gpu.yaml from the v3.0.5 release, images pinned by digest.
-# Local changes: GPU device from MILVUS_GPU_DEVICE (standalone-services.env or the host profile), and every service restarts unless stopped (D-018).
+# Local changes: GPU device from MILVUS_GPU_DEVICE (standalone-services.env or the host profile), every service restarts unless stopped (D-018), and authorization is on (../auth/milvus-user.yaml, D-037).
 x-milvus-image: &milvus-image milvusdb/milvus:v3.0.5-gpu@sha256:6d52c9dfe208ba7e05eabb9fd565fcf480f8f40aafc94381c5d6ebbaa2b5eb69
 
 services:
@@ -74,6 +74,8 @@ services:
       MINIO_ADDRESS: minio:9000
     volumes:
       - milvus-data:/var/lib/milvus
+      # Logins on: each client's user reaches only its own database (D-037)
+      - ../auth/milvus-user.yaml:/milvus/configs/user.yaml:ro
     ports:
       - "19530:19530"
       - "9091:9091"

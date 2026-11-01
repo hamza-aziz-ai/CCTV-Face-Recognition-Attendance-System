@@ -11,6 +11,10 @@
 cd "$(dirname "$0")" || exit 1
 CONFIG_DIR=${CONFIG_DIR:-$(pwd)}
 export CONFIG_DIR
+# The shared PostgreSQL's admin login: in the deploy folder's admin.env once a host has moved it there, away from every
+# client's site (CUTOVER-D037.md); otherwise in this site's .env
+ADMIN_ENV=$CONFIG_DIR/.env
+grep -qs '^POSTGRES_USER=' ../../admin.env && ADMIN_ENV=$(cd ../.. && pwd)/admin.env
 # Models and TensorRT engines are this host's data: outside the bundle, so a new release does not rebuild them
 [ "$CONFIG_DIR" = "$(pwd)" ] || export INSIGHTFACE_MODELS_DIR=${INSIGHTFACE_MODELS_DIR:-$CONFIG_DIR/insightface-models}
 
@@ -61,7 +65,7 @@ echo
 echo "Starting PostgreSQL"
 # shellcheck disable=SC2164
 cd STANDALONE-SERVICES/PostgreSQL
-docker-compose --env-file "$CONFIG_DIR/.env" up -d
+docker-compose --env-file "$ADMIN_ENV" up -d
 cd ../..
 
 echo

@@ -1,6 +1,6 @@
 """Provisions one client on this host's shared services (D-036 step 3), with admin rights the client's stack never gets.
 
-Per client <c>, each confined to its own data:
+Per client <c>, each confined to its own data (the owner keeps its database and collection names, D-036):
   PostgreSQL  role <c>_app owning <c>_cctv_camera_surveillance and <c>_face_recognition_database; nobody else connects
   Milvus      user <c>_app with a role over database <c>_default only, enough to publish (D-030: collections, alias),
               and an empty first version behind the alias plus the staging collection
@@ -15,6 +15,7 @@ behind the running stack's back: provisioning stops and says how to recover. Not
   python provision.py CLIENT              provision (or finish provisioning) one client; safe to rerun, and rerun it
                                           after changing the client's cameras (topics and partitions follow them)
   python provision.py --init-milvus-root  once per host, before Milvus authorisation is on: replace root's default password
+  python provision.py --init-kafbat       once per host: a read-only Kafka login for the Kafbat UI
 Options: --sites DIR, --admin-env FILE (holds MILVUS_ROOT_PASSWORD), --postgres/--kafka/--store CONTAINER, --milvus URL.
 Stdlib only, like watch.py: the services' own command-line tools run inside their containers through docker exec.
 """
@@ -39,6 +40,17 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 class Stop(Exception):
     """A refusal the owner must act on; the message carries no secret."""
+
+
+def databases(client):
+    """The client's two PostgreSQL databases; the owner keeps the names its data already has (D-036)."""
+    if client == OWNER:
+        return ["CCTV_Camera_Surveillance", "Face_Recognition_Database"]
+    return [f"{client}_cctv_camera_surveillance", f"{client}_face_recognition_database"]
+
+
+def milvus_database(client):
+    return "default" if client == OWNER else f"{client}_default"
 
 
 def settings(client):
@@ -89,8 +101,7 @@ def run(cmd, stdin=None, secret=()):
 
 def postgres(container, env):
     role, password = env["PG_APP_USER"], env["PG_APP_PASSWORD"]
-    client = role[:-len("_app")]
-    dbs = [f"{client}_cctv_camera_surveillance", f"{client}_face_recognition_database"]
+    dbs = databases(role[:-len("_app")])
     # Variables travel on stdin, never in argv; psql quotes them (:'literal', :"identifier")
     head = "".join(f"\\set {k} '{v}'\n" for k, v in {"role": role, "password": password, "db1": dbs[0], "db2": dbs[1]}.items())
     sql = head + r"""
@@ -98,6 +109,8 @@ SELECT format('CREATE ROLE %I LOGIN', :'role') WHERE NOT EXISTS (SELECT FROM pg_
 ALTER ROLE :"role" WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'password';
 SELECT format('CREATE DATABASE %I OWNER %I', d, :'role') FROM unnest(ARRAY[:'db1', :'db2']) AS d
   WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = d) \gexec
+-- The owner's databases existed before its role; they and their schema public move to it
+SELECT format('ALTER DATABASE %I OWNER TO %I', d, :'role') FROM unnest(ARRAY[:'db1', :'db2']) AS d \gexec
 SELECT format('REVOKE ALL ON DATABASE %I FROM PUBLIC', d) FROM unnest(ARRAY[:'db1', :'db2']) AS d \gexec
 SELECT format('GRANT ALL ON DATABASE %I TO %I', d, :'role') FROM unnest(ARRAY[:'db1', :'db2']) AS d \gexec
 -- The maintenance database is open to every role by default; no client needs it
@@ -105,6 +118,21 @@ REVOKE CONNECT ON DATABASE postgres FROM PUBLIC;
 """
     run(["docker", "exec", "-i", container, "sh", "-c", 'exec psql -X -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres'],
         stdin=sql, secret=[password])
+    # Tables, partitions and sequences someone else created (the owner's, made by the admin login before D-037) move to
+    # the role one by one. Never REASSIGN OWNED: it would move databases and tablespaces too. Sequences that belong to a
+    # table column move with their table.
+    transfer = f"\\set role '{role}'\n" + r"""
+SELECT format('ALTER %s %s OWNER TO %I',
+              CASE c.relkind WHEN 'S' THEN 'SEQUENCE' WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' ELSE 'TABLE' END,
+              c.oid::regclass, :'role')
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+ WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'S', 'v', 'm')
+   AND c.relowner <> (SELECT oid FROM pg_roles WHERE rolname = :'role')
+   AND NOT (c.relkind = 'S' AND EXISTS (SELECT FROM pg_depend d WHERE d.objid = c.oid AND d.deptype IN ('a', 'i'))) \gexec
+"""
+    for db in dbs:
+        run(["docker", "exec", "-i", container, "sh", "-c", f'exec psql -X -q -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "{db}"'],
+            stdin=transfer)
 
 
 def postgres_role_exists(container, role):
@@ -137,7 +165,7 @@ def milvus_call(url, token, path, body, secret=()):
 
 def milvus(url, root_token, env):
     user, password = env["MILVUS_APP_USER"], env["MILVUS_APP_PASSWORD"]
-    db, role = f"{user[:-len('_app')]}_default", f"{user[:-len('_app')]}_role"
+    db, role = milvus_database(user[:-len("_app")]), f"{user[:-len('_app')]}_role"
     call = lambda path, body: milvus_call(url, root_token, path, body, secret=[password, root_token])  # noqa: E731
     if db not in call("databases/list", {}):
         call("databases/create", {"dbName": db})
@@ -263,8 +291,6 @@ def root_token(admin_env):
 def provision(client, sites, admin_env, pg, kafka_container, store_container, milvus_url):
     if not CLIENT_ID.fullmatch(client):
         raise Stop(f"{client!r} is not a client ID: 3 to 30 lowercase letters or digits, starting with a letter")
-    if client == OWNER:
-        raise Stop("the owner keeps its legacy names and moves to restricted logins at the step 3c cutover")
     token = root_token(admin_env)
     site_env = sites / client / ".env"
     cameras = sites / client / "src/Camera-Configuration/camera_configuration.json"
@@ -289,7 +315,7 @@ def provision(client, sites, admin_env, pg, kafka_container, store_container, mi
     env = save_missing(site_env, env)  # new passwords are saved before any service is touched
     postgres(pg, env)
     milvus(milvus_url, token, env)
-    milvus_collections(milvus_url, token, f"{client}_default")
+    milvus_collections(milvus_url, token, milvus_database(client))
     kafka(kafka_container, env)
     kafka_topics(kafka_container, wanted_topics)
     store(store_container, env)
@@ -313,10 +339,27 @@ def init_milvus_root(admin_env, milvus_url):
     print(f"Milvus root password replaced; it is in {admin_env}")
 
 
+def init_kafbat(admin_env, container):
+    """A read-only Kafka login for the loopback-only Kafbat UI, which browses every client's topics (D-037). Rerunning
+    sets the saved password again; only the UI uses it."""
+    password = save_missing(admin_env, {"KAFBAT_PASSWORD": None})["KAFBAT_PASSWORD"]
+    admin = ["docker", "exec", container]
+    boot = ["--bootstrap-server", "localhost:29092"]
+    run(admin + ["kafka-configs", *boot, "--alter", "--entity-type", "users", "--entity-name", "kafbat",
+                 "--add-config", f"SCRAM-SHA-512=[password={password}]"], secret=[password])
+    grants = [(op, ["--topic", "*"]) for op in ("Read", "Describe", "DescribeConfigs")]
+    grants += [(op, ["--group", "*"]) for op in ("Read", "Describe")]
+    grants += [(op, ["--cluster"]) for op in ("Describe", "DescribeConfigs")]
+    for op, resource in grants:
+        run(admin + ["kafka-acls", *boot, "--add", "--allow-principal", "User:kafbat", "--operation", op, *resource])
+    print(f"Kafbat login ready; its password is in {admin_env}")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("client", nargs="?")
     parser.add_argument("--init-milvus-root", action="store_true")
+    parser.add_argument("--init-kafbat", action="store_true")
     parser.add_argument("--sites", type=Path, default=ROOT / "sites")
     parser.add_argument("--admin-env", type=Path, default=ROOT / "admin.env")
     parser.add_argument("--postgres", default="cctv-postgresql")
@@ -327,6 +370,8 @@ def main(argv=None):
     try:
         if args.init_milvus_root:
             init_milvus_root(args.admin_env, args.milvus)
+        elif args.init_kafbat:
+            init_kafbat(args.admin_env, args.kafka)
         elif args.client:
             provision(args.client, args.sites, args.admin_env, args.postgres, args.kafka, args.store, args.milvus)
         else:

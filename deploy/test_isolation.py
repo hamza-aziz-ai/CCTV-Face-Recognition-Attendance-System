@@ -235,6 +235,59 @@ def check_refused(f, env, client, other):
     assert f"{other}-enrolment" not in out, (client, "lists other bucket")
 
 
+def admin_psql(f, db, sql):
+    return sh("docker", "exec", "-i", f.pg, "psql", "-X", "-q", "-U", "admin", "-d", db, "-v", "ON_ERROR_STOP=1", stdin=sql)
+
+
+def seed_owner(f, root):
+    """The owner's site as it is before its cutover: databases, partitioned tables and a serial column created by the
+    admin login, and Milvus's default database with a published version behind the alias."""
+    for db in provision.databases("owner"):
+        admin_psql(f, "postgres", f'CREATE DATABASE "{db}";\n')
+    admin_psql(f, "CCTV_Camera_Surveillance",
+               "CREATE TABLE recognition_results (id SERIAL, y int, who text, PRIMARY KEY (id, y)) PARTITION BY RANGE (y);\n"
+               "CREATE TABLE recognition_results_2025 PARTITION OF recognition_results FOR VALUES FROM (2025) TO (2026);\n"
+               "INSERT INTO recognition_results (y, who) VALUES (2025, 'before');\n")
+    admin_psql(f, "Face_Recognition_Database", "CREATE TABLE person_summary (person_id text PRIMARY KEY);\n")
+    for path, body in (("collections/create", {"dbName": "default", "collectionName": "FACE_DATA_COLLECTION_FOR_COSINE_v7", "dimension": 8}),
+                       ("entities/insert", {"dbName": "default", "collectionName": "FACE_DATA_COLLECTION_FOR_COSINE_v7", "data": [{"id": 7, "vector": [0.2] * 8}]}),
+                       ("aliases/create", {"dbName": "default", "collectionName": "FACE_DATA_COLLECTION_FOR_COSINE_v7", "aliasName": "FACE_DATA_COLLECTION_FOR_COSINE"})):
+        assert not isinstance(milvus(f, root, path, body), Exception), path
+
+
+def check_owner(f, root, acme):
+    """The owner's cutover: its own restricted logins take over its old data, which no one else can reach."""
+    owner = f.env("owner")
+    out = psql(f, owner, "CCTV_Camera_Surveillance",
+               "CREATE TABLE IF NOT EXISTS recognition_results_2026 PARTITION OF recognition_results FOR VALUES FROM (2026) TO (2027);\n"
+               "INSERT INTO recognition_results (y, who) VALUES (2026, 'after');\nSELECT string_agg(who, ',' ORDER BY y) FROM recognition_results;\n")
+    assert out.returncode == 0 and "before,after" in out.stdout, ("owner writes its old tables", out.stderr[-300:])
+    assert psql(f, owner, "Face_Recognition_Database", "INSERT INTO person_summary VALUES ('p1');\n").returncode == 0
+    left = admin_psql(f, "CCTV_Camera_Surveillance", "\\pset tuples_only on\nSELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                      "WHERE n.nspname = 'public' AND pg_get_userbyid(c.relowner) = 'admin';\n").stdout.strip()
+    assert left == "0", f"{left} objects still owned by the admin login"
+    alias = milvus(f, root, "aliases/describe", {"dbName": "default", "aliasName": "FACE_DATA_COLLECTION_FOR_COSINE"})
+    assert alias["collectionName"] == "FACE_DATA_COLLECTION_FOR_COSINE_v7", ("existing alias untouched", alias)
+    assert not isinstance(milvus(f, owner, "entities/query", {"dbName": "default", "collectionName": "FACE_DATA_COLLECTION_FOR_COSINE",
+                                                              "filter": "id >= 0", "outputFields": ["id"]}), Exception)
+    assert denied(milvus(f, owner, "entities/query", {"dbName": "acme_default", "collectionName": "FACES_v1", "filter": "id >= 0",
+                                                      "outputFields": ["id"]}), "permission deny", "PermissionDenied")
+    assert partitions(f, "owner.maingate_entry") == 2
+    assert not denied(produce(f, owner, "KAFKA_APP_USER", "owner.maingate_entry"))
+    for db in provision.databases("owner"):
+        out = psql(f, acme, db, "SELECT 1;\n")
+        assert out.returncode != 0 and "permission denied for database" in out.stderr, ("acme on owner data", db)
+    out = psql(f, owner, "acme_cctv_camera_surveillance", "SELECT 1;\n")
+    assert out.returncode != 0 and "permission denied for database" in out.stderr, "owner on acme data"
+
+
+def check_kafbat(f):
+    kafbat = {"KAFBAT_USER": "kafbat", "KAFBAT_PASSWORD": provision.read_env(f.admin_env)["KAFBAT_PASSWORD"]}
+    listed = kafka_tool(f, kafbat, "KAFBAT_USER", "kafka-topics", "--list").stdout
+    assert "acme.maingate_entry" in listed and "owner.maingate_entry" in listed, listed[-300:]
+    assert denied(produce(f, kafbat, "KAFBAT_USER", "acme.maingate_entry")), "Kafbat must be read-only"
+
+
 def check_kafka_boundary(f):
     # Plaintext listeners answer only on the broker's loopback, so no other container gets the superuser
     net = f"{PROJECT}_default"
@@ -281,7 +334,7 @@ def test():
                            ("entities/insert", {"dbName": "default", "collectionName": "FACES_v1", "data": [{"id": 1, "vector": [0.1] * 8}]}),
                            ("aliases/create", {"dbName": "default", "collectionName": "FACES_v1", "aliasName": "FACES"})):
             assert not isinstance(milvus(f, root, path, body), Exception), path
-        assert f.provision("owner") == 1 and f.provision("Acme") == 1  # owner waits for 3c; bad IDs refused
+        assert f.provision("Acme") == 1  # bad IDs refused
         for client in ("acme", "beta"):
             assert f.provision(client) == 0, client
         # Topics and the first Milvus version come from provisioning, not from the app (D-037)
@@ -300,6 +353,14 @@ def test():
         check_refused(f, acme, "acme", "beta")
         check_refused(f, beta, "beta", "acme")
         check_kafka_boundary(f)
+
+        # The owner's cutover rehearsal, on data made the old way by the admin login
+        seed_owner(f, root)
+        cameras(f, "owner", 1, 2)
+        assert f.provision("owner") == 0
+        check_owner(f, root, acme)
+        assert provision.main(["--init-kafbat", "--admin-env", str(f.admin_env), "--kafka", f.kafka]) == 0
+        check_kafbat(f)
 
         # Interrupted after each service in turn: every rerun reuses the saved passwords and finishes
         saved = None
@@ -326,7 +387,7 @@ def test():
         check_own(f, acme, "acme")
         check_refused(f, acme, "acme", "beta")
         assert isinstance(milvus(f, {"MILVUS_APP_USER": "root", "MILVUS_APP_PASSWORD": "Milvus"}, "users/list", {}), Exception)
-        print("isolation ok (2 clients: own access on 4 services, cross-client and admin actions refused, Kafka plaintext "
+        print("isolation ok (2 clients and the owner's cutover: own access on 4 services, cross-client and admin actions refused, Kafka plaintext "
               "unreachable, reruns and interruptions safe, lost password stops, Milvus root replaced, holds after restart)")
     finally:
         f.compose("down", "-v", "--remove-orphans")

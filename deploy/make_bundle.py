@@ -23,6 +23,8 @@ FILES = [
     "STANDALONE-SERVICES/Milvus-Vector-Database/docker-compose.yml",
     "STANDALONE-SERVICES/Dataset-Store/docker-compose.yml",
     "STANDALONE-SERVICES/PostgreSQL/docker-compose.yml",
+    "STANDALONE-SERVICES/auth/kafka.env",
+    "STANDALONE-SERVICES/auth/milvus-user.yaml",
     "STANDALONE-SERVICES/InsightFace-REST/deploy_trt_multi-gpu.sh",
     "STANDALONE-SERVICES/InsightFace-REST/misc/nginx_conf/conf.d/default.conf",
     "STANDALONE-SERVICES/InsightFace-REST/models/models.json",
@@ -30,6 +32,7 @@ FILES = [
     "start_standalone_services.sh",
     "stop_standalone_services.sh",
     "set_configuration.sh",
+    "deploy/provision.py",
     "get_ip.sh",
     "master.env.example",
     ".env.example",
@@ -107,7 +110,8 @@ def demo(keep=None):
         assert "INSIGHTFACE_IMAGE='ghcr.io/hamza-aziz-ai/cctv-face-recognition-insightface-rest@sha256:" in \
             (Path(out) / "STANDALONE-SERVICES/standalone-services.env").read_text(encoding="utf-8")
         assert manifest["release"] == tag and len(manifest["images"]) == 9
-        assert [p.relative_to(out).as_posix() for p in Path(out).rglob("*.py")] == ["deploy/watch.py"], "no app code"
+        # Host tools only: watch.py and provision.py run on the host (D-034, D-037); no app code ships
+        assert sorted(p.relative_to(out).as_posix() for p in Path(out).rglob("*.py")) == ["deploy/provision.py", "deploy/watch.py"], "no app code"
         (Path(out) / "src/main.py").write_text("x")
         try:
             check(out)
