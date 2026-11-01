@@ -90,6 +90,7 @@ def latest_release():
         raise
     tag = run("docker", "inspect", "--format", '{{index .Config.Labels "org.opencontainers.image.version"}}', CHANNEL)
     ref = run("docker", "inspect", "--format", "{{index .RepoDigests 0}}", CHANNEL)
+    run("docker", "tag", CHANNEL, f"{CHANNEL.rsplit(':', 1)[0]}:{tag}")  # keeps a name once :stable moves on
     return tag, ref
 
 
@@ -156,11 +157,25 @@ def stable(site):
         raise RuntimeError(f"not stable after {STABLE_SECONDS}s: {', '.join(down.split())}")
 
 
+def tag_images(tag):
+    """Name a release's images: pulled by digest, they show as <none> in docker images."""
+    names = dict(check_bundle(RELEASES / tag, tag)["images"])
+    text = (RELEASES / tag / "docker-compose-main.yml").read_text(encoding="utf-8")
+    for name, digest in re.findall(r"image:\s*(\S+:[^@\s]+)@(sha256:[0-9a-f]{64})", text):
+        names[name] = f"{name.rsplit(':', 1)[0]}@{digest}"
+    for name, pinned in names.items():
+        try:
+            run("docker", "tag", pinned, name)
+        except RuntimeError:  # not on this host: InsightFace runs from its own image, the ROI page only on demand
+            pass
+
+
 def start(tag, site):
     """Start the release's stack from its bundle, with this client's config and data."""
     run(*compose(tag, site), "up", "-d", "--pull", "missing", "--no-build", "--wait", "--wait-timeout", "600")
     smoke(site)
     stable(site)
+    tag_images(tag)
 
 
 def deploy(tag, ref, site):
