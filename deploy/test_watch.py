@@ -101,8 +101,9 @@ def test():
     test_check_bundle()
     test_stage()
     test_prune()
+    test_tag_images()
     test_stable()
-    print("watch decisions ok (13 scenarios, 2 clients kept apart, registry failure notified once, bundles checked "
+    print("watch decisions ok (13 scenarios, 2 clients kept apart, registry failure notified once, images tagged, bundles checked "
           "and staged, old releases pruned, crash loops caught)")
 
 
@@ -246,6 +247,35 @@ def test_prune():
         watch.prune({"v9.9.9", "v9.9.8"})
     assert sorted(p.name for p in (tmp / "releases").iterdir()) == ["v9.9.8", "v9.9.9"]
     assert sorted(removed) == ["id-old", "id-old-bundle"], removed
+
+
+def test_tag_images():
+    """Every pinned image gets its name, and one that is not on this host does not stop the rest."""
+    tmp = Path(tempfile.mkdtemp())
+    manifest = watch.check_bundle(sample_bundle(tmp / "v9.9.9"), "v9.9.9")
+    tagged = []
+
+    def fake_run(*cmd):
+        if "insightface-rest" in cmd[2]:
+            raise RuntimeError("No such image")
+        tagged.append(cmd)
+        return ""
+
+    with mock.patch.multiple(watch, RELEASES=tmp, run=fake_run):
+        watch.tag_images("v9.9.9")
+    names = {cmd[3]: cmd[2] for cmd in tagged}
+    assert all(cmd[:2] == ("docker", "tag") for cmd in tagged)
+    assert names[f"{watch.IMAGE_PREFIX}api:v9.9.9"] == manifest["images"][f"{watch.IMAGE_PREFIX}api:v9.9.9"]
+    assert any(name.startswith("ghcr.io/hamza-aziz-ai/kafka-webapp:v") and "@sha256:" in pinned for name, pinned in names.items())
+    assert not any("insightface-rest" in name for name in names)
+
+    def fake_inspect(*cmd):
+        tagged.append(cmd)
+        return "v9.9.9"
+
+    with mock.patch.object(watch, "run", fake_inspect):
+        watch.latest_release()
+    assert tagged[-1] == ("docker", "tag", watch.CHANNEL, f"{watch.CHANNEL.rsplit(':', 1)[0]}:v9.9.9")
 
 
 def test_stable():
