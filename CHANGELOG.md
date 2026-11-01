@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.3.0 (2026-11-01)
+
+## What's Changed
+* docs: record the agreed order of work in HANDOVER.md by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/58
+* docs: start TIMELINES.md with real PR durations and the incidents that cost time by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/57
+* feat(deploy): deploy release bundles from the registry instead of a git clone by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/53
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.2.0...v2.3.0
+
 ## v2.2.0 (2026-11-01)
 
 ## What's Changed
