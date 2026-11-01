@@ -28,7 +28,7 @@ Outside input enters at these points. Details and gaps are in [THREAT.md](THREAT
 - The reporting API on port 9090, the only endpoint with a key.
 - Every other published port: 8000, 20001, 20012, 20013, 9095, the Postgres port, 6385, 19000, 19001, 19530, 9000, 9001, 9010, 9011, 9092. None of these has network-level protection, and most have no login.
 - The ERP, which receives records and whose responses the API reads.
-- GitHub Releases and ghcr.io, which the watcher trusts for what to deploy.
+- ghcr.io, which the watcher trusts for what to deploy: the deploy bundle's `:stable` tag, moved only by `release.yml`, and the image digests the bundle pins.
 
 ## Hosts
 

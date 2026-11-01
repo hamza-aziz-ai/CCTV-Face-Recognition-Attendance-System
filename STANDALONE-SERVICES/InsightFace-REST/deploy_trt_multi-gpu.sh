@@ -26,8 +26,12 @@ fi
 export MSYS_NO_PATHCONV=1
 HERE=$(pwd -W 2>/dev/null || pwd)
 
-# Create directory to store downloaded models
-mkdir -p models
+# Downloaded models and built engines: this folder by default; start_standalone_services.sh points a deployment host
+# at its site folder. models.json comes with the release, so it is refreshed there on every start.
+MODELS_DIR=${INSIGHTFACE_MODELS_DIR:-models}
+mkdir -p "$MODELS_DIR"
+[ "$MODELS_DIR" = models ] || cp models/models.json "$MODELS_DIR/models.json"
+MODELS_DIR=$(cd "$MODELS_DIR" && (pwd -W 2>/dev/null || pwd))
 
 # The image CI published for this source tree (insightface-image.yml). A deployment bundle sets INSIGHTFACE_IMAGE to its
 # digest; in a checkout the tag comes from git. To try uncommitted changes, docker build -t "$INSIGHTFACE_IMAGE" first.
@@ -80,7 +84,7 @@ for i in "${INSIGHTFACE_GPUS[@]}"; do
         -e DEF_RETURN_FACE_DATA="$RETURN_FACE_DATA" \
         -e DEF_EXTRACT_EMBEDDING="$EXTRACT_EMBEDDINGS" \
         -e DEF_EXTRACT_GA="$DETECT_GENDER_AGE" \
-        -v "$HERE"/models:/models \
+        -v "$MODELS_DIR":/models \
         --health-cmd='curl -f http://localhost:18080/info || exit 1' \
         --health-interval=1m \
         --health-timeout=10s \

@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.3.0 (2026-11-01)
+
+## What's Changed
+* docs: record the agreed order of work in HANDOVER.md by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/58
+* docs: start TIMELINES.md with real PR durations and the incidents that cost time by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/57
+* feat(deploy): deploy release bundles from the registry instead of a git clone by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/53
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.2.0...v2.3.0
+
+## v2.2.0 (2026-11-01)
+
+## What's Changed
+* docs: copy-edit the docs for US spelling, aligned tables and model names by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/49
+* chore(data): add face vectors to the dataset by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/48
+* ci: close release-failure issues once a later release is published by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/50
+* refactor: generic GPU defaults instead of the A100 MIG layout by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/51
+* feat: ship deployable artifacts instead of source to deployment hosts by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/52
+* ci: skip the image builds on PRs that only change docs by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/55
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.1.0...v2.2.0
+
 ## v2.1.0 (2026-10-31)
 
 ## What's Changed

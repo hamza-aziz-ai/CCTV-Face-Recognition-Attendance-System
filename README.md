@@ -97,7 +97,7 @@ cp src/Camera-Configuration/camera_configuration.example.json \
 
 Each location has an ERP `api-endpoint` and a set of `cctv-cameras` grouped by point (for example `entry` and `exit`). Each camera has `ip_address`, `port`, `endpoint`, `username`, `password` and an optional ROI polygon in `masking-coordinates`. A camera whose `username` or `password` is `null` falls back to `CAM_USERNAME` / `CAM_PASSWORD`. Kafka topics are named `<location>_<point>`, with one partition per camera.
 
-To draw an ROI polygon on a live stream, run `Custom-ROI-Provisioning/crop_rectangle.py` with `RTSP_URL` set, then copy the printed points into `masking-coordinates`.
+To draw a camera's ROI polygon, start the ROI page with `docker compose -f docker-compose-main.yml --profile roi up -d roi-provisioning` and open http://localhost:8069. Pick a camera, load a full-resolution snapshot, click around the area to keep, preview the crop (the producer's own `crop_and_mask_roi`), and save: the points go into that camera's `masking-coordinates`. Restart `producer-consumer` to apply them, and stop the page afterwards (`docker compose -f docker-compose-main.yml --profile roi stop roi-provisioning`). It listens on this host only and has no login (D-035). Without Docker, `Custom-ROI-Provisioning/crop_rectangle.py` with `RTSP_URL` set prints the same kind of points to copy in by hand.
 
 ### Parameters
 
@@ -154,6 +154,8 @@ docker compose -f docker-compose-main.yml -f docker-compose.dev.yml build   # bu
 
 To start in two steps instead, run `./start_standalone_services.sh`, then `docker-compose -f docker-compose-main.yml up -d`.
 
+The standalone scripts also run from a release bundle, where the site's config lives in a separate folder: `CONFIG_DIR=<site folder> bash <bundle>/start_standalone_services.sh`. They then read `.env` and `master.env` from that folder and keep the InsightFace models and TensorRT engines in `<site folder>/insightface-models`, so a new release does not rebuild them. `set_configuration.sh` writes this machine's IP only to `master.env`; the stacks read it from there, so no tracked file changes.
+
 The images contain the application source, so rebuild them after code changes. For development, start with both files (`docker compose -f docker-compose-main.yml -f docker-compose.dev.yml up -d`): `docker-compose.dev.yml` mounts `./src` over the baked copy, so edits apply on restart without a rebuild.
 
 ### 5. Enroll faces
@@ -190,31 +192,42 @@ This also stops the standalone stacks: InsightFace-REST, Milvus and Kafka.
 - **CI** (`.github/workflows/ci.yml`) runs on every PR: lint, secret scan, compose validation, model-manifest drift check, watcher tests, and builds and smoke-tests all 8 images. The aggregate check is `ci`.
 - **Auto-merge** (`automerge.yml`): a PR into `main` is squash-merged, and its branch deleted, once `ci` and every other check passed on its latest commit. A run with a cancelled job is re-run once; a real failure stays failed.
 - **Auto-release** (`release.yml`): after a merge, the PR titles since the last tag decide the version as Conventional Commits. `feat:` gives a minor bump, `fix:`/`perf:` a patch, and `type!:` or a `BREAKING CHANGE` footer a major; anything else gives no release. CI then re-runs on the exact commit, the 7 service images are pushed to GitHub Packages as `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, the tag and GitHub Release are created with `mlops/model-manifest.json` attached, and the release notes are added to `CHANGELOG.md`. **PR titles must follow this convention.**
-- **Auto-deploy** (`deploy/watch.py`): a poller on the deployment host deploys each new release and rolls back on failure.
+- **Auto-deploy** (`deploy/watch.py`): a poller on the deployment host deploys each new release from the registry and rolls back on failure. The host holds no repository and no GitHub login (D-033, D-034).
 
 ### Deployment watcher setup (Windows deployment host)
 
-Run once, after a release with images exists (v0.3.0 or later). The watcher manages only the main compose stack; start the standalone services first (`./start_standalone_services.sh`). The images are private, so Docker signs in to ghcr.io with your `gh` login, which needs the `read:packages` scope.
+The watcher manages only the main compose stack; start the standalone services first. The host needs Docker, Python 3 and a pull-only login to ghcr.io: a token with only `read:packages`, of an account that can read these packages and not the repository. Never use the owner's `gh` login on a deployment host.
 
 ```powershell
-gh auth refresh -s read:packages
-gh auth token | docker login ghcr.io -u hamza-aziz-ai --password-stdin
-gh repo clone hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System C:\deploy\cctv
-Copy-Item .env C:\deploy\cctv\.env      # from the dev checkout; the clone needs the same secrets
+docker login ghcr.io -u <deployment account>    # paste the read:packages token when asked
+mkdir C:\deploy\cctv\site
+# Put this site's files under C:\deploy\cctv\site: .env, master.env, src\Camera-Configuration\camera_configuration.json,
+# DISPLAY-FACE-DATASET\ and DYNAMIC-FACIAL-RECOGNITION-DATASET\ (templates are in the bundle: *.example)
 cd C:\deploy\cctv
-python deploy\watch.py --enroll         # deploys the newest release now and starts watching
+$c = docker create ghcr.io/hamza-aziz-ai/cctv-face-recognition-deploy:stable
+docker cp "${c}:/bundle/deploy/watch.py" watch.py; docker rm $c
+python watch.py --check                         # fetches and checks the newest bundle, deploys nothing
+python watch.py --enroll                        # deploys the newest release now and starts watching
 schtasks /Create /TN "CCTV deploy watcher" /SC MINUTE /MO 10 /IT /F `
-  /TR "\"C:\ProgramData\anaconda3\pythonw.exe\" \"C:\deploy\cctv\deploy\watch.py\""
+  /TR "\"C:\ProgramData\anaconda3\pythonw.exe\" \"C:\deploy\cctv\watch.py\""
 ```
 
 Every 10 minutes, while you are signed in and Docker Desktop is running, the watcher does the following:
-- It reads the newest published release, skipping drafts and pre-releases. It deploys it only if the tag is on `main`, the release is not the current one, and it has not failed before.
-- It checks the tag out in the deploy clone, pulls that release's images (only once; a rollback reuses them), and runs `up --wait`. It records the release as current only after `http://localhost:9090/docs` answers.
-- On failure it rolls back to the last good release, marks the failed one so it is never retried, and shows a Windows message.
-- It never starts a stack you stopped.
-- After a successful deploy it deletes the release images of every tag except the current and previous one.
+- It pulls `cctv-face-recognition-deploy:stable`, which CI moves to a release only after publishing it, and reads its release from the image label. It deploys it only if that is not the current release and it has not failed before.
+- It copies the bundle out of the image without running it, into `releases\<tag>\`, and refuses it unless its manifest is for that release and pins every image to one of ours by digest.
+- It runs `up --wait` from the bundle with `site\` as the project folder, so the containers get this site's config and data. It records the release as current only after `http://localhost:9090/docs` answers and nothing is restarting 90 seconds later.
+- On failure it rolls back to the previous release, whose bundle and images are still on the host, marks the failed one so it is never retried, and shows a Windows message.
+- It never starts a stack you stopped. If the registry login fails or site files are missing, it stops deploying and shows one message.
+- After a successful deploy it deletes the bundles and images of every release except the current and previous one.
 
-Its log is in `C:\deploy\cctv\deploy\watch.log`. To retry a failed release, run `python deploy\watch.py --enroll`. To stop watching, run `schtasks /Delete /TN "CCTV deploy watcher" /F`.
+The watcher never replaces itself; to update it, copy `deploy/watch.py` out of a newer bundle the same way. Its log is `C:\deploy\cctv\watch.log`. To retry a failed release, run `python watch.py --enroll`. To stop watching, run `schtasks /Delete /TN "CCTV deploy watcher" /F`.
+
+The automerge nudge (`deploy/nudge_automerge.py`) needs the owner's `gh` login, so it runs only on the owner's laptop, from the dev checkout:
+
+```powershell
+schtasks /Create /TN "CCTV automerge nudge" /SC MINUTE /MO 10 /IT /F `
+  /TR "\"C:\ProgramData\anaconda3\pythonw.exe\" \"<dev checkout>\deploy\nudge_automerge.py\""
+```
 
 ## Reporting API
 
@@ -267,13 +280,12 @@ The system stores biometric data (face images and embeddings) in several places.
 │   ├── Camera-Configuration/            # camera config template
 │   └── util/                            # enrollment, dataset and development scripts
 ├── STANDALONE-SERVICES/                 # InsightFace-REST, Milvus, Kafka, face liveness
-├── Custom-ROI-Provisioning/             # ROI drawing tool (crop_rectangle.py)
+├── Custom-ROI-Provisioning/             # ROI page (app.py, compose profile roi) and desktop tool (crop_rectangle.py)
 ├── docker-compose-main.yml
 ├── *.Dockerfile
 └── start_* / stop_* / set_configuration.sh
 ```
 
-`Custom-ROI-Provisioning/app.py` is a legacy Flask tool that no longer runs against the current code.
 
 ## Raspberry Pi display
 
