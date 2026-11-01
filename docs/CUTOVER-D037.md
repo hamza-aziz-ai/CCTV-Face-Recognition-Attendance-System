@@ -6,6 +6,8 @@ The owner's displays go blank for a few minutes. Messages sent during the switch
 
 ## Before you start
 
+Until a host has done this cutover, do not run `start_standalone_services.sh` or `docker compose up` for Kafka or Milvus from a release with this change: they would turn logins on under a stack still using the old settings. Restarting the machine is safe, and the watcher touches only the main stack.
+
 1. These are merged and released, and the release is `:stable`:
    - client IDs (#61);
    - per-client stacks (#62, #74);
@@ -40,7 +42,7 @@ Run these in the deploy folder. Commands that use the admin login run inside the
    This creates `owner_app` in PostgreSQL and hands it the owner's databases, tables, partitions and sequences, one by one. It also creates the owner's Milvus user on the `default` database (the existing alias stays), Kafka users and `owner.*` topics from the camera configuration, and the `owner-enrolment` bucket. The new passwords are added to `sites\owner\.env`. Run the same command for every other client on this host.
 8. **Switch the owner's site to its own logins.** Edit these yourself:
    - `sites\owner\master.env`: delete the `LEGACY_SHARED_SERVICES=1` line. Set `KAFKA_TOPIC=owner.<location>_<point>` for the in-stack display.
-   - `sites\owner\.env`: delete `POSTGRES_USER` and `POSTGRES_PASSWORD`. The shared PostgreSQL keeps its own copy, in the standalone services' `.env`.
+   - `sites\owner\.env`: move the `POSTGRES_USER` and `POSTGRES_PASSWORD` lines to `admin.env` in the deploy folder. `start_standalone_services.sh` and `stop_standalone_services.sh` read them from there once they are present.
 9. **Start the owner's stack:**
    `python watch.py --enroll owner`
    It deploys the current release with the new settings and runs the usual smoke and stability checks.
@@ -67,7 +69,7 @@ A week later, delete the old unprefixed topics (`maingate_entry` and the like) w
 Releases from before #65 cannot run against these services, so roll back the settings, not the release:
 
 1. Pause the watcher, if it is running.
-2. Put `LEGACY_SHARED_SERVICES=1` back in `sites\owner\master.env`, and `POSTGRES_USER` / `POSTGRES_PASSWORD` back in `sites\owner\.env`.
+2. Put `LEGACY_SHARED_SERVICES=1` back in `sites\owner\master.env`, and move `POSTGRES_USER` / `POSTGRES_PASSWORD` from `admin.env` back to `sites\owner\.env`.
 3. Start the previous Kafka and Milvus compose files: plaintext Kafka with its add-ons, and Milvus without `user.yaml`. Use the previous release's `STANDALONE-SERVICES` folder.
 4. `python watch.py --enroll owner`.
 

@@ -11,6 +11,10 @@
 cd "$(dirname "$0")" || exit 1
 CONFIG_DIR=${CONFIG_DIR:-$(pwd)}
 export CONFIG_DIR
+# The shared PostgreSQL's admin login: in the deploy folder's admin.env once a host has moved it there, away from every
+# client's site (CUTOVER-D037.md); otherwise in this site's .env
+ADMIN_ENV=$CONFIG_DIR/.env
+grep -qs '^POSTGRES_USER=' ../../admin.env && ADMIN_ENV=$(cd ../.. && pwd)/admin.env
 
 NETWORK_NAME="insightface-network"
 
@@ -87,7 +91,7 @@ cd ../..
 # shellcheck disable=SC2164
 cd STANDALONE-SERVICES/PostgreSQL
 echo "shutdown PostgreSQL"
-docker-compose --env-file "$CONFIG_DIR/.env" down
+docker-compose --env-file "$ADMIN_ENV" down
 cd ../..
 
 # Dataset store (DVC remote) cleanup; its data folder (DATASET_STORE_DIR) is kept
