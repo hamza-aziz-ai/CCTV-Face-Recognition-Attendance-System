@@ -1,0 +1,6 @@
+# Only 443 is published, so there is nothing to redirect from
+{
+	auto_https disable_redirects
+}
+
+import /routes/*.caddy

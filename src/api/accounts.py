@@ -16,6 +16,7 @@ import sys
 from typing import Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 current = os.path.dirname(os.path.realpath(__file__))
@@ -55,6 +56,19 @@ CREATE TABLE IF NOT EXISTS login_failures (
     failed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """
+
+SIGN_IN_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in</title>
+<style>body{font-family:system-ui,sans-serif;background:#f3f4f6;display:grid;place-items:center;height:100vh;margin:0}form{background:#fff;padding:2rem;border-radius:.75rem;display:grid;gap:.75rem;width:18rem;box-shadow:0 1px 4px #0002}input,button{padding:.6rem;font-size:1rem}p{color:#b91c1c;min-height:1.2rem;margin:0}</style></head>
+<body><form id="f"><h1>Sign in</h1>
+<label for="u">Username</label><input id="u" autocomplete="username" required autofocus>
+<label for="p">Password</label><input id="p" type="password" autocomplete="current-password" required>
+<button>Sign in</button><p id="e" role="alert"></p></form>
+<script>document.getElementById("f").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const r = await fetch("/auth/login", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({username: document.getElementById("u").value, password: document.getElementById("p").value})});
+  if (r.ok) { location.href = "/"; } else { document.getElementById("e").textContent = r.status === 429 ? "Too many failed logins; try again later" : "Wrong username or password"; }
+});</script></body></html>"""
 
 router = APIRouter(prefix="/auth")
 cursor_source: Optional[Callable] = None  # app.py's get_db_cursor
@@ -124,6 +138,11 @@ admin = require("client_admin")
 class Login(BaseModel):
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=PASSWORD_LENGTHS[1])  # scrypt's cost should not depend on a caller's input size
+
+
+@router.get("/sign-in", response_class=HTMLResponse)
+def sign_in_page():
+    return SIGN_IN_PAGE
 
 
 @router.post("/login")

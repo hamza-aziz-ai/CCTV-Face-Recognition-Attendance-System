@@ -309,7 +309,7 @@ Every client's stack keeps its logs, frames and datasets in its own project fold
 Outside input enters at these points. Who could abuse each one, and what to close first, is in [THREAT.md](THREAT.md).
 
 - Camera streams (RTSP or HTTP), read by the camera threads.
-- The reporting API on `API_PORT` (9090), the only endpoint with a login: accounts and machine tokens in the client's own database (D-039). Plain HTTP until the reverse proxy arrives.
+- The HTTPS proxy on 443, the way in for people and machines (D-040): accounts and machine tokens in the client's own database guard the API and display (D-039). The API, display and portrait ports are on 127.0.0.1 only.
 - The DB controller (20001), feedback controller (20012) and face collector (8000) are reachable only from inside their client's stack network; they still have no login (D-036).
 - Every other published port, with no network-level protection: `DISPLAY_IMAGE_PORT` (20013) and `DISPLAY_PORT` (9095) of each client stack, with no login (the ROI page's `ROI_PORT` is bound to 127.0.0.1 and has no login); the PostgreSQL port, with one role per client; 6385 and 19000 (plus 19001 and up for more InsightFace-REST containers), with no login; 19530, with one Milvus user per client, and 9091; 9000 and 9001 (Milvus MinIO, default credentials); 9010 and 9011 (dataset store, one key per client); 9092, with SCRAM logins and topic-prefix ACLs per client. Kafka's plaintext listeners, JMX and Kafbat are bound to the loopback.
 - The ERP endpoints, which receive records and whose responses the API reads.

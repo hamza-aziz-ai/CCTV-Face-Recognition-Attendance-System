@@ -14,6 +14,8 @@ export CONFIG_DIR
 # The shared PostgreSQL's admin login: in the deploy folder's admin.env once a host has moved it there, away from every client's site (CUTOVER-D037.md); otherwise in this site's .env
 ADMIN_ENV=$CONFIG_DIR/.env
 grep -qs '^POSTGRES_USER=' ../../admin.env && ADMIN_ENV=$(cd ../.. && pwd)/admin.env
+# The HTTPS proxy runs on a deployment host, once the deploy folder has its route files (D-040)
+[ -d ../../proxy ] && PROXY_DIR=$(cd ../../proxy && { pwd -W 2>/dev/null || pwd; }) && export PROXY_DIR
 # Models and TensorRT engines are this host's data: outside the bundle, so a new release does not rebuild them
 [ "$CONFIG_DIR" = "$(pwd)" ] || export INSIGHTFACE_MODELS_DIR=${INSIGHTFACE_MODELS_DIR:-$CONFIG_DIR/insightface-models}
 
@@ -68,6 +70,16 @@ docker-compose --env-file "$ADMIN_ENV" up -d
 cd ../..
 
 echo
+
+docker network create cctv-edge > /dev/null 2>&1
+if [ -n "${PROXY_DIR:-}" ]; then
+    echo "Starting the HTTPS proxy"
+    # shellcheck disable=SC2164
+    cd STANDALONE-SERVICES/Proxy
+    docker-compose up -d
+    cd ../..
+    echo
+fi
 
 # start the dataset store (DVC remote); its credentials and data folder come from .env
 echo "Starting Dataset Store (DVC remote)"

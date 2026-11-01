@@ -203,6 +203,7 @@ def tag_images(tag):
 
 def start(tag, site):
     """Start the release's stack from its bundle, with this client's config and data."""
+    subprocess.run(["docker", "network", "create", "cctv-edge"], capture_output=True, creationflags=NO_WINDOW)  # fails harmlessly once it exists
     run(*compose(tag, site), "up", "-d", "--pull", "missing", "--no-build", "--wait", "--wait-timeout", "600")
     smoke(site)
     stable(site)

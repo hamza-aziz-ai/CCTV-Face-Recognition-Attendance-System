@@ -23,6 +23,8 @@ FILES = [
     "STANDALONE-SERVICES/Milvus-Vector-Database/docker-compose.yml",
     "STANDALONE-SERVICES/Dataset-Store/docker-compose.yml",
     "STANDALONE-SERVICES/PostgreSQL/docker-compose.yml",
+    "STANDALONE-SERVICES/Proxy/docker-compose.yml",
+    "STANDALONE-SERVICES/Proxy/Caddyfile",
     "STANDALONE-SERVICES/auth/kafka.env",
     "STANDALONE-SERVICES/auth/milvus-user.yaml",
     "STANDALONE-SERVICES/InsightFace-REST/deploy_trt_multi-gpu.sh",

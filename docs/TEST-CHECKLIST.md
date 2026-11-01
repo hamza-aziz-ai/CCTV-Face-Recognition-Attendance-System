@@ -19,6 +19,8 @@ In `database-controller`, against a throwaway PostgreSQL, `python3 src/database_
 
 In `producer-consumer`, `python3 src/util/test_camera.py` prints `camera ok (region at the frame edge crops, 2 alerts for 500 dark frames, recovery announced once)`.
 
+`python3 -I deploy/test_proxy.py`, on a real Caddy with stand-ins, prints `proxy ok (signed-out visitors sent to sign-in, display and WebSockets need a session, API routes reachable, API docs closed, bad host names refused)`.
+
 In `api`, against a throwaway PostgreSQL, `python3 src/api/test_accounts.py` prints `accounts ok (role matrix, CSRF, logout, expiry, disabled users, password change, machine tokens, throttling, no key in the URL)`.
 
 In `producer-consumer`, `python3 src/util/client_checks.py` prints `clients ok (bad IDs refused, owner names kept, two clients share no name, Milvus bound to the client's database)` (D-036).

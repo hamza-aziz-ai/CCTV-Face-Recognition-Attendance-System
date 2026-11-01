@@ -42,6 +42,12 @@ CONFIG_DIR="$T/site" bash "$T/host/releases/v1/start_standalone_services.sh" > /
 CONFIG_DIR="$T/site" bash "$T/host/releases/v1/stop_standalone_services.sh" > /dev/null 2>&1
 check "after the cutover PostgreSQL reads the deploy folder's admin.env" "[ \$(grep 'PostgreSQL' '$T/calls.log' | grep -c -- \"--env-file $T/host/admin.env\") = 2 ]"
 
+check "no proxy before the host has route files" "! grep -q 'Proxy' '$T/calls.log'"
+mkdir "$T/host/proxy"
+: > "$T/calls.log"
+CONFIG_DIR="$T/site" bash "$T/host/releases/v1/start_standalone_services.sh" > /dev/null 2>&1
+check "the proxy starts once the host has route files" "grep 'Proxy' '$T/calls.log' | grep -q 'up -d'"
+
 echo "== checkout mode (default)"
 : > "$T/calls.log"
 before=$(git -C "$CHECKOUT" status --porcelain --untracked-files=no)

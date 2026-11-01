@@ -247,6 +247,23 @@ This also stops the standalone stacks: InsightFace-REST, Milvus, Kafka, PostgreS
 | [HANDOVER.md](docs/HANDOVER.md)             | Session handover notes, newest first                                                                                  |
 | [Kafka-WebApp](Kafka-WebApp/README.md)      | Display client setup, kept in its own repository                                                                      |
 
+## Signing in
+
+Each client is at `https://<client>.localhost`, or `SITE_HOST` in its site `.env`. Create an account in the API container, then sign in there:
+
+```powershell
+docker exec -it cctv-mfr-api-service-1 python3 src/api/accounts.py add-user NAME client_admin
+```
+
+Roles are `client_admin`, `enrolment_operator` and `viewer`. Report routes are under `/api/`. Machines use `add-token NAME ROLE` and send `Authorization: Bearer <token>`.
+
+Trust the proxy's private CA once on each device. On this host, in PowerShell:
+
+```powershell
+docker cp cctv-proxy:/data/caddy/pki/authorities/local/root.crt $env:TEMP\cctv-root.crt
+certutil -user -addstore Root $env:TEMP\cctv-root.crt
+```
+
 ## Known issues and limitations
 
 - nginx forwards to one InsightFace-REST container only; more containers from `INSIGHTFACE_GPUS` start but are not balanced (D-032).

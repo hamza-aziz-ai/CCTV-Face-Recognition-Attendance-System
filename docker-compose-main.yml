@@ -84,7 +84,11 @@ services:
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
       - ./logs:/Multi-Person-Face-Recognition/logs
     ports:
-      - "${API_PORT:-9090}:8000"
+      # On this machine only, for the watcher; everyone else comes through the HTTPS proxy (D-040)
+      - "127.0.0.1:${API_PORT:-9090}:8000"
+    networks:
+      - default
+      - edge
     # database-controller creates CCTV_Camera_Surveillance, which the API reads
     depends_on:
       mfr-database-controller:
@@ -148,7 +152,7 @@ services:
       - ./logs:/Multi-Person-Face-Recognition/logs
     ports:
       # Displays on other machines fetch portraits here
-      - "${DISPLAY_IMAGE_PORT:-20013}:20013"
+      - "127.0.0.1:${DISPLAY_IMAGE_PORT:-20013}:20013"
     init: true
     healthcheck:
       test: [ "CMD", "./src/fetch_face_image_server/healthcheck_display_image_server.sh" ]
@@ -194,7 +198,16 @@ services:
       KAFKA_PASSWORD: ${KAFKA_DISPLAY_PASSWORD:-}
     ports:
       # 9090 is the reporting API on this host
-      - "${DISPLAY_PORT:-9095}:9090"
+      - "127.0.0.1:${DISPLAY_PORT:-9095}:9090"
+    networks:
+      - default
+      - edge
     depends_on:
       display-image-server:
         condition: service_healthy
+
+# Shared with the host's HTTPS proxy (D-040); the watcher and the start script create it
+networks:
+  edge:
+    name: cctv-edge
+    external: true
