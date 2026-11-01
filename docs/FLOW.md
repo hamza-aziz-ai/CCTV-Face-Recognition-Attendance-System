@@ -2,7 +2,7 @@
 
 How execution travels through the system, one flow per section. The overview is the System Design diagram in the [README](../README.md#system-design); what exists and who owns it is in [ARCHITECTURE.md](ARCHITECTURE.md); stored data is in [DATA.md](DATA.md).
 
-Checked against main after #69, which pins Kafka-WebApp v0.3.0. The latest release tag is `v2.1.0`.
+Checked against `main` at e9bf3fc. The latest release tag at that point was `v2.3.0`.
 
 ## How to read the diagrams
 

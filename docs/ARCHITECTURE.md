@@ -2,7 +2,7 @@
 
 What exists, where it runs and who owns it. The system reads frames from IP cameras, recognizes faces, records attendance, posts it to each location's ERP and shows the result on displays. The overview is in the [README](../README.md#solution-architecture), execution order in [FLOW.md](FLOW.md), and the stored data in [DATA.md](DATA.md).
 
-Checked against main after #69, which pins Kafka-WebApp v0.3.0. The latest release tag is `v2.1.0`.
+Checked against `main` at e9bf3fc. The latest release tag at that point was `v2.3.0`.
 
 ## Modules
 
@@ -284,8 +284,8 @@ Where each store lives on the host:
 
 | Store                                      | Host location                                                                                                                           | Set in                                                         |
 |--------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
-| PostgreSQL data                            | `/workspace/database/postgresql18/cctv-face-recognition`                                                                                | `docker-compose-main.yml`                                      |
-| Milvus, etcd and Milvus MinIO data         | `${DOCKER_VOLUME_DIRECTORY}/volumes/{milvus,etcd,minio}`, default `/usr/local/database/milvus`                                          | `standalone-services.env`, Milvus compose file                 |
+| PostgreSQL data                            | Docker volume `cctv-postgres-data` (D-038)                                                                                              | `docker-compose-main.yml`                                      |
+| Milvus, etcd and Milvus MinIO data         | Docker volumes `milvus-data`, `milvus-etcd` and `milvus-minio` (D-038)                                                                  | Milvus compose file                                            |
 | Kafka data                                 | Docker volume `kafka-data` of the Kafka stack (D-028)                                                                                   | Kafka compose file                                             |
 | Dataset store data                         | `DATASET_STORE_DIR`, outside the repository                                                                                             | `.env`, Dataset-Store compose file                             |
 | `DYNAMIC-FACIAL-RECOGNITION-DATASET/`      | The compose project folder (`site\` on a deployment host), mounted into the collector and the updater                                   | `docker-compose-main.yml`, `--project-directory` in `watch.py` |
@@ -298,7 +298,7 @@ Where each store lives on the host:
 | Watcher state and log                      | `state.json`, `watch.log` in the deploy folder, next to `watch.py`                                                                      | `watch.py`                                                     |
 | Release bundles                            | `releases\<tag>\` in the deploy folder, current and previous kept                                                                       | `watch.py`                                                     |
 
-On Windows with Docker Desktop, the `/workspace/...` and `/usr/local/...` paths are inside the Docker Desktop VM, not on the Windows disk.
+On Windows with Docker Desktop, `/workspace/...` paths are inside the Docker Desktop VM, not on the Windows disk, and a restart empties them. That is why stateful services use named volumes (D-038), and it is the reason logs and recognition frames move to the site folder in D-036 step 2.
 
 ## Trust boundaries
 
