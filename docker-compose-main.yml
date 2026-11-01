@@ -176,7 +176,7 @@ services:
 
   # Recognition display for this host (Raspberry Pis run the same image with its default ports); versioned in the Kafka-WebApp repository
   kafka-webapp:
-    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.1.2@sha256:1e478d2eb0aff5634a4f22461f6380853d4210db86e35778e84ef6478819b950
+    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.3.0@sha256:83cd06eb30d041c9723b19335da5049b357126e210378033afd12abe5e8819b6
     container_name: cctv-face-recognition-kafka-webapp
     restart: unless-stopped
     env_file:
