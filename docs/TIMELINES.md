@@ -22,62 +22,79 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 
 ## Pull requests
 
-| PR  | Opened (UTC)     | Work (upper bound) | Open to merge        | Size           | Title                                                                              |
-|-----|------------------|--------------------|----------------------|----------------|------------------------------------------------------------------------------------|
-| #1  | 2026-10-30 06:24 | n/a                | 4h 30m               | +582/-1003 29f | build: make images registry-ready (Python 3.11, baked source, real healthchecks)   |
-| #2  | 2026-10-30 06:33 | 8m                 | closed, redone as #7 | +184/-2 5f     | feat(mlops): add model manifest with CI drift check                                |
-| #3  | 2026-10-30 06:53 | 20m                | 4h 02m               | +77/-0 3f      | ci: auto-merge PRs once every check on the head commit passes                      |
-| #4  | 2026-10-30 06:56 | 3m                 | 3h 59m               | +114/-1 4f     | ci: release automatically when merged titles call for a version bump               |
-| #5  | 2026-10-30 07:01 | 4m                 | 3h 55m               | +49/-5 7f      | feat(ops): add per-host GPU profiles, starting with the RTX 4050 laptop            |
-| #6  | 2026-10-30 09:52 | 2h 51m             | 1h 03m               | +287/-8 8f     | feat(ops): add pull-based deployment watcher with rollback                         |
-| #7  | 2026-10-30 11:00 | redo of #2         | 2m                   | +184/-2 5f     | feat(mlops): add model manifest with CI drift check                                |
-| #8  | 2026-10-30 11:02 | redo of #3         | 2m                   | +77/-0 3f      | ci: auto-merge PRs once every check on the head commit passes                      |
-| #9  | 2026-10-30 11:05 | redo of #4         | 1m                   | +114/-1 4f     | ci: release automatically when merged titles call for a version bump               |
-| #10 | 2026-10-30 11:08 | redo of #5         | 1m                   | +49/-5 7f      | feat(ops): add per-host GPU profiles, starting with the RTX 4050 laptop            |
-| #11 | 2026-10-30 11:10 | redo of #6         | 1m                   | +287/-8 8f     | feat(ops): add pull-based deployment watcher with rollback                         |
-| #12 | 2026-10-30 11:30 | 19m                | 1m                   | +78/-21 14f    | feat(release): publish service images to GitHub Packages (ghcr.io)                 |
-| #13 | 2026-10-30 11:52 | 21m                | 1m                   | +4/-2 2f       | fix(release): push images to ghcr.io one at a time                                 |
-| #14 | 2026-10-30 11:57 | 5m                 | 1m                   | +47/-6 7f      | feat(ops): restart standalone and app containers automatically                     |
-| #15 | 2026-10-30 12:15 | 17m                | 1m                   | +34/-4 4f      | fix: stop tracking master.env and keep the host's copy on deploy                   |
-| #16 | 2026-10-30 13:40 | 1h 25m             | 6m                   | +14/-145 6f    | fix(standalone): make the standalone services start on the Windows laptop host     |
-| #17 | 2026-10-30 13:43 | 3m                 | 3m                   | +12/-5 5f      | fix: make the stack's Postgres host port configurable                              |
-| #18 | 2026-10-30 15:03 | 1h 20m             | 1m                   | +29/-14 4f     | fix: first deploy on the Windows host (camera config mount, host IP, crash loop)   |
-| #19 | 2026-10-30 15:10 | 6m                 | 1m                   | +88/-7 10f     | feat(mlops): add a MinIO dataset store as the DVC remote                           |
-| #20 | 2026-10-30 15:53 | 43m                | 4m                   | +20/-6 6f      | feat!: move PostgreSQL from 12 to 18.6                                             |
-| #21 | 2026-10-30 16:03 | 9m                 | 18m                  | +74/-88 5f     | feat(standalone): move Kafka to Confluent Platform 8.4.0 community edition         |
-| #22 | 2026-10-30 16:16 | 13m                | 8m                   | +56/-17 6f     | feat(standalone): move Milvus to 3.0.5 following its official GPU compose file     |
-| #23 | 2026-10-30 16:24 | 7m                 | 1m                   | +35/-1 3f      | feat(ops): delete release images the watcher no longer needs                       |
-| #24 | 2026-10-30 16:37 | 13m                | 5m                   | +87/-76 20f    | feat: move app images to Python 3.14 with current libraries                        |
-| #25 | 2026-10-30 16:56 | 18m                | 1m                   | +19/-3 5f      | feat: add Kafka-WebApp as a submodule of hamza-aziz-ai/Kafka-WebApp                |
-| #26 | 2026-10-30 17:19 | 22m                | 1m                   | +37/-1 5f      | feat: run Kafka-WebApp in the stack on port 9095                                   |
-| #27 | 2026-10-30 17:27 | 7m                 | 1m                   | +565/-7 20f    | docs: add the documents required by the field guide                                |
-| #28 | 2026-10-30 17:41 | 14m                | 47m                  | +1/-1 1f       | docs: record why Milvus over other vector stores                                   |
-| #29 | 2026-10-30 17:42 | 1m                 | 19m                  | +47/-19 1f     | docs: rewrite the defense brief in the owner's words                               |
-| #30 | 2026-10-30 17:50 | 7m                 | 22m                  | +72/-13 10f    | fix: start producer-consumer on Python 3.14 and catch crash loops on deploy        |
-| #31 | 2026-10-30 18:09 | 19m                | 3m                   | +42/-32 3f     | fix: make enrolment and fresh installs work on this host                           |
-| #32 | 2026-10-30 18:26 | 16m                | 25m                  | +211/-25 14f   | feat: start the real datasets with checked enrolment                               |
-| #33 | 2026-10-30 18:34 | 8m                 | 7m                   | +24/-1 2f      | ci: re-run cancelled CI jobs once                                                  |
-| #34 | 2026-10-30 18:54 | 19m                | 12m                  | +2/-1 1f       | ci: treat a check with a conclusion as finished                                    |
-| #35 | 2026-10-30 19:03 | 9m                 | 3m                   | +71/-378 27f   | feat!: remove client names and the INSTITUTE setting                               |
-| #36 | 2026-10-30 19:23 | 19m                | 1m                   | +150/-1 4f     | fix(release): free runner disk and keep CHANGELOG.md updated                       |
-| #37 | 2026-10-30 19:48 | 25m                | 2m                   | +19/-1 2f      | ci: open an issue when a release fails                                             |
-| #38 | 2026-10-30 19:57 | 8m                 | 2m                   | +23/-4 5f      | fix: remove startup races between services                                         |
-| #39 | 2026-10-30 20:04 | 7m                 | 0m                   | +95/-0 2f      | Add Claude Code GitHub Workflow                                                    |
-| #40 | 2026-10-30 20:05 | 1m                 | 15m                  | +59/-19 3f     | fix: correct service dependencies and healthchecks, and add Kafbat UI              |
-| #41 | 2026-10-30 20:08 | 2m                 | 20m                  | +2/-1 1f       | ci: let a finished Claude review also trigger auto-merge                           |
-| #43 | 2026-10-30 20:39 | 30m                | 5m                   | +208/-91 8f    | fix: keep Kafka topics across restarts and store broker data on a volume           |
-| #44 | 2026-10-30 20:55 | 16m                | 3h 57m               | +99/-6 6f      | fix(ci): recover stuck merges and stale releases without a person                  |
-| #45 | 2026-10-31 01:02 | n/a                | 1m                   | +18/-2 3f      | fix: run Kafka-WebApp v0.1.2 so recognitions reach the display                     |
-| #46 | 2026-10-31 01:04 | 2m                 | 2m                   | +231/-40 13f   | feat: version face vectors with the dataset and serve Milvus through an alias      |
-| #47 | 2026-10-31 01:09 | 5m                 | 3m                   | +687/-578 50f  | feat: update InsightFace-REST to 0.9.5.0 on TensorRT 11                            |
-| #48 | 2026-10-31 03:29 | 2h 19m             | 15m                  | +6/-7 2f       | chore(data): add face vectors to the dataset                                       |
-| #49 | 2026-10-31 03:34 | 5m                 | 1m                   | +184/-184 15f  | docs: copy-edit the docs for US spelling, aligned tables and model names           |
-| #50 | 2026-10-31 03:46 | 11m                | 1m                   | +24/-0 1f      | ci: close release-failure issues once a later release is published                 |
-| #51 | 2026-10-31 03:52 | 6m                 | 5m                   | +65/-68 13f    | refactor: generic GPU defaults instead of the A100 MIG layout                      |
-| #52 | 2026-10-31 04:37 | 44m                | 38m                  | +339/-28 13f   | feat: ship deployable artifacts instead of source to deployment hosts              |
-| #53 | 2026-10-31 05:25 | 48m                | open                 | +389/-166 11f  | feat(deploy): deploy release bundles from the registry instead of a git clone      |
-| #55 | 2026-10-31 06:29 | 1h 04m             | open                 | +26/-1 1f      | ci: skip the image builds on PRs that only change docs                             |
-| #56 | 2026-10-31 06:47 | 17m                | open                 | +80/-13 8f     | feat: run the standalone scripts from a release bundle with a separate site folder |
+| PR  | Opened (UTC)     | Work (upper bound) | Open to merge        | Size           | Title                                                                                                    |
+|-----|------------------|--------------------|----------------------|----------------|----------------------------------------------------------------------------------------------------------|
+| #1  | 2026-10-30 06:24 | n/a                | 4h 30m               | +582/-1003 29f | build: make images registry-ready (Python 3.11, baked source, real healthchecks)                         |
+| #2  | 2026-10-30 06:33 | 8m                 | closed, redone as #7 | +184/-2 5f     | feat(mlops): add model manifest with CI drift check                                                      |
+| #3  | 2026-10-30 06:53 | 20m                | 4h 02m               | +77/-0 3f      | ci: auto-merge PRs once every check on the head commit passes                                            |
+| #4  | 2026-10-30 06:56 | 3m                 | 3h 59m               | +114/-1 4f     | ci: release automatically when merged titles call for a version bump                                     |
+| #5  | 2026-10-30 07:01 | 4m                 | 3h 55m               | +49/-5 7f      | feat(ops): add per-host GPU profiles, starting with the RTX 4050 laptop                                  |
+| #6  | 2026-10-30 09:52 | 2h 51m             | 1h 03m               | +287/-8 8f     | feat(ops): add pull-based deployment watcher with rollback                                               |
+| #7  | 2026-10-30 11:00 | redo of #2         | 2m                   | +184/-2 5f     | feat(mlops): add model manifest with CI drift check                                                      |
+| #8  | 2026-10-30 11:02 | redo of #3         | 2m                   | +77/-0 3f      | ci: auto-merge PRs once every check on the head commit passes                                            |
+| #9  | 2026-10-30 11:05 | redo of #4         | 1m                   | +114/-1 4f     | ci: release automatically when merged titles call for a version bump                                     |
+| #10 | 2026-10-30 11:08 | redo of #5         | 1m                   | +49/-5 7f      | feat(ops): add per-host GPU profiles, starting with the RTX 4050 laptop                                  |
+| #11 | 2026-10-30 11:10 | redo of #6         | 1m                   | +287/-8 8f     | feat(ops): add pull-based deployment watcher with rollback                                               |
+| #12 | 2026-10-30 11:30 | 19m                | 1m                   | +78/-21 14f    | feat(release): publish service images to GitHub Packages (ghcr.io)                                       |
+| #13 | 2026-10-30 11:52 | 21m                | 1m                   | +4/-2 2f       | fix(release): push images to ghcr.io one at a time                                                       |
+| #14 | 2026-10-30 11:57 | 5m                 | 1m                   | +47/-6 7f      | feat(ops): restart standalone and app containers automatically                                           |
+| #15 | 2026-10-30 12:15 | 17m                | 1m                   | +34/-4 4f      | fix: stop tracking master.env and keep the host's copy on deploy                                         |
+| #16 | 2026-10-30 13:40 | 1h 25m             | 6m                   | +14/-145 6f    | fix(standalone): make the standalone services start on the Windows laptop host                           |
+| #17 | 2026-10-30 13:43 | 3m                 | 3m                   | +12/-5 5f      | fix: make the stack's Postgres host port configurable                                                    |
+| #18 | 2026-10-30 15:03 | 1h 20m             | 1m                   | +29/-14 4f     | fix: first deploy on the Windows host (camera config mount, host IP, crash loop)                         |
+| #19 | 2026-10-30 15:10 | 6m                 | 1m                   | +88/-7 10f     | feat(mlops): add a MinIO dataset store as the DVC remote                                                 |
+| #20 | 2026-10-30 15:53 | 43m                | 4m                   | +20/-6 6f      | feat!: move PostgreSQL from 12 to 18.6                                                                   |
+| #21 | 2026-10-30 16:03 | 9m                 | 18m                  | +74/-88 5f     | feat(standalone): move Kafka to Confluent Platform 8.4.0 community edition                               |
+| #22 | 2026-10-30 16:16 | 13m                | 8m                   | +56/-17 6f     | feat(standalone): move Milvus to 3.0.5 following its official GPU compose file                           |
+| #23 | 2026-10-30 16:24 | 7m                 | 1m                   | +35/-1 3f      | feat(ops): delete release images the watcher no longer needs                                             |
+| #24 | 2026-10-30 16:37 | 13m                | 5m                   | +87/-76 20f    | feat: move app images to Python 3.14 with current libraries                                              |
+| #25 | 2026-10-30 16:56 | 18m                | 1m                   | +19/-3 5f      | feat: add Kafka-WebApp as a submodule of hamza-aziz-ai/Kafka-WebApp                                      |
+| #26 | 2026-10-30 17:19 | 22m                | 1m                   | +37/-1 5f      | feat: run Kafka-WebApp in the stack on port 9095                                                         |
+| #27 | 2026-10-30 17:27 | 7m                 | 1m                   | +565/-7 20f    | docs: add the documents required by the field guide                                                      |
+| #28 | 2026-10-30 17:41 | 14m                | 47m                  | +1/-1 1f       | docs: record why Milvus over other vector stores                                                         |
+| #29 | 2026-10-30 17:42 | 1m                 | 19m                  | +47/-19 1f     | docs: rewrite the defense brief in the owner's words                                                     |
+| #30 | 2026-10-30 17:50 | 7m                 | 22m                  | +72/-13 10f    | fix: start producer-consumer on Python 3.14 and catch crash loops on deploy                              |
+| #31 | 2026-10-30 18:09 | 19m                | 3m                   | +42/-32 3f     | fix: make enrolment and fresh installs work on this host                                                 |
+| #32 | 2026-10-30 18:26 | 16m                | 25m                  | +211/-25 14f   | feat: start the real datasets with checked enrolment                                                     |
+| #33 | 2026-10-30 18:34 | 8m                 | 7m                   | +24/-1 2f      | ci: re-run cancelled CI jobs once                                                                        |
+| #34 | 2026-10-30 18:54 | 19m                | 12m                  | +2/-1 1f       | ci: treat a check with a conclusion as finished                                                          |
+| #35 | 2026-10-30 19:03 | 9m                 | 3m                   | +71/-378 27f   | feat!: remove client names and the INSTITUTE setting                                                     |
+| #36 | 2026-10-30 19:23 | 19m                | 1m                   | +150/-1 4f     | fix(release): free runner disk and keep CHANGELOG.md updated                                             |
+| #37 | 2026-10-30 19:48 | 25m                | 2m                   | +19/-1 2f      | ci: open an issue when a release fails                                                                   |
+| #38 | 2026-10-30 19:57 | 8m                 | 2m                   | +23/-4 5f      | fix: remove startup races between services                                                               |
+| #39 | 2026-10-30 20:04 | 7m                 | 0m                   | +95/-0 2f      | Add Claude Code GitHub Workflow                                                                          |
+| #40 | 2026-10-30 20:05 | 1m                 | 15m                  | +59/-19 3f     | fix: correct service dependencies and healthchecks, and add Kafbat UI                                    |
+| #41 | 2026-10-30 20:08 | 2m                 | 20m                  | +2/-1 1f       | ci: let a finished Claude review also trigger auto-merge                                                 |
+| #43 | 2026-10-30 20:39 | 30m                | 5m                   | +208/-91 8f    | fix: keep Kafka topics across restarts and store broker data on a volume                                 |
+| #44 | 2026-10-30 20:55 | 16m                | 3h 57m               | +99/-6 6f      | fix(ci): recover stuck merges and stale releases without a person                                        |
+| #45 | 2026-10-31 01:02 | n/a                | 1m                   | +18/-2 3f      | fix: run Kafka-WebApp v0.1.2 so recognitions reach the display                                           |
+| #46 | 2026-10-31 01:04 | 2m                 | 2m                   | +231/-40 13f   | feat: version face vectors with the dataset and serve Milvus through an alias                            |
+| #47 | 2026-10-31 01:09 | 5m                 | 3m                   | +687/-578 50f  | feat: update InsightFace-REST to 0.9.5.0 on TensorRT 11                                                  |
+| #48 | 2026-10-31 03:29 | 2h 19m             | 15m                  | +6/-7 2f       | chore(data): add face vectors to the dataset                                                             |
+| #49 | 2026-10-31 03:34 | 5m                 | 1m                   | +184/-184 15f  | docs: copy-edit the docs for US spelling, aligned tables and model names                                 |
+| #50 | 2026-10-31 03:46 | 11m                | 1m                   | +24/-0 1f      | ci: close release-failure issues once a later release is published                                       |
+| #51 | 2026-10-31 03:52 | 6m                 | 5m                   | +65/-68 13f    | refactor: generic GPU defaults instead of the A100 MIG layout                                            |
+| #52 | 2026-10-31 04:37 | 44m                | 38m                  | +339/-28 13f   | feat: ship deployable artifacts instead of source to deployment hosts                                    |
+| #53 | 2026-10-31 05:25 | 48m                | 20h 19m              | +389/-166 11f  | feat(deploy): deploy release bundles from the registry instead of a git clone                            |
+| #55 | 2026-10-31 06:29 | 1h 04m             | 18h 59m              | +26/-1 1f      | ci: skip the image builds on PRs that only change docs                                                   |
+| #56 | 2026-10-31 06:47 | 17m                | 19h 19m              | +80/-13 8f     | feat: run the standalone scripts from a release bundle with a separate site folder                       |
+| #57 | 2026-10-31 07:29 | 42m                | 18h 01m              | +106/-0 1f     | docs: start TIMELINES.md with real PR durations and the incidents that cost time                         |
+| #58 | 2026-10-31 07:35 | 6m                 | 17h 55m              | +31/-0 1f      | docs: record the agreed order of work in HANDOVER.md                                                     |
+| #59 | 2026-10-31 07:46 | 11m                | 18h 24m              | +410/-218 17f  | fix: repair the ROI page so it draws regions into the camera configuration                               |
+| #60 | 2026-10-31 08:46 | 1h 00m             | 17h 27m              | +59/-0 1f      | docs: record the client separation and login design (D-036)                                              |
+| #61 | 2026-10-31 09:54 | 1h 08m             | 16h 41m              | +148/-19 12f   | feat: require CLIENT_ID and give each client its own databases and topics (D-036 step 1)                 |
+| #62 | 2026-10-31 10:05 | 11m                | 16h 42m              | +245/-175 12f  | feat: run each client's stack as its own compose project on a shared PostgreSQL (D-036 step 2a)          |
+| #63 | 2026-10-31 10:19 | 14m                | closed, see #74      | +238/-127 3f   | feat(deploy): watch one site folder per client, each its own compose project (D-036 step 2b)             |
+| #64 | 2026-10-31 11:15 | 56m                | 15h 44m              | +757/-31 9f    | feat(deploy): provision per-client logins on the shared services, with an isolation test (D-036 step 3a) |
+| #65 | 2026-10-31 11:49 | 34m                | 15h 19m              | +267/-136 14f  | feat: log in to the shared services with the client's own accounts (D-036 step 3b)                       |
+| #66 | 2026-10-31 11:51 | 2m                 | 14h 41m              | +1080/-274 3f  | docs: restyle README, FLOW.md and ARCHITECTURE.md to the documentation standard                          |
+| #67 | 2026-10-31 11:54 | 3m                 | 14h 20m              | +60/-1 4f      | fix: face collector loop and display health check found in the docs review                               |
+| #68 | 2026-10-31 12:15 | 21m                | open                 | +301/-228 10f  | feat: turn on per-client logins on the shared services, with the cutover runbook (D-036 step 3c)         |
+| #69 | 2026-11-01 01:42 | 13h 27m            | 35m                  | +1/-1 1f       | feat: pin Kafka-WebApp v0.3.0 so the display shows every camera                                          |
+| #70 | 2026-11-01 02:24 | 42m                | 2m                   | +47/-9 6f      | fix: keep Postgres and Milvus data across restarts with named volumes                                    |
+| #72 | 2026-11-01 02:34 | 10m                | 1m                   | +7/-2 1f       | ci: retry the release image push when ghcr.io refuses it                                                 |
+| #73 | 2026-11-01 02:42 | 8m                 | 3m                   | +0/-0 0f       | Add Claude Code GitHub Workflow                                                                          |
+| #74 | 2026-11-01 02:50 | 8m                 | 2m                   | +337/-225 5f   | feat(deploy): watch one site folder per client, each its own compose project (D-036 step 2b)             |
 
 ## Incidents that cost time
 
