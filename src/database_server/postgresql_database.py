@@ -266,7 +266,6 @@ def insert_recognition_data(current_date: str, current_time: str, results: dict)
                         threshold_datetime = current_datetime - timedelta(
                             minutes=SAME_CAM_TIME_ENTRY_THRESHOLD
                         )
-                        time_threshold = threshold_datetime.strftime("%H:%M:%S")
 
                         # Check for duplicate entries within the threshold.
                         select_query = sql.SQL("""
@@ -274,12 +273,13 @@ def insert_recognition_data(current_date: str, current_time: str, results: dict)
                             WHERE person_id = %s
                               AND location = %s
                               AND camera_name = %s
-                              AND recognition_timestamp BETWEEN %s - INTERVAL '%s minutes' AND %s
+                              AND recognition_date BETWEEN %s AND %s
+                              AND recognition_date + recognition_time BETWEEN %s AND %s
                         """)
                         # ensure_year_location_partition_exists(cursor, location, current_year)
                         cursor.execute(
                             select_query,
-                            (person_id, location, camera_name, current_datetime, SAME_CAM_TIME_ENTRY_THRESHOLD, current_datetime)
+                            (person_id, location, camera_name, threshold_datetime.date(), current_datetime.date(), threshold_datetime, current_datetime)
                         )
                         if cursor.fetchone():
                             database_server_logger.warning(
