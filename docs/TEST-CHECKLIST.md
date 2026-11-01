@@ -40,7 +40,7 @@ For a change to `src/main.py` or its imports, also start `main.py` for real, aga
 
 ## Customer path, by hand
 
-Not done yet: this host has no real camera and no enrolled faces.
+Steps 1 to 4 passed on 2026-11-01 with a clip of an enrolled face served over HTTP to a one-off producer. A real camera and step 5, the ERP, are still untested.
 
 1. Enrol one person, and point one camera at them.
 2. A row appears in `recognition_results`, with the right person and camera.

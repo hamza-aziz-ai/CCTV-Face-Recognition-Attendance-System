@@ -164,9 +164,7 @@ sequenceDiagram
         DBC-->>C: 200 status OK, before anything is written
         DBC->>DBC: background task, per record: decode the frame, draw the box and ID, take the location from the camera name
         DBC->>PG: SELECT the same person, location and camera in the last 5 minutes
-        alt column recognition_timestamp missing, as the code creates the table
-            PG-->>DBC: error: the whole batch is logged and dropped
-        else a recent record exists
+        alt a recent record exists
             PG-->>DBC: row: this record is skipped
         else no recent record
             PG-->>DBC: no row
@@ -184,12 +182,11 @@ sequenceDiagram
 3. Otherwise the controller schedules the insert as a background task and answers `{"status": "OK"}` at once. The caller never learns whether the insert worked.
 4. For each record the task decodes the frame, draws the box, ID and score on it, reduces an `http` camera address to its host name, and takes the location as the part of the camera name before the first underscore.
 5. It looks for a record of the same person, location and camera in the last `SAME_CAM_TIME_ENTRY_THRESHOLD = 5` minutes.
-6. Known issue: that query uses a column `recognition_timestamp` the table does not have, and a `%s` placeholder inside a quoted interval. On a table created by this code the query fails, the exception ends the task, and the whole batch is logged as `Error while inserting data` and lost. The steps below apply only to a table migrated by hand.
-7. A recent record means a duplicate: this record is skipped.
-8. No recent record: the insert goes ahead.
-9. The task creates the partition `recognition_results_<year>` (by date range) and its child `recognition_results_<year>_<location>` (by list) if they are missing.
-10. It inserts person, location, camera, camera address, date, time, score and the annotated frame, with `api_acknowledged` false. PostgreSQL routes the row to its partition.
-11. The task commits once, after the last record.
+6. A recent record means a duplicate: this record is skipped.
+7. No recent record: the insert goes ahead.
+8. The task creates the partition `recognition_results_<year>` (by date range) and its child `recognition_results_<year>_<location>` (by list) if they are missing.
+9. It inserts person, location, camera, camera address, date, time, score and the annotated frame, with `api_acknowledged` false. PostgreSQL routes the row to its partition.
+10. The task commits once, after the last record.
 
 ## 4. Recognition to display
 
