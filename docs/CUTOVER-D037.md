@@ -15,7 +15,8 @@ Until a host has done this cutover, do not run `start_standalone_services.sh` or
    - app logins (#65);
    - this change.
 2. A Kafka-WebApp release that has SASL logins, every partition and `PROJECT_SERVICES` is pinned in `docker-compose-main.yml`.
-3. The host runs from the bundle layout (roadmap item 5): `sites\owner\` holds the owner's `.env`, `master.env` (with `CLIENT_ID=owner` and `LEGACY_SHARED_SERVICES=1`) and `src\Camera-Configuration\camera_configuration.json`, and `provision.py` sits beside `watch.py`.
+3. The host runs from the bundle layout (roadmap item 5): `sites\owner\` holds the owner's `.env`, `master.env` (with `CLIENT_ID=owner` and `LEGACY_SHARED_SERVICES=1`) and `src\Camera-Configuration\camera_configuration.json`, and a copy of `releases\<tag>\deploy\provision.py` sits beside `watch.py`.
+5. The compose files from before D-037 are saved beside `watch.py`, because the watcher prunes old release folders. From a checkout: `git archive d3c3bac STANDALONE-SERVICES/Confluent-Kafka STANDALONE-SERVICES/Milvus-Vector-Database STANDALONE-SERVICES/standalone-services.env | tar -x -C <deploy folder>ollback-compose`.
 4. The owner's stack runs and works on that release.
 
 ## Steps
@@ -30,10 +31,11 @@ Run these in the deploy folder. Commands that use the admin login run inside the
 3. **Stop the owner's stack:**
    `docker compose -p cctv stop`
 4. **Restart Kafka with logins.** This also removes Schema Registry, Connect, ksqlDB, REST Proxy and Flink; their volumes stay. From the release's `STANDALONE-SERVICES\Confluent-Kafka`:
-   `docker compose --env-file ..\standalone-services.env up -d --remove-orphans`
+   `docker compose --env-file ..\standalone-services.env --env-file <deploy folder>\sites\owner\master.env up -d --remove-orphans`
+   `master.env` comes last, so the broker advertises this host's address and not the placeholder in `standalone-services.env`.
    Then check that the broker is healthy: `docker ps --filter name=broker`.
 5. **Restart Milvus with authorization.** From `STANDALONE-SERVICES\Milvus-Vector-Database`:
-   `docker compose --env-file ..\standalone-services.env up -d`
+   `docker compose --env-file ..\standalone-services.env --env-file <deploy folder>\sites\owner\master.env up -d`
 6. **Set up the host's admin logins.** This replaces Milvus root's default password and creates the read-only Kafbat login. Both passwords go to `admin.env` in the deploy folder; keep that file off every client's site.
    `python provision.py --init-milvus-root`
    `python provision.py --init-kafbat`
@@ -50,7 +52,7 @@ Run these in the deploy folder. Commands that use the admin login run inside the
     - `curl -s -o NUL -w "%{http_code}" localhost:9090/docs` prints 200.
     - Nothing is restarting: `docker ps --filter label=com.docker.compose.project=cctv`.
     - A recognition reaches the display. Walk past a camera, or play a clip.
-    - The services' environments hold only their own keys. List names only, never values: `docker exec cctv-mfr-api-service-1 env | findstr /B "PG_APP POSTGRES"` should list `PG_APP_USER` and `PG_APP_PASSWORD`, and no `POSTGRES_` keys.
+    - The services' environments hold only their own keys. List names only, never values: `docker exec cctv-mfr-api-service-1 env | findstr /B "PG_APP POSTGRES"` should list `PG_APP_USER` and `PG_APP_PASSWORD`. `POSTGRES_USER` and `POSTGRES_PASSWORD` also appear, because the compose file passes them, and they must be empty.
     - The default Milvus password no longer works: `curl -s -X POST localhost:19530/v2/vectordb/users/list -H "Authorization: Bearer root:Milvus" -d "{}"` returns a non-zero `code`.
 11. **Switch the Raspberry Pi displays.** Set:
     - `KAFKA_USERNAME=owner_display`;
@@ -59,7 +61,9 @@ Run these in the deploy folder. Commands that use the admin login run inside the
     - `IP_ADDRESS` to this host.
 
     Restart each display.
-12. **Resume the watcher:**
+12. **Restart Kafbat with its read-only login, if you use it.** From `STANDALONE-SERVICES\Confluent-Kafka`:
+    `docker compose --env-file ..\standalone-services.env --env-file <deploy folder>\sites\owner\master.env --env-file <deploy folder>dmin.env --profile ui up -d kafka-ui`
+13. **Resume the watcher:**
     `schtasks /Change /TN "CCTV deploy watcher" /ENABLE`
 
 A week later, delete the old unprefixed topics (`maingate_entry` and the like) with `docker exec broker kafka-topics --bootstrap-server localhost:29092 --delete --topic <name>`.
@@ -70,7 +74,7 @@ Releases from before #65 cannot run against these services, so roll back the set
 
 1. Pause the watcher, if it is running.
 2. Put `LEGACY_SHARED_SERVICES=1` back in `sites\owner\master.env`, and move `POSTGRES_USER` / `POSTGRES_PASSWORD` from `admin.env` back to `sites\owner\.env`.
-3. Start the previous Kafka and Milvus compose files: plaintext Kafka with its add-ons, and Milvus without `user.yaml`. Use the previous release's `STANDALONE-SERVICES` folder.
+3. Start the Kafka and Milvus compose files saved in `rollback-compose`: plaintext Kafka with its add-ons, and Milvus without `user.yaml`.
 4. `python watch.py --enroll owner`.
 
 The admin PostgreSQL login is a superuser, so it reaches the owner's data whoever owns it. The old unprefixed topics are still there, and the legacy mode uses them.
