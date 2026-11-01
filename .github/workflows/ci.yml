@@ -174,6 +174,14 @@ jobs:
       - name: Client separation
         if: matrix.service == 'producer-consumer'
         run: docker run --rm --entrypoint python3 ci/${{ matrix.service }}:test src/util/client_checks.py
+      # Records save once on the table the code creates, against a real PostgreSQL: the duplicate check broke twice with no test
+      - name: Recognition records
+        if: matrix.service == 'database-controller'
+        run: |
+          docker network create records
+          docker run -d --name records-db --network records -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci postgres:18.6-trixie
+          until docker exec records-db pg_isready -h records-db -U ci; do sleep 1; done
+          docker run --rm --network records --entrypoint python3 -e CLIENT_ID=owner -e LEGACY_SHARED_SERVICES=1 -e IP_ADDRESS=records-db -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci ci/${{ matrix.service }}:test src/database_server/test_records.py
       # A worse crop on a full cluster used to loop forever and block the collector
       - name: Face saver
         if: matrix.service == 'dynamic-face-dataset-collector'

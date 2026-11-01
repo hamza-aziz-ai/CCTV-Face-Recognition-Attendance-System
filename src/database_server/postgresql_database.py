@@ -248,7 +248,9 @@ def insert_recognition_data(current_date: str, current_time: str, results: dict)
         with psycopg2.connect(**DB_CONFIG) as conn:
             with conn.cursor() as cursor:
                 # Now, for each record, ensure partition exists.
-                for person_id, records in results.items():
+                for person_id, records in sorted(results.items()):
+                    # Batches run in parallel, and an uncommitted row is invisible to the duplicate check below. Held until commit; sorted, so two batches cannot deadlock
+                    cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (person_id,))
                     for record in records:
                         camera_name, camera_ip, confidence_score, frame_base64, bbox = record
                         frame = base64_to_image(frame_base64)

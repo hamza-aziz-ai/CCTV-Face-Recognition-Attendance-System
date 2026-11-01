@@ -15,6 +15,8 @@ A change is done when these pass and the real output is pasted in the PR. CI run
 
 Each of the 8 images builds, `pip check` is clean, `cv2` and `numpy` import, entrypoints and health checks exist, and no `master.env`, `.env`, `.git` or `src/Camera-Configuration` is inside.
 
+In `database-controller`, against a throwaway PostgreSQL, `python3 src/database_server/test_records.py` prints `records ok (saved, repeat skipped, saved after the window, 8 parallel batches saved once)`.
+
 In `producer-consumer`, `python3 src/util/client_checks.py` prints `clients ok (bad IDs refused, owner names kept, two clients share no name, Milvus bound to the client's database)` (D-036).
 
 ## Client isolation (CI job `isolation`, on PRs that touch provisioning or the shared services)
@@ -40,7 +42,7 @@ For a change to `src/main.py` or its imports, also start `main.py` for real, aga
 
 ## Customer path, by hand
 
-Steps 1 to 4 passed on 2026-11-01 with a clip of an enrolled face served over HTTP to a one-off producer. A real camera and step 5, the ERP, are still untested.
+Steps 1 to 4 passed on 2026-11-01 with a real 1080p RTSP stream through a one-off producer, and the name and portrait appeared on the display. Step 5, the ERP, is still untested.
 
 1. Enrol one person, and point one camera at them.
 2. A row appears in `recognition_results`, with the right person and camera.
