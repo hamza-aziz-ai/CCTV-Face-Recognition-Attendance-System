@@ -58,6 +58,9 @@ jobs:
           docker compose -f docker-compose-main.yml config --quiet
           docker compose -f docker-compose-main.yml -f docker-compose.dev.yml config --quiet
           DATASET_STORE_USER=ci DATASET_STORE_PASSWORD=ci DATASET_STORE_DIR=/tmp/store docker compose -f STANDALONE-SERVICES/Dataset-Store/docker-compose.yml config --quiet
+          POSTGRES_USER=ci POSTGRES_PASSWORD=ci docker compose -f STANDALONE-SERVICES/PostgreSQL/docker-compose.yml config --quiet
+      # Two clients' stacks on one host: no fixed names, own ports, own site folder, internal services by name (D-036)
+      - run: python3 -I deploy/test_layout.py
       # The deployment bundle: only allow-listed files, every image pinned, and its compose file still valid (D-033)
       - run: |
           python3 -I deploy/make_bundle.py demo /tmp/bundle

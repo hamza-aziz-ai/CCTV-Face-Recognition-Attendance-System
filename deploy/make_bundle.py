@@ -22,6 +22,7 @@ FILES = [
     "STANDALONE-SERVICES/Confluent-Kafka/docker-compose.yml",
     "STANDALONE-SERVICES/Milvus-Vector-Database/docker-compose.yml",
     "STANDALONE-SERVICES/Dataset-Store/docker-compose.yml",
+    "STANDALONE-SERVICES/PostgreSQL/docker-compose.yml",
     "STANDALONE-SERVICES/InsightFace-REST/deploy_trt_multi-gpu.sh",
     "STANDALONE-SERVICES/InsightFace-REST/misc/nginx_conf/conf.d/default.conf",
     "STANDALONE-SERVICES/InsightFace-REST/models/models.json",

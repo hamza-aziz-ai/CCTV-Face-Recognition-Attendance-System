@@ -175,7 +175,7 @@ ENROLMENT_MIN_CONFIDENCE = 0.7    # lowest face detection confidence accepted fo
 NUMBER_OF_PICTURES = 3
 
 # API address for dynamic facial dataset collection service
-DYNAMIC_FACE_DATA_COLLECTOR_API = f"http://{IP_ADDRESS}:8000"
+DYNAMIC_FACE_DATA_COLLECTOR_API = "http://dynamic-face-dataset-collector:8000"  # service name: this client's own collector (D-036)
 
 # PostgreSQL Database Name
 POSTGRESQL_DATABASE_NAME = client_name("Face_Recognition_Database")
@@ -189,7 +189,7 @@ TIMEOUT = 5 * 60
 # Parameters specific to Database Server Which Connects to Database (REDIS)
 ########################################################################################################################
 # DATABASE Host
-DATABASE_HOST = IP_ADDRESS  # IP of the machine where the database is running
+DATABASE_HOST = "mfr-database-controller"  # service name: this client's own controller, not published on the host (D-036)
 
 # DATABASE port
 DATABASE_PORT = 20001
@@ -220,7 +220,7 @@ SAME_CAM_TIME_ENTRY_THRESHOLD = 5    # minutes
 # Parameters specific to Feedback Server Which Connects to Feedback Message Publisher (CONFLUENT-KAFKA)
 ########################################################################################################################
 # FEEDBACK Host
-FEEDBACK_HOST = IP_ADDRESS  # IP of the machine where the database is running
+FEEDBACK_HOST = "mfr-feedback-controller"  # service name: this client's own controller, not published on the host (D-036)
 
 # FEEDBACK port
 FEEDBACK_PORT = 20012

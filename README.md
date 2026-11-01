@@ -25,15 +25,15 @@ flowchart TB
     NOPE["`No match: face ignored`"]:::outcome
     LIVE{"`(4) Liveness check enabled?`"}:::decision
     LV["`Liveness service :6386, off by default`"]:::store
-    DBC["`(5) DB controller :20001`"]:::step
-    PG[("`PostgreSQL recognition_results, partitioned by year and location`")]:::store
-    FBC["`(6) Feedback controller :20012`"]:::step
+    DBC["`(5) DB controller, internal :20001`"]:::step
+    PG[("`Shared PostgreSQL: recognition_results, partitioned by year and location`")]:::store
+    FBC["`(6) Feedback controller, internal :20012`"]:::step
     K[("`Kafka topic per entry point, one partition per camera`")]:::store
     KW["`Kafka-WebApp display`"]:::outcome
     DISP["`Display image server :20013`"]:::step
     API["`(7) ERP sync job in the reporting API, every minute`"]:::step
     ERP["`Institution ERP`"]:::outcome
-    COL["`(8) Face collector :8000`"]:::step
+    COL["`(8) Face collector, internal :8000`"]:::step
     DYN[("`Face crops and face_images table`")]:::store
     UPD["`Nightly updater, 01:00`"]:::step
 
@@ -96,7 +96,7 @@ flowchart TB
     WD{"`(5) Compose up, smoke test on :9090, stable after 90 s?`"}:::decision
     STACK["`(6) Main compose stack, project cctv, config and data from the site folder`"]:::outcome
     RB["`Roll back to the previous release, Windows message`"]:::error
-    SA[("`(7) Standalone services: InsightFace-REST and nginx, Milvus, Kafka, dataset store`")]:::store
+    SA[("`(7) Shared standalone services: PostgreSQL, InsightFace-REST and nginx, Milvus, Kafka, dataset store`")]:::store
 
     DEV --> CI --> AM
     AM -->|"`yes`"| MAIN --> REL
@@ -110,7 +110,7 @@ flowchart TB
     WD -->|"`yes`"| STACK
     WD -->|"`no`"| RB
     GHCR -.->|"`InsightFace-REST image, pulled by start_standalone_services.sh`"| SA
-    STACK -->|"`connects by host IP`"| SA
+    STACK -->|"`shared services by host IP`"| SA
 
     classDef entry fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
     classDef step fill:#dcfce7,stroke:#15803d,color:#0f172a
@@ -125,8 +125,8 @@ flowchart TB
 3. **Build and release.** After a merge, `release.yml` reads the merged pull request titles as Conventional Commits: `type!:` or a `BREAKING CHANGE` footer gives a major bump, `feat:` a minor one, `fix:` or `perf:` a patch, and anything else no release. It re-runs CI on the exact commit, pushes the eight app images, including the ROI page, to `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, builds the InsightFace-REST image if its source changed, and publishes the deploy bundle (D-033). Only then does it tag, create the GitHub Release with `mlops/model-manifest.json`, move the bundle's `stable` tag and add the notes to `CHANGELOG.md`. A failed release opens an issue for the owner (D-014, D-017, D-029). **Pull request titles must follow this convention.**
 4. **Watcher.** `watch.py` runs through Windows Task Scheduler from a deploy folder that holds no repository and no GitHub login, only a pull-only registry login (D-033, D-034). It pulls the deploy bundle's `stable` tag, which only `release.yml` moves, and reads the release from the image label. It deploys that release only if it is not the current one and has not failed before. The owner installs `watch.py` by hand from a bundle; it never replaces itself. Starting automerge for green pull requests left open is a separate script, `deploy/nudge_automerge.py`, which runs only on the owner's laptop (D-029).
 5. **Deploy check.** The watcher copies the bundle out of its image with `docker create` and `docker cp`, without running it, into `releases\<tag>\`, and refuses it unless its manifest is for that release and pins every image to one of ours by digest. It then runs `docker compose -p cctv --project-directory site up --pull missing --no-build --wait` with the bundle's compose file, waits for `http://localhost:9090/docs` to answer, then checks that no service is restarting or exited 90 seconds later. On failure it starts the previous release from its bundle, records the failed tag so it is never retried unattended, and shows a Windows message. A registry login or site-config problem stops deploys with a single message. See [docs/ROLLBACK.md](docs/ROLLBACK.md).
-6. **Live stack.** The main compose stack runs seven application containers, PostgreSQL and Kafka-WebApp, plus the ROI page on demand. Config and data come from the deploy folder's `site\` folder, so a new release changes only images and compose files. The watcher never starts a stack the owner stopped, and keeps only the bundles and images of the current and previous releases.
-7. **Standalone services.** InsightFace-REST, Milvus, Kafka and the dataset store run as separate compose stacks or containers, started by `start_standalone_services.sh`. The watcher does not manage them; they change only when someone runs that script. On a deployment host the script runs from a release bundle, with `CONFIG_DIR` pointing at the site folder.
+6. **Live stack.** The main compose stack runs seven application containers and Kafka-WebApp, plus the ROI page on demand. It is compose project `cctv` for the owner and `cctv-<client>` for any other client, with no fixed container names and its own network: the DB controller, feedback controller and face collector are reached by service name and not published on the host (D-036). Config and data come from the deploy folder's `site\` folder, so a new release changes only images and compose files. The watcher never starts a stack the owner stopped, and keeps only the bundles and images of the current and previous releases.
+7. **Standalone services.** PostgreSQL, InsightFace-REST, Milvus, Kafka and the dataset store are shared by every client stack on the host and run as separate compose stacks or containers, started by `start_standalone_services.sh`. The watcher does not manage them; they change only when someone runs that script. On a deployment host the script runs from a release bundle, with `CONFIG_DIR` pointing at the site folder.
 
 Who owns which part, and the runtime ports, are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -154,14 +154,15 @@ Secrets are not stored in this repository. Copy the template and fill in the val
 cp .env.example .env
 ```
 
-| Variable                                                            | Used by                                                                                             |
-|---------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`                                | PostgreSQL and every service that connects to it                                                    |
-| `POSTGRES_HOST_PORT`                                                | Host port for PostgreSQL when 5432 is taken; default 5432                                           |
-| `API_KEY`                                                           | Reporting API (`?api_key=` query parameter)                                                         |
-| `CAM_USERNAME`, `CAM_PASSWORD`                                      | Default camera credentials                                                                          |
-| `HOST_PROFILE`                                                      | Optional GPU profile under `STANDALONE-SERVICES/hosts/`                                             |
-| `DATASET_STORE_USER`, `DATASET_STORE_PASSWORD`, `DATASET_STORE_DIR` | Dataset store (MinIO DVC remote): root login and the host folder holding the data, outside the repo |
+| Variable                                                            | Used by                                                                                                                       |
+|---------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`                                | PostgreSQL and every service that connects to it                                                                              |
+| `POSTGRES_HOST_PORT`                                                | Host port for PostgreSQL when 5432 is taken; default 5432                                                                     |
+| `API_KEY`                                                           | Reporting API (`?api_key=` query parameter)                                                                                   |
+| `CAM_USERNAME`, `CAM_PASSWORD`                                      | Default camera credentials                                                                                                    |
+| `API_PORT`, `DISPLAY_IMAGE_PORT`, `DISPLAY_PORT`, `ROI_PORT`        | Published ports of this client's stack, defaults 9090, 20013, 9095 and 8069; only a second client on the same host needs them |
+| `HOST_PROFILE`                                                      | Optional GPU profile under `STANDALONE-SERVICES/hosts/`                                                                       |
+| `DATASET_STORE_USER`, `DATASET_STORE_PASSWORD`, `DATASET_STORE_DIR` | Dataset store (MinIO DVC remote): root login and the host folder holding the data, outside the repo                           |
 
 The camera configuration is git-ignored. Create it from the template:
 
@@ -169,7 +170,7 @@ The camera configuration is git-ignored. Create it from the template:
 cp src/Camera-Configuration/camera_configuration.example.json src/Camera-Configuration/camera_configuration.json
 ```
 
-Each location has an ERP `api-endpoint` and a set of `cctv-cameras` grouped by entry point (for example `entry` and `exit`). Each camera has `ip_address`, `port`, `endpoint`, `username`, `password` and an optional ROI polygon in `masking-coordinates`. A camera whose `username` or `password` is `null` falls back to `CAM_USERNAME` and `CAM_PASSWORD`. Camera keys end in a number (`cctv-camera-1`), which sets the camera's Kafka partition. To draw a camera's ROI polygon, start the ROI page with `docker compose -f docker-compose-main.yml --profile roi up -d roi-provisioning` and open http://localhost:8069. Pick a camera, load a full-resolution snapshot, click around the area to keep, preview the crop (made with the producer's own `crop_and_mask_roi`), and save: the points go into that camera's `masking-coordinates`. Restart the producer-consumer to apply them, and stop the page afterwards (`docker compose -f docker-compose-main.yml --profile roi stop roi-provisioning`). It listens on this host only and has no login (D-035). Without Docker, `Custom-ROI-Provisioning/crop_rectangle.py` with `RTSP_URL` set prints the same kind of points to copy in by hand.
+Each location has an ERP `api-endpoint` and a set of `cctv-cameras` grouped by entry point (for example `entry` and `exit`). Each camera has `ip_address`, `port`, `endpoint`, `username`, `password` and an optional ROI polygon in `masking-coordinates`. A camera whose `username` or `password` is `null` falls back to `CAM_USERNAME` and `CAM_PASSWORD`. Camera keys end in a number (`cctv-camera-1`), which sets the camera's Kafka partition. To draw a camera's ROI polygon, start the ROI page with `docker compose -f docker-compose-main.yml --profile roi up -d roi-provisioning` and open http://localhost:8069 (`ROI_PORT` if set). Pick a camera, load a full-resolution snapshot, click around the area to keep, preview the crop (made with the producer's own `crop_and_mask_roi`), and save: the points go into that camera's `masking-coordinates`. Restart the producer-consumer to apply them, and stop the page afterwards (`docker compose -f docker-compose-main.yml --profile roi stop roi-provisioning`). It listens on this host only and has no login (D-035). Without Docker, `Custom-ROI-Provisioning/crop_rectangle.py` with `RTSP_URL` set prints the same kind of points to copy in by hand.
 
 Runtime parameters such as batch size, thresholds, ports and the staging and liveness flags live in [`src/parameters.py`](src/parameters.py). At startup `set_configuration.sh` writes the host IP to `master.env` (created from `master.env.example`, not tracked). The standalone stacks read it from there too, so no tracked file changes. InsightFace-REST models, batch sizes and GPU devices are set in `standalone-services.env`. `master.env` also names the client the site serves, `CLIENT_ID` (D-036): every service refuses to start without a valid one, and `CLIENT_ID=owner` keeps the database, collection and topic names used before; other clients get their own ([DATA.md](docs/DATA.md)).
 
@@ -197,7 +198,7 @@ To add data, run `dvc add FACIAL-RECOGNITION-DATASET`, commit the updated `.dvc`
 
 ```bash
 docker compose -f docker-compose-main.yml -f docker-compose.dev.yml build   # build the application images
-./start_complete_project.sh     # standalone stacks, then the main compose stack
+./start_complete_project.sh     # shared standalone stacks, including PostgreSQL, then the main compose stack
 ```
 
 To start in two steps instead, run `./start_standalone_services.sh`, then `docker-compose -f docker-compose-main.yml up -d`.
@@ -222,7 +223,7 @@ Nothing is enrolled unless every photo passes the checks. The script saves the v
 ./stop_complete_project.sh
 ```
 
-This also stops the standalone stacks: InsightFace-REST, Milvus, Kafka and the dataset store.
+This also stops the standalone stacks: InsightFace-REST, Milvus, Kafka, PostgreSQL and the dataset store.
 
 ## Documentation
 
