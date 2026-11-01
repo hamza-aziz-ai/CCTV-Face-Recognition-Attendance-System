@@ -19,7 +19,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import StreamingResponse
-from fastapi.security.api_key import APIKeyQuery
 
 from psycopg2 import pool, OperationalError
 from psycopg2.extras import RealDictCursor
@@ -39,6 +38,7 @@ from parameters import (
     METRIC_TYPE
 )
 from custom_logging import api_logger
+import accounts
 
 # -------------------- Global Configuration & Globals --------------------
 
@@ -52,9 +52,6 @@ DB_CONFIG = {
     "host": POSTGRESQL_HOST,
     "port": POSTGRESQL_PORT,
 }
-
-API_KEY = os.environ.get("API_KEY")
-api_key_query = APIKeyQuery(name="api_key")
 
 # Global connection pool; it will be initialized on startup.
 db_pool: Optional[pool.ThreadedConnectionPool] = None
@@ -288,13 +285,6 @@ def start_scheduler() -> BackgroundScheduler:
     api_logger.info("Scheduler started for processing unacknowledged rows.")
     return scheduler
 
-# -------------------- FastAPI API Key Dependency --------------------
-
-def get_api_key(api_key: str = Depends(api_key_query)) -> bool:
-    if api_key == API_KEY:
-        return True
-    raise HTTPException(status_code=403, detail="Unauthorized: Invalid API Key")
-
 # -------------------- FastAPI Lifespan --------------------
 
 @asynccontextmanager
@@ -314,6 +304,8 @@ async def lifespan(app: FastAPI):
         api_logger.error(f"Error creating DB connection pool: {e}")
         sys.exit(1)
 
+    accounts.setup(get_db_cursor)
+
     # Load camera configuration (can be cached globally if needed)
     load_camera_configuration()
 
@@ -330,17 +322,16 @@ async def lifespan(app: FastAPI):
         api_logger.info("Shutting down application...")
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(accounts.router)
 
 # -------------------- API Endpoints --------------------
 
 @app.get("/fetch_tiled_frames")
-def fetch_tiled_frames(date: str, person_id: str, api_key: bool = Depends(get_api_key)):
+def fetch_tiled_frames(date: str, person_id: str, caller: dict = Depends(accounts.signed_in)):
     """
     Fetch recognition frames for a given person and date,
     compose a tiled image, and return it as a PNG.
     """
-    if not api_key:
-        raise HTTPException(status_code=403, detail="Unauthorized: Invalid API Key")
     try:
         dt, postgres_date = parse_date(date)
         year = dt.year
@@ -410,13 +401,11 @@ def fetch_tiled_frames(date: str, person_id: str, api_key: bool = Depends(get_ap
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
 @app.get("/fetch_person_data")
-def fetch_person_data(date: str, person_id: str, camera_name: Optional[str] = None, api_key: bool = Depends(get_api_key)):
+def fetch_person_data(date: str, person_id: str, camera_name: Optional[str] = None, caller: dict = Depends(accounts.signed_in)):
     """
     Fetch recognition results for a given person and date,
     and return formatted data.
     """
-    if not api_key:
-        raise HTTPException(status_code=403, detail="Unauthorized: Invalid API Key")
     try:
         dt, postgres_date = parse_date(date)
         year = dt.year
@@ -454,13 +443,11 @@ def fetch_person_data(date: str, person_id: str, camera_name: Optional[str] = No
 
 
 @app.get("/fetch_camera_data")
-def fetch_camera_data(date: str, camera_name: str, api_key: bool = Depends(get_api_key)):
+def fetch_camera_data(date: str, camera_name: str, caller: dict = Depends(accounts.signed_in)):
     """
     Fetch recognition results for a given person and date,
     and return formatted data.
     """
-    if not api_key:
-        raise HTTPException(status_code=403, detail="Unauthorized: Invalid API Key")
     try:
         dt, postgres_date = parse_date(date)
         year = dt.year
@@ -493,12 +480,10 @@ def fetch_camera_data(date: str, camera_name: str, api_key: bool = Depends(get_a
 
 
 @app.get("/fetch_module_data")
-def fetch_module_data(date: str, module: str, api_key: bool = Depends(get_api_key)):
+def fetch_module_data(date: str, module: str, caller: dict = Depends(accounts.signed_in)):
     """
     Fetch recognition results for a specific module (i.e. location) and date.
     """
-    if not api_key:
-        raise HTTPException(status_code=403, detail="Unauthorized: Invalid API Key")
     try:
         dt, postgres_date = parse_date(date)
         year = dt.year
@@ -533,14 +518,12 @@ def fetch_frames_by_time(
         module: str,
         start_time: Optional[str] = None,
         end_time: Optional[str] = None,
-        api_key: bool = Depends(get_api_key)
+        caller: dict = Depends(accounts.signed_in)
 ):
     """
     Fetch recognition frames across all people for a given date,
     optionally within a specified time range, and return a tiled image.
     """
-    if not api_key:
-        raise HTTPException(status_code=403, detail="Unauthorized: Invalid API Key")
     try:
         dt, postgres_date = parse_date(date)
         year = dt.year
@@ -631,14 +614,12 @@ def fetch_frames_by_time(
 def manual_post(
         date: str,
         location: str,
-        api_key: bool = Depends(get_api_key)
+        caller: dict = Depends(accounts.admin)
 ):
     """
     Post all recognition data for a given date and location as a single batched request.
     API endpoint is determined from the location using camera config JSON.
     """
-    if not api_key:
-        raise HTTPException(status_code=403, detail="Unauthorized: Invalid API Key")
 
     try:
         # Load camera configuration JSON

@@ -19,6 +19,8 @@ In `database-controller`, against a throwaway PostgreSQL, `python3 src/database_
 
 In `producer-consumer`, `python3 src/util/test_camera.py` prints `camera ok (region at the frame edge crops, 2 alerts for 500 dark frames, recovery announced once)`.
 
+In `api`, against a throwaway PostgreSQL, `python3 src/api/test_accounts.py` prints `accounts ok (role matrix, CSRF, logout, expiry, disabled users, password change, machine tokens, throttling, no key in the URL)`.
+
 In `producer-consumer`, `python3 src/util/client_checks.py` prints `clients ok (bad IDs refused, owner names kept, two clients share no name, Milvus bound to the client's database)` (D-036).
 
 ## Client isolation (CI job `isolation`, on PRs that touch provisioning or the shared services)
