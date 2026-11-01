@@ -56,7 +56,7 @@ def build(out, tag, commit, digests, root=ROOT):
     out = Path(out)
     for name in FILES:
         (out / name).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(root / name, out / name)
+        shutil.copy(root / name, out / name)  # keeps the executable bit: the bundle's scripts call each other
     pinned = {}
     for ref, digest in digests.items():
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):

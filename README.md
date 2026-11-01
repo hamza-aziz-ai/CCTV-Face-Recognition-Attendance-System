@@ -154,6 +154,8 @@ docker compose -f docker-compose-main.yml -f docker-compose.dev.yml build   # bu
 
 To start in two steps instead, run `./start_standalone_services.sh`, then `docker-compose -f docker-compose-main.yml up -d`.
 
+The standalone scripts also run from a release bundle, where the site's config lives in a separate folder: `CONFIG_DIR=<site folder> bash <bundle>/start_standalone_services.sh`. They then read `.env` and `master.env` from that folder and keep the InsightFace models and TensorRT engines in `<site folder>/insightface-models`, so a new release does not rebuild them. `set_configuration.sh` writes this machine's IP only to `master.env`; the stacks read it from there, so no tracked file changes.
+
 The images contain the application source, so rebuild them after code changes. For development, start with both files (`docker compose -f docker-compose-main.yml -f docker-compose.dev.yml up -d`): `docker-compose.dev.yml` mounts `./src` over the baked copy, so edits apply on restart without a rebuild.
 
 ### 5. Enroll faces
