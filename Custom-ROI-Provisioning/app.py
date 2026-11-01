@@ -1,99 +1,142 @@
 """
-This module was created to update the ROI (region of interest) for each IP camera.
+Draws each camera's region of interest (ROI) and saves it to the site's camera configuration.
+
+The producer crops every frame to the camera's `masking-coordinates` polygon before recognition
+(src/util/generic_utilities.py: crop_and_mask_roi). This page shows a full-resolution snapshot of a camera, lets you
+click the polygon on it, previews the crop with the producer's own function, and saves the points to
+src/Camera-Configuration/camera_configuration.json. The producer reads that file at start, so restart it afterwards.
 
 Author: Kshitij Parashar
 Date: 4 October 2023
+Rewritten 2026-10-31: the old page edited src/parameters.py and imported names that no longer exist.
 """
+import json
+import os
+import sys
+import tempfile
 
-from flask import Flask, render_template, Response, request, send_from_directory, redirect, url_for
 import cv2
-import fileinput
+from flask import Flask, Response, jsonify, render_template, request
 
-from src.util.generic_utilities import create_mask, roi_coordinates
-from src.parameters import IP_CAMS, FRAME_WIDTH, FRAME_HEIGHT
+# The shared modules live in src/ and import each other by bare name (`from parameters import ...`)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "src"))
+
+from parameters import CAMERA_CONFIGURATION_FILE  # noqa: E402
+from util.generic_utilities import camera_stream_url, crop_and_mask_roi  # noqa: E402
+
+MAX_POINTS = 100
+MAX_COORDINATE = 20000  # well above any camera resolution in use
 
 app = Flask(__name__)
-camera_name = ''  # Initialize with an empty string
-
-# Initialize variables for the text boxes
-width = ''
-height = ''
-pos_x = ''
-pos_y = ''
 
 
-# Function to capture video from the IP camera
-def get_camera_feed():
-    global camera_name
-    if camera_name:
-        cap = cv2.VideoCapture(IP_CAMS[camera_name][0])
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            else:
-                frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT))
-                roi_left, roi_top, roi_right, roi_bottom = roi_coordinates(int(width), int(
-                    height), frame.shape[1], frame.shape[0], int(pos_x), int(pos_y))
-                mask = create_mask(frame, roi_left, roi_top,
-                                   roi_right, roi_bottom)
-                frame = frame * mask
-
-                _, buffer = cv2.imencode('.jpg', frame)
-                frame = buffer.tobytes()
-
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-        cap.release()
+def load_config():
+    with open(CAMERA_CONFIGURATION_FILE, encoding="utf-8") as f:
+        return json.load(f)
 
 
-@app.route('/', methods=['GET', 'POST'])
+def cameras(config):
+    """Every camera as (id, its config), where id is "<location>/<entry or exit>/<camera name>"."""
+    for location, settings in config.items():
+        for point, named in settings.get("cctv-cameras", {}).items():
+            for name, camera in named.items():
+                yield f"{location}/{point}/{name}", camera
+
+
+def find_camera(config, camera_id):
+    for cid, camera in cameras(config):
+        if cid == camera_id:
+            return camera
+    raise KeyError(f"no camera {camera_id!r} in the camera configuration")
+
+
+def valid_points(points):
+    """A polygon as the producer expects it: at least 3 [x, y] integer points inside the frame."""
+    if not isinstance(points, list) or not 3 <= len(points) <= MAX_POINTS:
+        raise ValueError(f"a region needs 3 to {MAX_POINTS} points")
+    for point in points:
+        if (not isinstance(point, list) or len(point) != 2
+                or not all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= MAX_COORDINATE for v in point)):
+            raise ValueError(f"not a point inside the frame: {point!r}")
+    return points
+
+
+def save_points(camera_id, points):
+    """Set one camera's masking-coordinates (None clears it). Written to a temporary file in the same folder and
+    swapped in, so a crash never leaves a half-written configuration for the producer."""
+    config = load_config()
+    find_camera(config, camera_id)["masking-coordinates"] = None if points is None else valid_points(points)
+    folder = os.path.dirname(os.path.abspath(CAMERA_CONFIGURATION_FILE))
+    fd, tmp = tempfile.mkstemp(dir=folder, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+            f.write("\n")
+        os.replace(tmp, CAMERA_CONFIGURATION_FILE)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
+def snapshot(camera):
+    """One frame at the camera's full resolution: the coordinates the producer's crop uses."""
+    stream = cv2.VideoCapture(camera_stream_url(camera))
+    try:
+        grabbed, frame = stream.read()
+    finally:
+        stream.release()
+    if not grabbed:
+        raise ConnectionError("could not read a frame from the camera")
+    return frame
+
+
+def jpeg(frame):
+    return Response(cv2.imencode(".jpg", frame)[1].tobytes(), mimetype="image/jpeg")
+
+
+@app.get("/")
 def index():
-    global camera_name, width, height, pos_x, pos_y
-    if request.method == 'POST':
-        camera_name = request.form['camera_name']
-
-        # Get values from the text boxes and store them in variables
-        width = request.form['width']
-        height = request.form['height']
-        pos_x = request.form['pos_x']
-        pos_y = request.form['pos_y']
-
-    return render_template('index.html', width=width, height=height, pos_x=pos_x, pos_y=pos_y)
+    return render_template("index.html")
 
 
-# Serve static files (JavaScript)
+@app.get("/api/cameras")
+def list_cameras():
+    return jsonify([{"id": cid, "points": camera.get("masking-coordinates")} for cid, camera in cameras(load_config())])
 
 
-@app.route('/static/<path:filename>')
-def serve_static(filename):
-    return send_from_directory('static', filename)
+@app.get("/snapshot")
+def camera_snapshot():
+    try:
+        return jpeg(snapshot(find_camera(load_config(), request.args.get("camera", ""))))
+    except KeyError as e:
+        return jsonify(error=str(e)), 404
+    except ConnectionError as e:
+        return jsonify(error=str(e)), 502
 
 
-@app.route('/video_feed')
-def video_feed():
-    return Response(get_camera_feed(), mimetype='multipart/x-mixed-replace; boundary=frame')
+@app.post("/preview")
+def preview():
+    """The snapshot cropped and masked exactly as the producer would do it with these points."""
+    body = request.get_json(silent=True) or {}
+    try:
+        points = valid_points(body.get("points"))
+        return jpeg(crop_and_mask_roi(snapshot(find_camera(load_config(), body.get("camera", ""))), points))
+    except (KeyError, ValueError) as e:
+        return jsonify(error=str(e)), 400
+    except ConnectionError as e:
+        return jsonify(error=str(e)), 502
 
 
-# Route to send variables to Python file
-@app.route('/send_variables', methods=['POST'])
-def update_variables():
-    # Get the final details and update them in parameters.py
-    new_values = (int(width), int(height), int(pos_x), int(pos_y))
-    with fileinput.FileInput("src/parameters.py", inplace=True) as file:
-        for line in file:
-            # Search for the line that corresponds to the key
-            if camera_name in line:
-                if "# " in line:
-                    # Replace the line with the updated values
-                    line = f'    # "{camera_name}": ["{IP_CAMS[camera_name][0]}", {new_values}],\n'
-                else:
-                    line = f'    "{camera_name}": ["{IP_CAMS[camera_name][0]}", {new_values}],\n'
-            print(line, end='')
-
-    # Redirect back to the main page with a success message
-    return redirect(url_for('index'))
+@app.post("/api/roi")
+def update_roi():
+    """Save (or, with points null, clear) one camera's region."""
+    body = request.get_json(silent=True) or {}
+    try:
+        save_points(body.get("camera", ""), body.get("points"))
+    except (KeyError, ValueError) as e:
+        return jsonify(error=str(e)), 400
+    return jsonify(saved=body.get("camera"), note="Restart producer-consumer to apply it.")
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8069)
