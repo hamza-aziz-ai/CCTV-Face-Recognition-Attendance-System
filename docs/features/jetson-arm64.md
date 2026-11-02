@@ -2,7 +2,7 @@
 
 Findings from 2026-11-02 on the owner's Orin Nano Super developer kit (8 GB, JetPack 7.2.1, CUDA 13.2, TensorRT 10.16.2.10, MAXN_SUPER). This is roadmap item 12.
 
-## Result so far
+## Engine benchmarks
 
 Native TensorRT builds and runs both of our real models on the Jetson's GPU, in FP16. These are `trtexec` figures on synthetic input, 300 iterations each. They exclude video decode, image preparation, post-processing, Milvus and Kafka, so a real pipeline will be slower.
 
@@ -59,6 +59,38 @@ The apt repo is `som`, not `t234`, on JetPack 7.2.1. An image only fits the JetP
 
 These match the host's TensorRT 10.16 speeds. The `runtime` image has `trtexec` and the Python `Builder` and ONNX parser, but no `numpy`, so the InsightFace-REST image must install its Python requirements on top. Engines built on TensorRT 10.16 will not load here, so the 10.3 engines are built separately.
 
+## InsightFace-REST on the Jetson
+
+InsightFace-REST 0.9.5 runs on the Jetson from `STANDALONE-SERVICES/InsightFace-REST/src/Dockerfile_trt_jetson`, on `l4t-tensorrt:r10.3.0-runtime`, with the laptop's model, batch and threshold settings (`DET_BATCH_SIZE=8`, `REC_BATCH_SIZE=16`, `NUM_WORKERS=1`). The image is 6.18 GB. With no engines yet, first start took about 6.5 minutes and peaked at 4.7 GB of board memory; later starts take seconds.
+
+Each image in `src/test_images` went to the Jetson and to the laptop (TensorRT 11, amd64). Both found the same faces in all 5 images, 119 faces in total:
+
+| Measure | Result |
+|---|---|
+| Embedding cosine, Jetson against laptop | Minimum 0.9955, mean 0.9989 |
+| Detection confidence | Within 0.002 on the faces read |
+| Face position | Within 0.5 px on the faces read |
+
+Load test on the Jetson itself, posting one image in a loop for 20 s per level:
+
+| Clients | One face per request | Four faces per request |
+|---|---|---|
+| 1 | 42.5 requests/s, 24 ms | 29.6 requests/s, 34 ms |
+| 2 | 48.4 requests/s, 41 ms | 34.5 requests/s, 58 ms |
+| 4 | 48.1 requests/s, 84 ms | 34.6 requests/s, 118 ms |
+| 8 | 48.8 requests/s, 164 ms | 35.4 requests/s, 223 ms |
+| 16 | 49.8 requests/s, 324 ms | 35.3 requests/s, 457 ms |
+
+Latency is the median. Throughput flattens at about 49 requests/s, or 141 faces/s with four faces per request. The one server process stays near 115% CPU while the GPU peaks at 78% and 65 °C, so the limit is that Python process, not the GPU. The board's CPU was not saturated. The container used about 1 GB of memory, 1.8 GB after a fresh engine build.
+
+Differences from the amd64 image:
+
+- `onnx_to_trt.py` sets FP16 with the builder flag on TensorRT 10, because the ONNX conversion path needs TensorRT 11's strongly typed networks.
+- The 1 GB builder workspace limit stays off on TensorRT 10. With it, `w600k_r50` at batch 16 failed with `Could not find any implementation for node PWN(PRelu_1)`.
+- `icc-rt` has no arm64 build, `onnx-simplifier` is never imported, and `tritonclient` needs `gevent`, which would not build here. All three are left out.
+- CuPy compiles at run time, so it needs the CUDA headers. `nvidia-cuda-runtime-cu12` supplies them; the `[ctk]` extra also works but adds 4 GB.
+- JPEGs decode with TurboJPEG, as nvJPEG is not used here.
+
 ## What this means
 
 - The x86 image cannot run here: it is amd64 and on TensorRT 11.
@@ -69,4 +101,4 @@ These match the host's TensorRT 10.16 speeds. The `runtime` image has `trtexec` 
 
 ## Not yet tested
 
-Real faces, real accuracy on TensorRT 10, InsightFace-REST itself, building engines inside a container, CPU load, several camera streams at once, and Milvus on this board.
+A live camera through this image, accuracy on a labelled set, an unenrolled person, the producer, consumer and Kafka on this board, more than one worker, Milvus on this board, and an image build in CI. The load test repeats one image; real frames vary, and video decode and the rest of the pipeline add load.

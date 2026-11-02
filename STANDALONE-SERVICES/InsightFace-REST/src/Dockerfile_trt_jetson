@@ -1,0 +1,33 @@
+# Jetson: TensorRT 10.3, CUDA 12.6, Python 3.10, Ubuntu 22.04; tested on JetPack 7.2.1 (docs/features/jetson-arm64.md)
+FROM nvcr.io/nvidia/l4t-tensorrt:r10.3.0-runtime@sha256:2c5dd352de34433ca837f75f38822312ef520bd1c5582d13d20449752aecf04e
+
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Kolkata
+ENV TRT_VERSION=10.3.0
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
+    && apt-get update && apt-get install -y tzdata
+
+ENV PIP_INSTALL="python3 -m pip --no-cache-dir install"
+
+RUN apt-get update &&\
+    apt-get install -y\
+            libgl1 \
+            libglib2.0-0 \
+            libturbojpeg &&\
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+# icc-rt is Intel only, onnx-simplifier is never imported, and the Triton client needs gevent, which has no wheel here and is unused with TensorRT
+# JPEGs decode with TurboJPEG, as nvJPEG is not on Jetson
+# CuPy compiles kernels at run time, so it needs the CUDA headers; its [ctk] extra would add 4 GB of unused math libraries
+RUN grep -vE '^(icc-rt|onnx-simplifier|tritonclient)' requirements.txt > jetson-requirements.txt \
+    && $PIP_INSTALL -r jetson-requirements.txt cupy-cuda12x cuda-pathfinder nvidia-cuda-runtime-cu12
+
+WORKDIR /app
+COPY if_rest /app/if_rest
+COPY entrypoint.sh /app/entrypoint.sh
+
+ENTRYPOINT [ "bash" ]
+CMD ["entrypoint.sh"]
