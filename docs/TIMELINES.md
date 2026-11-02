@@ -105,6 +105,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #83 | 2026-11-01 16:40 | 10m                | 7m                   | +420/-42 14f   | feat: add per-client accounts, sessions and machine tokens to the API (D-039)                            |
 | #84 | 2026-11-01 17:52 | 1h 12m             | 6m                   | +275/-6 17f    | feat: serve each client over HTTPS behind a shared proxy (D-040)                                         |
 | #85 | 2026-11-02 04:10 | overnight gap      | 7m                   | +252/-16 7f    | feat: fix live updates over HTTPS and theme the sign-in page |
+| #86 | 2026-11-02 07:30 | same-day gap       | 6m                   | +4/-4 4f       | fix: pin the display with the single-person card fix |
 
 ## Incidents that cost time
 
