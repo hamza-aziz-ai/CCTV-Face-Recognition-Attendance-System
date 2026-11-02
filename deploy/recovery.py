@@ -2,7 +2,8 @@
 
   python recovery.py snapshot CLIENT             writes sites/CLIENT/snapshots/<time>: both databases, the bucket, the site's data
   python recovery.py restore CLIENT FOLDER       puts a snapshot back; the client's stack must be down
-  python recovery.py remove CLIENT --confirm CLIENT   deletes the client everywhere, its site folder too; the owner is refused
+  python recovery.py remove CLIENT --confirm CLIENT   deletes the client everywhere, its site folder too; the owner is refused,
+                                                      and the ID cannot be used again on this Kafka
 Options as in provision.py: --sites DIR, --admin-env FILE, --postgres/--kafka/--store/--proxy CONTAINER, --milvus URL.
 
 Milvus is never copied: rows share a person's ID as primary key, so vectors cannot be read back out (D-030). The vectors.parquet
@@ -13,6 +14,7 @@ Stdlib only, like provision.py and watch.py.
 import argparse
 import hashlib
 import json
+import secrets
 import shutil
 import subprocess
 import sys
@@ -155,9 +157,11 @@ def remove_kafka(container, env, client):
             run(admin + ["kafka-consumer-groups", *boot, "--delete", "--group", group])
     for kind in ("--topic", "--group"):
         run(admin + ["kafka-acls", *boot, "--remove", "--force", kind, prefix, "--resource-pattern-type", "prefixed"])
+    # Never --delete-config: on cp-kafka 8.4.0, deleting one SCRAM login loses every client's login at the next broker
+    # restart (D-042). A password nobody holds, with no ACLs, ends the login just as well; the name stays, so the ID is spent.
     for user in (env["KAFKA_APP_USER"], env["KAFKA_DISPLAY_USER"]):
-        if provision.kafka_user_exists(container, user):
-            run(admin + ["kafka-configs", *boot, "--alter", "--entity-type", "users", "--entity-name", user, "--delete-config", "SCRAM-SHA-512"])
+        password = secrets.token_hex(32)
+        run(admin + ["kafka-configs", *boot, "--alter", "--entity-type", "users", "--entity-name", user, "--add-config", f"SCRAM-SHA-512=[password={password}]"], secret=[password])
 
 
 def remove_milvus(url, token, env, client):

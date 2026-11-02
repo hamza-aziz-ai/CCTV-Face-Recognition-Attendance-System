@@ -401,18 +401,18 @@ def check_recovery(f):
     assert isinstance(milvus(f, delta, "collections/list", {"dbName": "delta_default"}), Exception)
     topics = sh("docker", "exec", f.kafka, "kafka-topics", "--bootstrap-server", "localhost:29092", "--list").stdout
     assert "delta." not in topics, topics
-    assert not provision.kafka_user_exists(f.kafka, "delta_app") and not provision.kafka_user_exists(f.kafka, "delta_display")
+    # The names stay on purpose: deleting a SCRAM login loses every login at the next restart (D-042). The old password is dead
+    assert "Authentication failed" in produce(f, delta, "KAFKA_APP_USER", "beta.maingate_entry")
     acls = sh("docker", "exec", f.kafka, "kafka-acls", "--bootstrap-server", "localhost:29092", "--list").stdout
     assert "delta" not in acls, acls
     assert not provision.store_user_exists(f.store, "delta-app")
     assert mc(f, delta, "mc ls c/delta-enrolment")[0] != 0, "bucket or key survived"
     check_own(f, beta, "beta")
 
-    # The ID can be used again, from nothing
+    # The spent ID is refused, not reset: its Kafka name still exists and nobody holds the password
     cameras(f, "delta", 1, 2)
-    assert f.provision("delta") == 0
-    check_own(f, f.env("delta"), "delta")
-    assert recover("remove", "delta", "--confirm", "delta") == 0
+    assert f.provision("delta") == 1
+    assert not (site / ".env").exists()
 
 
 def test():
@@ -483,10 +483,6 @@ def test():
 
         f.compose("restart")
         f.up()
-        for _ in range(20):  # the broker answers before it has replayed its SCRAM logins
-            if "Authentication failed" not in produce(f, acme, "KAFKA_APP_USER", "acme.maingate_entry"):
-                break
-            time.sleep(3)
         check_own(f, acme, "acme")
         check_refused(f, acme, "acme", "beta")
         assert isinstance(milvus(f, {"MILVUS_APP_USER": "root", "MILVUS_APP_PASSWORD": "Milvus"}, "users/list", {}), Exception)
