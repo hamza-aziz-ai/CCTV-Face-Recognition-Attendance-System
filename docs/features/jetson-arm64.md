@@ -91,6 +91,35 @@ Differences from the amd64 image:
 - CuPy compiles at run time, so it needs the CUDA headers. `nvidia-cuda-runtime-cu12` supplies them; the `[ctk]` extra also works but adds 4 GB.
 - JPEGs decode with TurboJPEG, as nvJPEG is not used here.
 
+### Two workers
+
+With `NUM_WORKERS=2` the same load test, on warm workers:
+
+| Clients | One face per request | Four faces per request |
+|---|---|---|
+| 1 | 41.5 requests/s, 24 ms | Not measured warm |
+| 2 | 57.0 requests/s, 35 ms | 41.5 requests/s, 51 ms |
+| 4 | 73.5 requests/s, 57 ms | 55.2 requests/s, 76 ms |
+| 8 | 76.2 requests/s, 107 ms | 53.6 requests/s, 151 ms |
+| 16 | 77.4 requests/s, 210 ms | 54.0 requests/s, 301 ms |
+
+That is about 55% more than one worker: 216 faces/s with four faces per request. The container uses 2.37 GB, and the board 3.3 GB in all. Each worker's first request after a start took about 26 s, so a client with a 30 s timeout can fail once; send a warm-up request before taking traffic.
+
+## Live camera through the Jetson
+
+On 2026-11-02 the producer-consumer, database controller and feedback controller ran on the Jetson as arm64 images, built there from the unchanged `main.Dockerfile`, `database-server.Dockerfile` and `feedback-server.Dockerfile` (2.06, 1.58 and 1.53 GB). Recognition used the Jetson's InsightFace-REST, published on 6385, while Milvus, Kafka and PostgreSQL stayed on the laptop, reached over the LAN. `master.env` on the Jetson kept `IP_ADDRESS` as the laptop and set `INSIGHTFACE_HOST=http://<jetson>`. The dynamic face dataset collector was left out, so no face crops were kept on the Jetson.
+
+One camera, the owner's phone over RTSP, with the owner in front of it and one person enrolled:
+
+| Measure | Result |
+|---|---|
+| Records in 80 s | 39, all the enrolled person, no other name |
+| Score | Minimum 0.482, mean 0.709, maximum 0.784 |
+| Laptop on the same camera, earlier | Minimum 0.603, mean 0.715, maximum 0.774 |
+| Producer-consumer | About 266% CPU, 1 GB |
+
+Scores under 0.5 count only when the staging collection also matches, which accepts down to 0.45 by design. The test read and cleared its rows every 2 s, as the duplicate window otherwise keeps one record per person. The phone's stream dropped and reconnected 5 times. The room's dark start halted recognition until a light was on, as on the laptop. This is one person and one camera, not an accuracy figure.
+
 ## What this means
 
 - The x86 image cannot run here: it is amd64 and on TensorRT 11.
@@ -101,4 +130,4 @@ Differences from the amd64 image:
 
 ## Not yet tested
 
-A live camera through this image, accuracy on a labelled set, an unenrolled person, the producer, consumer and Kafka on this board, more than one worker, Milvus on this board, and an image build in CI. The load test repeats one image; real frames vary, and video decode and the rest of the pipeline add load.
+Accuracy on a labelled set, an unenrolled person, more than one camera, the dynamic face dataset collector, Milvus or Kafka on this board, whether the display shows the Jetson's messages, three or more workers, and an image build in CI. The load test repeats one image; real frames vary.
