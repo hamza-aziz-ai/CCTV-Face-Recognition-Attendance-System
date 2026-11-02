@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.9.2 (2026-11-02)
+
+## What's Changed
+* chore: run InsightFace-REST on the Jetson with TensorRT 10 by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/87
+* fix: start automerge when the InsightFace image build ends by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/88
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.9.1...v2.9.2
+
 ## v2.9.1 (2026-11-02)
 
 ## What's Changed
