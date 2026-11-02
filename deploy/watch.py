@@ -39,6 +39,7 @@ IMAGE_PREFIX = "ghcr.io/hamza-aziz-ai/cctv-face-recognition-"
 # Same rule as src/parameters.py; the owner's stack keeps the project name it had before D-036
 CLIENT_ID = re.compile(r"[a-z][a-z0-9]{2,29}")
 OWNER = "owner"
+BASE_TIER = "standard"
 # Bind-mounted into the containers: a missing file would be created by Docker as an empty folder
 SITE_FILES = [".env", "master.env", "src/Camera-Configuration/camera_configuration.json"]
 STABLE_SECONDS = 90
@@ -210,8 +211,16 @@ def start(tag, site):
     tag_images(tag)
 
 
+def tier(site):
+    """The owner-set tier (D-041). No container mounts this file; a client without one gets the base tier."""
+    file = site / "tier"
+    return file.read_text(encoding="utf-8").strip() if file.is_file() else BASE_TIER
+
+
 def deploy(tag, ref, site):
-    stage(tag, ref)
+    manifest = stage(tag, ref)
+    if tier(site) not in manifest.get("tiers", [BASE_TIER]):  # bundles older than D-041 list no tiers
+        raise RuntimeError(f"{tag} does not offer tier {tier(site)!r}")
     start(tag, site)
 
 

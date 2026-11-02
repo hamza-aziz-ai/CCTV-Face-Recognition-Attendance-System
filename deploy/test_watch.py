@@ -98,6 +98,7 @@ def test():
     assert (code, deployed, notified) == (1, [], 1) and ".env" in saved["problem"]
     test_clients()
     test_registry_failure()
+    test_tiers()
     test_check_bundle()
     test_stage()
     test_prune()
@@ -145,6 +146,30 @@ def test_clients():
     (tmp / "sites/acme/.env").write_text("API_KEY=secret\nAPI_PORT=9190\n")
     assert watch.setting(tmp / "sites/acme/.env", "API_PORT", "9090") == "9190"
     assert watch.setting(tmp / "sites/owner/.env", "API_PORT", "9090") == "9090"
+
+
+def test_tiers():
+    """A client runs only a tier the release offers (D-041); a client with no tier file gets the base tier."""
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = site(Path(tmp))
+        started = []
+        offered = {"tiers": ["standard"]}
+        with mock.patch.multiple(watch, stage=lambda tag, ref: offered, start=lambda tag, site: started.append(tag)):
+            watch.deploy("v1", "bundle@v1", folder)
+            (folder / "tier").write_text("deepstream\n")
+            assert watch.tier(folder) == "deepstream"
+            try:
+                watch.deploy("v2", "bundle@v2", folder)
+            except RuntimeError as e:
+                assert "tier 'deepstream'" in str(e)
+            else:
+                raise AssertionError("a tier the release does not offer was started")
+            offered["tiers"].append("deepstream")
+            watch.deploy("v3", "bundle@v3", folder)
+            del offered["tiers"]  # a bundle from before tiers offers the base tier only
+            (folder / "tier").write_text("standard\n")
+            watch.deploy("v4", "bundle@v4", folder)
+        assert started == ["v1", "v3", "v4"], started
 
 
 def test_registry_failure():

@@ -640,3 +640,17 @@ Chosen: 3. `STANDALONE-SERVICES/Proxy` publishes only 443 and keeps its CA in th
 Why: Caddy issues and renews its own certificates, and `forward_auth` guards a page without touching the app behind it. The API, display and portrait ports stay on 127.0.0.1, because the watcher's smoke test and port checks use them.
 Trade-off: each device must trust the private CA once. Someone with a login on the host can reach those ports without a session, the same as Kafbat. A proxy outage takes every client on the host offline. Raspberry Pi displays are not covered yet: they read portraits from port 20013, which no longer reaches the LAN. There is no sign-out button on the display yet, only 8-hour expiry and revocation by command.
 Revisit if: a client needs a public certificate, or Pi displays return.
+
+## D-041: A client's tier is an owner-set file on the host
+Date: 2026-11-02   Model: Claude Opus 5.5
+Context: D-036 step 5 needs a tier per client that the client cannot edit, selecting exactly one recognition image. Only the standard tier has an image today; DeepStream is a later roadmap item.
+Options:
+
+1. a key in the site's `.env` or `master.env`
+2. a `tier` file in the site folder, checked by the watcher against the tiers the release lists
+3. compose profiles for each tier now, before a second image exists
+
+Chosen: 2. `sites/<client>/tier` holds one word, and no file means `standard`. `make_bundle.py` lists the release's tiers in `release-manifest.json`, and `deploy()` in `watch.py` refuses a tier the release does not list, which rolls that client back and notifies. Choosing the image is added with the first paid image, as there is only one to choose today.
+Why: `master.env` is mounted into containers, and `.env` holds credentials that only provisioning should write. No container mounts the site's `tier` file, so on a central host a client has no way to edit it. The missing-file default gives the cheapest tier, so a mistake never grants a paid feature.
+Trade-off: this only guards central hosts, and dedicated clients stay gated by which packages their pull token can read, which cannot take back an image already on their host. A refused tier also marks the release failed for that client, so after fixing the file the owner runs `watch.py --enroll <client>`.
+Revisit if: the DeepStream image ships. Then add it to `TIERS` and make the compose file select the image by tier.
