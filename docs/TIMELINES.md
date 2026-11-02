@@ -134,7 +134,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | 2026-11-02 morning | The display got no live updates over HTTPS: the page hardcoded `http://`, and a curl WebSocket test had missed it | About 1h (estimate) | Session record, no exact timing | Test live pages in a real browser, not with curl |
 | 2026-11-02 morning | The browser kept showing "Not secure": the proxy's CA was not installed, then Brave was still running in the background | About 30m (estimate) | Session record, no exact timing | Close every browser process after installing a CA |
 | 2026-11-02 06:30 to 07:10 | Jetson spike: detection needed a fixed-size model per batch, the image build used the wrong apt repo, and a time limit cut off the final export | About 25m (estimate) | Session timestamps | On this board, run image builds with no time limit; exporting took over 4 minutes |
-| 2026-11-02 07:17 | v0.4.0 display squeezes a single person's name into a vertical column, seen only in the first live recognition on the HTTPS page | Fix pending | Owner's screenshot | Check the display with one card and a long ID before releasing it |
+| 2026-11-02 07:17 | The display squeezed a single person's name into a vertical column, seen only in the first live recognition on the HTTPS page; `v0.3.0` had the same CSS, and `v0.4.1` fixed it (#86) | Under 1h (estimate) | Owner's screenshot, Kafka-WebApp's report | Check the display with one card and a long ID before releasing it |
 
 ## Estimating from this
 

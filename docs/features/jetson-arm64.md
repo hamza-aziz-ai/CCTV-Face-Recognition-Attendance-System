@@ -47,10 +47,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 
 The apt repo is `som`, not `t234`, on JetPack 7.2.1. An image only fits the JetPack release in its repo line, here r39.2.
 
+## NVIDIA's TensorRT image
+
+`nvcr.io/nvidia/l4t-tensorrt:r10.3.0` is the newest tag. It is older than the board's own stack, but it works on JetPack 7.2.1: Ubuntu 22.04, Python 3.10, TensorRT 10.3.0 and CUDA 12.6 inside the image, with the GPU reached through the nvidia runtime. Figures are `trtexec` at batch 1, on engines built in each image with the same fixed-size SCRFD model:
+
+| Image | Size on disk | Digest | Recognition | Detection |
+|---|---|---|---|---|
+| `r10.3.0-devel` | 12.4 GB | `sha256:602c0972ae06...` | 371 faces/s, 2.9 ms, built in 82 s | 186 frames/s, 5.8 ms, built in 104 s |
+| `r10.3.0-runtime`, engines from `devel` | 4.48 GB | `sha256:2c5dd352de34...` | 353 faces/s, 2.9 ms | 186 frames/s, 5.8 ms |
+| `r10.3.0-runtime`, engine built inside it | 4.48 GB | `sha256:2c5dd352de34...` | Not built | 184 frames/s, built in 102 s |
+
+These match the host's TensorRT 10.16 speeds. The `runtime` image has `trtexec` and the Python `Builder` and ONNX parser, but no `numpy`, so the InsightFace-REST image must install its Python requirements on top. Engines built on TensorRT 10.16 will not load here, so the 10.3 engines are built separately.
+
 ## What this means
 
-- The x86 image cannot run here: it is amd64, on TensorRT 11, and its base image has no `l4t` build for r39.2.1.
-- The GPU and CUDA libraries reach a plain `ubuntu:24.04` container with `--runtime nvidia --gpus all`, but TensorRT does not, so the image must install it. The Dockerfile below does this from NVIDIA's Jetson apt repo.
+- The x86 image cannot run here: it is amd64 and on TensorRT 11.
+- NVIDIA's `l4t-tensorrt:r10.3.0-runtime` is the planned base. It carries its own CUDA and TensorRT, runs on this board, and can build engines, which InsightFace-REST does at startup.
+- A plain `ubuntu:24.04` container also gets the GPU and CUDA libraries with `--runtime nvidia --gpus all`, but not TensorRT. The Dockerfile above is the fallback for that route.
 - SCRFD must be reshaped with the project's `reshape_onnx.py` before building; a fixed model per batch size worked.
 - The Orin Nano has no hardware encoder (NVENC), so nothing here should re-encode video.
 
