@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.9.0 (2026-11-02)
+
+## What's Changed
+* feat: fix live updates over HTTPS and theme the sign-in page by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/85
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.8.0...v2.9.0
+
 ## v2.8.0 (2026-11-01)
 
 ## What's Changed
