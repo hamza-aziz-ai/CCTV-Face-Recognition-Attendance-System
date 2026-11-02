@@ -23,8 +23,6 @@ Agreed order (owner, 2026-11-01). This replaces the list below.
 7. Signed setup codes, required before the first outside client (Face-Dataset-Collector D-014).
 8. Later: ERP test with a real address, PTZ merge, DeepStream tier, Jetson arm64 plan. The Orin Nano has no NVENC, so annotated live view draws boxes in the viewer.
 
-Dated: delete the old topics `maingate_entry` and `maingate_exit` after 2026-11-08.
-
 Owner, before any real people are enrolled: sign off the notice, legal basis, consent per re-enrolment and ML Kit disclosure. Also the InsightFace licence email and Dependabot triage. Off-host backups do not exist yet.
 
 ## Session summary: 2026-10-31 (model: Claude Opus 5.5, councils with Codex GPT-6.1 Sol)

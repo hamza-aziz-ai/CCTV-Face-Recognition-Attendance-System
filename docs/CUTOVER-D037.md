@@ -77,7 +77,7 @@ Releases from before #65 cannot run against these services, so roll back the set
 3. Start the Kafka and Milvus compose files saved in `rollback-compose`: plaintext Kafka with its add-ons, and Milvus without `user.yaml`.
 4. `python watch.py --enroll owner`.
 
-The admin PostgreSQL login is a superuser, so it reaches the owner's data whoever owns it. The old unprefixed topics are still there, and the legacy mode uses them.
+The admin PostgreSQL login is a superuser, so it reaches the owner's data whoever owns it. The legacy mode uses the old unprefixed topics, and creates them at start if they were deleted.
 
 If PostgreSQL data was damaged, restore the dump from step 2, into a stopped stack, with `psql -U "$POSTGRES_USER" -f` inside the container.
 
