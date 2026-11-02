@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.9.3 (2026-11-02)
+
+## What's Changed
+* chore(deploy): add an owner-set tier per client (D-041) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/89
+* chore(deploy): keep release folders that containers still mount by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/90
+* chore(deploy): add client snapshot, restore and remove (D-042) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/91
+* chore(edge): let an edge node use its own InsightFace-REST by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/92
+* fix(display): pin Kafka-WebApp v0.4.2, which keeps names on one line by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/94
+* fix(camera): keep camera passwords out of OpenCV's logs by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/93
+* ci: point submodules at their latest main automatically by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/95
+* chore(deps): Bump actions/checkout from 4 to 7 in the actions group by @dependabot[bot] in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/96
+* ci: push submodule pins with GITHUB_TOKEN, so SUBMODULES_TOKEN stays read-only by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/97
+
+## New Contributors
+* @dependabot[bot] made their first contribution in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/96
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.9.2...v2.9.3
+
 ## v2.9.2 (2026-11-02)
 
 ## What's Changed
