@@ -295,6 +295,9 @@ def proxy_route(client, host):
     api = f"{project}-mfr-api-service-1:8000"
     return f"""{host} {{
 	tls internal
+	handle /static/fonts/* {{
+		reverse_proxy {project}-kafka-webapp-1:9090
+	}}
 	handle /auth/* {{
 		reverse_proxy {api}
 	}}

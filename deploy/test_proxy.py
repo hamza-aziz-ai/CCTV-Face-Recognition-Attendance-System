@@ -83,6 +83,8 @@ def test():
             socket = fetch("/socket.io/", "session=good", "-H", "Connection: Upgrade", "-H", "Upgrade: websocket", "--http1.1")
             assert socket[0] == "200" and socket[2].startswith("display"), socket
             assert fetch("/auth/sign-in")[::2] == ("200", "api /auth/sign-in")
+            assert fetch("/static/fonts/x.ttf")[::2] == ("200", "display /static/fonts/x.ttf"), "the sign-in page needs its fonts before sign-in"
+            assert fetch("/static/other.js")[0] == "302"
             assert fetch("/api/fetch_module_data")[::2] == ("200", "api /fetch_module_data")
             for closed in ("/api/docs", "/api/redoc", "/api/openapi.json"):
                 assert fetch(closed)[0] == "404", closed

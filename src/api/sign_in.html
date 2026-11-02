@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in · Attendance Display</title>
+    <style>
+        /* The display's own theme and fonts, so signing in feels like the same product */
+        @font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm_plex_sans_regular.ttf"); }
+        @font-face { font-family: "IBM Plex Sans"; font-weight: 500; font-display: swap; src: url("/static/fonts/ibm_plex_sans_medium.ttf"); }
+        @font-face { font-family: "IBM Plex Sans"; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm_plex_sans_semibold.ttf"); }
+
+        :root {
+            --ink: #14202b;
+            --ink-muted: #46535f;
+            --ground: #f3f5f7;
+            --surface: #ffffff;
+            --line: #d5dbe1;
+            --accent: #0b5f63;
+            --accent-dark: #084649;
+            --error: #a32019;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+            background: var(--ground);
+            color: var(--ink);
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        }
+
+        .scene {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2.25rem;
+            padding: 3rem;
+            overflow: hidden;
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .brand {
+            position: absolute;
+            top: 2.5rem;
+            left: 3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.15rem;
+            font-weight: 600;
+        }
+
+        .brand svg { width: 2rem; height: 2rem; }
+
+        .guide {
+            position: relative;
+            display: grid;
+            place-items: center;
+            width: min(17rem, 42vw);
+            aspect-ratio: 4 / 5;
+            border: 5px solid #fff;
+            border-radius: 50%;
+        }
+
+        .guide::before {
+            content: "";
+            position: absolute;
+            inset: -1.5rem;
+            border: 2px solid rgb(255 255 255 / 0.35);
+            border-radius: 50%;
+            animation: scan 3.2s ease-in-out infinite;
+        }
+
+        .guide svg { width: 52%; opacity: 0.8; }
+
+        @keyframes scan {
+            0%, 100% { transform: scale(1); opacity: 0.35; }
+            50% { transform: scale(1.06); opacity: 1; }
+        }
+
+        .scene p {
+            max-width: 22rem;
+            margin: 0;
+            font-size: 1.6rem;
+            font-weight: 600;
+            line-height: 1.25;
+            text-align: center;
+        }
+
+        main {
+            display: grid;
+            place-items: center;
+            padding: 2.5rem;
+        }
+
+        form {
+            width: min(23rem, 100%);
+            padding: 2.5rem;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            box-shadow: 0 12px 32px rgb(20 32 43 / 0.08);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 600;
+        }
+
+        .hint {
+            margin: 0.4rem 0 1.75rem;
+            color: var(--ink-muted);
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            margin-bottom: 1.25rem;
+            padding: 0.75rem 0.85rem;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--ground);
+            color: var(--ink);
+            font: inherit;
+        }
+
+        input:focus-visible, button:focus-visible {
+            outline: 3px solid rgb(11 95 99 / 0.35);
+            outline-offset: 1px;
+            border-color: var(--accent);
+        }
+
+        button {
+            width: 100%;
+            padding: 0.8rem;
+            border: 0;
+            border-radius: 8px;
+            background: var(--accent);
+            color: #fff;
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        button:hover { background: var(--accent-dark); }
+        button:disabled { opacity: 0.7; cursor: progress; }
+
+        #error {
+            min-height: 1.4rem;
+            margin: 0.9rem 0 0;
+            color: var(--error);
+            font-weight: 500;
+        }
+
+        @media (max-width: 760px) {
+            body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+            .scene { flex-direction: row; gap: 1rem; padding: 1.5rem; justify-content: flex-start; }
+            .brand { position: static; }
+            .guide, .scene p { display: none; }
+            main { padding: 1.25rem; align-items: start; }
+            form { padding: 1.75rem; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .guide::before { animation: none; }
+            button { transition: none; }
+        }
+    </style>
+</head>
+<body>
+    <section class="scene" aria-hidden="true">
+        <div class="brand">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 8a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <path d="M16 10.5 21 8v8l-5-2.5"></path>
+            </svg>
+            Attendance Display
+        </div>
+        <div class="guide">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="8" r="4"></circle>
+                <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"></path>
+            </svg>
+        </div>
+        <p>Face recognition attendance</p>
+    </section>
+    <main>
+        <form id="sign-in">
+            <h1>Welcome back</h1>
+            <p class="hint">Sign in to see the live display.</p>
+            <label for="username">Username</label>
+            <input id="username" autocomplete="username" required autofocus>
+            <label for="password">Password</label>
+            <input id="password" type="password" autocomplete="current-password" required>
+            <button id="submit">Sign in</button>
+            <p id="error" role="alert"></p>
+        </form>
+    </main>
+    <script>
+        const form = document.getElementById("sign-in");
+        const submit = document.getElementById("submit");
+        const error = document.getElementById("error");
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            submit.disabled = true;
+            submit.textContent = "Signing in…";
+            error.textContent = "";
+            try {
+                const response = await fetch("/auth/login", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({username: document.getElementById("username").value, password: document.getElementById("password").value}),
+                });
+                if (response.ok) {
+                    location.href = "/";
+                    return;
+                }
+                error.textContent = response.status === 429 ? "Too many failed logins. Try again later." : "Wrong username or password.";
+            } catch {
+                error.textContent = "Could not reach the server. Try again.";
+            }
+            submit.disabled = false;
+            submit.textContent = "Sign in";
+        });
+    </script>
+</body>
+</html>
