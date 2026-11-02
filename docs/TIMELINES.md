@@ -108,6 +108,9 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #86 | 2026-11-02 07:32 | same-day gap       | 3m                   | +4/-4 4f       | fix: pin the display with the single-person card fix |
 | #87 | 2026-11-02 09:33 | same-day gap       | 25m                  | +78/-7 3f      | chore: run InsightFace-REST on the Jetson with TensorRT 10 |
 | #88 | 2026-11-02 09:59 | 1m                 | 3m                   | +2/-2 1f       | fix: start automerge when the InsightFace image build ends |
+| #89 | 2026-11-02 10:59 | 1h 00m             | 3m                   | +53/-3 4f      | chore(deploy): add an owner-set tier per client (D-041) |
+| #90 | 2026-11-02 11:16 | 17m                | 5m                   | +18/-3 2f      | chore(deploy): keep release folders that containers still mount |
+| #91 | 2026-11-02 11:54 | 38m                | 8m                   | +375/-4 6f     | chore(deploy): add client snapshot, restore and remove (D-042) |
 
 ## Incidents that cost time
 
@@ -139,6 +142,8 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | 2026-11-02 06:30 to 07:10 | Jetson spike: detection needed a fixed-size model per batch, the image build used the wrong apt repo, and a time limit cut off the final export | About 25m (estimate) | Session timestamps | On this board, run image builds with no time limit; exporting took over 4 minutes |
 | 2026-11-02 07:17 | The display squeezed a single person's name into a vertical column, seen only in the first live recognition on the HTTPS page; `v0.3.0` had the same CSS, and `v0.4.1` fixed it (#86) | Under 1h (estimate) | Owner's screenshot, Kafka-WebApp's report | Check the display with one card and a long ID before releasing it |
 | 2026-11-02 09:44 to 09:58 | #87 sat open after green checks: `ci` ended before `insightface-image`, automerge skipped it, and nothing started automerge again while Claude Code Review is paused | 14m | Run timestamps | Every check that gates a merge must also start automerge |
+| 2026-11-02 11:10 | Found while testing `remove`: the watcher had deleted the release folders holding the proxy's and Milvus's mounted config, so the next restart could have stopped either from starting. Files restored and #90 merged with no downtime | About 20m (estimate) | Session timestamps | Cleanup must check what is still in use, not only what the current release needs |
+| 2026-11-02 11:30 to 12:00 | The rehearsal showed that deleting one Kafka SCRAM login loses every login at the next broker restart. A low-memory stop cost one rerun, and a wrong race theory cost another | About 30m (estimate) | Session timestamps | Restart services after destructive steps in a rehearsal; a retry that still fails is not a race |
 
 ## Estimating from this
 
