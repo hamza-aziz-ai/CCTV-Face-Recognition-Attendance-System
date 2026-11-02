@@ -229,7 +229,7 @@ def mounted():
     at the next restart if it goes."""
     ids = run("docker", "ps", "-aq").split()
     sources = run("docker", "inspect", "--format", "{{range .Mounts}}{{.Source}} {{end}}", *ids) if ids else ""
-    return set(re.findall(r"releases[/\]([^/\\s]+)[/\]", sources))
+    return set(re.findall(r"releases[/\\]([^/\\\s]+)[/\\]", sources))
 
 
 def prune(keep):
