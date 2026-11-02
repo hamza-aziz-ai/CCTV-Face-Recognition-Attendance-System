@@ -15,7 +15,7 @@ Late update: v2.8.0 is deployed and D-036 step 4 is done (D-039, D-040). Account
 Agreed order (owner, 2026-11-01). This replaces the list below.
 
 1. Accuracy check on a real camera in good light: scores were 0.55 against a 0.5 threshold. Needs the owner.
-2. D-036 step 5: tiers (D-041) and snapshot, restore and remove (D-042) are done, and the live rehearsal with a temporary client proved `restore` rebuilds Milvus with the real `face_vectors.py publish` (D-042). `recovery.py` is installed on the host by hand. The ID `rehearsal` is spent on this broker.
+2. D-036 step 5: tiers (D-041) and snapshot, restore and remove (D-042) are done, and the live rehearsal with a temporary client proved `restore` rebuilds Milvus with the real `face_vectors.py publish` (D-042). `recovery.py` is installed on the host by hand. The ID `rehearsal` is spent on this broker. On 2026-11-02 `cctv-proxy` and `milvus-standalone` were recreated from the v2.9.2 bundle, so no container mounts the old v2.6.2 or v2.8.0 folders; the proxy answered HTTPS after the recreate and after a restart, and Milvus kept the owner's versions. `milvus-etcd` and `milvus-minio` were left running, as their settings did not change; their labels still name a deleted worktree, `C:\wt23`, and they mount only named volumes.
 3. Live view (8b).
 4. Enrolment API (8c), then the Android app (8d).
 5. Deletion, isolation and recovery tests (8e).
