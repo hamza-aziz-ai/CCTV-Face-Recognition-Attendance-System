@@ -136,8 +136,8 @@ LIGHTING_ALERT_SECONDS = 30
 ########################################################################################################################
 # Parameters specific to InsightFace-REST face detection
 ########################################################################################################################
-# InsightFace-REST host
-INSIGHTFACE_HOST = f"http://{IP_ADDRESS}"
+# InsightFace-REST host; an edge node such as the Jetson sets INSIGHTFACE_HOST in master.env to use its own, while the shared services stay on IP_ADDRESS
+INSIGHTFACE_HOST = os.getenv("INSIGHTFACE_HOST") or f"http://{IP_ADDRESS}"
 
 # InsightFace-REST port
 INSIGHTFACE_PORT = "6385"  # the nginx load balancer in front of the InsightFace-REST containers
