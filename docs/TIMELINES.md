@@ -111,6 +111,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #89 | 2026-11-02 10:59 | 1h 00m             | 3m                   | +53/-3 4f      | chore(deploy): add an owner-set tier per client (D-041) |
 | #90 | 2026-11-02 11:16 | 17m                | 5m                   | +18/-3 2f      | chore(deploy): keep release folders that containers still mount |
 | #91 | 2026-11-02 11:54 | 38m                | 8m                   | +375/-4 6f     | chore(deploy): add client snapshot, restore and remove (D-042) |
+| #92 | 2026-11-02 16:30 | same-day gap       | 50m (estimate)       | +32/-3 2f      | chore(edge): let an edge node use its own InsightFace-REST |
 
 ## Incidents that cost time
 

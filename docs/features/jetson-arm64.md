@@ -120,6 +120,20 @@ One camera, the owner's phone over RTSP, with the owner in front of it and one p
 
 Scores under 0.5 count only when the staging collection also matches, which accepts down to 0.45 by design. The test read and cleared its rows every 2 s, as the duplicate window otherwise keeps one record per person. The phone's stream dropped and reconnected 5 times. The room's dark start halted recognition until a light was on, as on the laptop. This is one person and one camera, not an accuracy figure.
 
+The owner's display showed the name within a second, so the Jetson's feedback controller reached the laptop's Kafka and the display read it.
+
+### More cameras
+
+The same phone stream entered as 1, 2 and 4 cameras, 60 s each, with InsightFace-REST on two workers and the owner in front of it:
+
+| Cameras | Records per minute | Score min, mean | GPU, average | Producer-consumer CPU | InsightFace-REST CPU |
+|---|---|---|---|---|---|
+| 1 | 28 | 0.471, 0.609 | 15% | 219% | 24% |
+| 2 | 60, 30 per camera | 0.478, 0.646 | 34% | 291% | 26% |
+| 4 | 108, 27 per camera | 0.469, 0.687 | 56% | 437% | 68% |
+
+Records grew with the cameras, nothing was purged from the frame buffer, and no stream dropped. The board's 6 CPU cores carry the producer-consumer at about 4.4 of them with 4 cameras, so CPU, not the GPU, is the likely limit beyond that; frames here are 640x360 after resizing. Every display message in these runs went to camera 1's partition, because the feedback controller reads its camera map once at start and only the producer-consumer was restarted between runs. A rerun with all three restarted caught too few recognitions to check. The feedback controller must be restarted after cameras change.
+
 ## What this means
 
 - The x86 image cannot run here: it is amd64 and on TensorRT 11.
@@ -130,4 +144,4 @@ Scores under 0.5 count only when the staging collection also matches, which acce
 
 ## Not yet tested
 
-Accuracy on a labelled set, an unenrolled person, more than one camera, the dynamic face dataset collector, Milvus or Kafka on this board, whether the display shows the Jetson's messages, three or more workers, and an image build in CI. The load test repeats one image; real frames vary.
+Accuracy on a labelled set, an unenrolled person, real separate cameras, more than 4 cameras, the display with more than one camera, the dynamic face dataset collector and where an edge node's face crops should go, Milvus or Kafka on this board, three or more workers, and an image build in CI. The load test repeats one image; real frames vary.
