@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.9.1 (2026-11-02)
+
+## What's Changed
+* fix: pin the display with the single-person card fix by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/86
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.9.0...v2.9.1
+
 ## v2.9.0 (2026-11-02)
 
 ## What's Changed
