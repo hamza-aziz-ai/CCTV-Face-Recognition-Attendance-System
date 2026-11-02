@@ -224,6 +224,14 @@ def deploy(tag, ref, site):
     start(tag, site)
 
 
+def mounted():
+    """Releases a container still mounts: the shared services run from the bundle that started them, and lose their config
+    at the next restart if it goes."""
+    ids = run("docker", "ps", "-aq").split()
+    sources = run("docker", "inspect", "--format", "{{range .Mounts}}{{.Source}} {{end}}", *ids) if ids else ""
+    return set(re.findall(r"releases[/\]([^/\\s]+)[/\]", sources))
+
+
 def prune(keep):
     """Delete bundles and our images that the kept releases do not use. Dev builds (no digest) and the standalone
     InsightFace image stay, and a failure never fails a deploy."""
@@ -232,8 +240,9 @@ def prune(keep):
         for tag in keep:
             if tag and (RELEASES / tag).exists():
                 used |= set(check_bundle(RELEASES / tag, tag)["images"].values())
+        in_use = mounted()
         for folder in RELEASES.iterdir() if RELEASES.exists() else []:
-            if folder.name not in keep:
+            if folder.name not in keep | in_use:
                 shutil.rmtree(folder, ignore_errors=True)
         stale = set()
         for line in run("docker", "images", "--digests", "--format", "{{.Repository}}@{{.Digest}} {{.ID}}").splitlines():
