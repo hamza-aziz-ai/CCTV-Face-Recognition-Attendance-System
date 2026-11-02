@@ -654,3 +654,20 @@ Chosen: 2. `sites/<client>/tier` holds one word, and no file means `standard`. `
 Why: `master.env` is mounted into containers, and `.env` holds credentials that only provisioning should write. No container mounts the site's `tier` file, so on a central host a client has no way to edit it. The missing-file default gives the cheapest tier, so a mistake never grants a paid feature.
 Trade-off: this only guards central hosts, and dedicated clients stay gated by which packages their pull token can read, which cannot take back an image already on their host. A refused tier also marks the release failed for that client, so after fixing the file the owner runs `watch.py --enroll <client>`.
 Revisit if: the DeepStream image ships. Then add it to `TIERS` and make the compose file select the image by tier.
+
+## D-042: Per-client snapshot, restore and removal, and removed Kafka logins are disabled, never deleted
+Date: 2026-11-02   Model: Claude Opus 5.5
+Context: D-036 step 5 needs one client snapshotted, restored and removed without touching another. Milvus cannot export our vectors, because rows share a person's ID as primary key and `query` returns one row per key (D-030). On a throwaway `cp-kafka:8.4.0` broker, `kafka-configs --delete-config SCRAM-SHA-512` for one user left the other logins working until the next restart, when the broker listed no SCRAM users and refused every client. Removing topics and ACLs alone did not do this, and neither did replacing the password. It was repeated on a broker running nothing else.
+Options:
+
+1. delete the client's Kafka users, as the other services do
+2. disable them: a random password nobody holds, and no ACLs
+3. leave the Kafka users as they are
+
+Chosen: 2, in `deploy/recovery.py`.
+- `snapshot` writes `sites/<client>/snapshots/<time>`: a `pg_dump` of both databases, the bucket, the site's data folders and a `snapshot.json` of hashes. It holds no passwords.
+- `restore` checks the hashes and refuses another client's snapshot or a stack with containers. It replaces the site's data, drops and recreates the two databases, reruns provisioning, restores the dumps and mirrors the bucket, then rebuilds Milvus with the release's `face_vectors.py publish` from the restored `vectors.parquet` files.
+- `remove` needs `--confirm <client>`, refuses the owner and a stack with containers, and clears Kafka, Milvus, the store, PostgreSQL and the proxy route. The site folder goes last, because its `.env` lets an interrupted run be repeated.
+Why: a client's removal must never reach another client, and one deleted login reaches all of them. Rebuilding Milvus from the files is the existing path (D-030), so there is no second way to fill it.
+Trade-off: each removed client leaves two disabled login names on the broker, and its ID cannot be used again there: provisioning stops on it, as it does for any login whose password is not saved. Snapshots sit on the same host, so they are not off-host backups, and `remove` deletes them with the site. `restore` also needs the site's `.env`, which no snapshot holds.
+Revisit if: a Kafka upgrade fixes the login deletion. Prove it with a restart on a throwaway broker first. Never run `--delete-config` on a live broker.

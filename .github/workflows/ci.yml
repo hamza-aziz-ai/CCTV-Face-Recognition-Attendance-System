@@ -216,7 +216,7 @@ jobs:
         env:
           BASE: ${{ github.base_ref }}
         run: |
-          if [ -n "$BASE" ] && git diff --name-only "origin/$BASE...HEAD" | grep -qE '^(deploy/(provision|test_isolation)\.py|STANDALONE-SERVICES/|src/(parameters|milvus_server)\.py|src/util/face_vectors\.py)'; then
+          if [ -n "$BASE" ] && git diff --name-only "origin/$BASE...HEAD" | grep -qE '^(deploy/(provision|recovery|test_isolation)\.py|STANDALONE-SERVICES/|src/(parameters|milvus_server)\.py|src/util/face_vectors\.py)'; then
             echo run=true >> "$GITHUB_OUTPUT"
           fi
       - if: steps.changed.outputs.run == 'true'

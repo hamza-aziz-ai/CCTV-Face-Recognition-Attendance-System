@@ -5,7 +5,8 @@ MinIO under a random isotest-* compose project, with the same authentication set
   - each is refused, with an explicit authorisation error, on the other's, and on admin actions;
   - Kafka's plaintext listeners are unreachable from other containers and anonymous clients are refused;
   - reruns change nothing, an interrupted run finishes on rerun, a lost password stops provisioning;
-  - Milvus root's default password is replaced; everything still holds after the services restart.
+  - Milvus root's default password is replaced; everything still holds after the services restart;
+  - one client is snapshotted, damaged, restored and removed with deploy/recovery.py, and another never changes.
 Needs Docker; pulls about 3.5 GB of images the first time. Never touches the live services or their data.
 Run from the repo root: python3 -I deploy/test_isolation.py"""
 import hashlib
@@ -22,6 +23,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import provision  # noqa: E402
+import recovery  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 AUTH = REPO / "STANDALONE-SERVICES" / "auth"
@@ -317,6 +319,102 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def fingerprint(f, env, client):
+    """Everything of a client that a neighbour's recovery must leave alone."""
+    rows = psql(f, env, f"{client}_cctv_camera_surveillance", "SELECT who FROM r ORDER BY who;\n").stdout
+    objects = mc(f, env, f"mc cat c/{client}-enrolment/probe.txt")[1]
+    db = f"{client}_default"
+    collections = sorted(milvus(f, env, "collections/list", {"dbName": db}))
+    message = consume(f, env, f"{client}.maingate_entry", f"{client}.maingate_entry.check{secrets.token_hex(2)}")
+    return rows, objects, collections, "hello" in message, digest(f.sites / client / ".env")
+
+
+def check_recovery(f):
+    """The D-036 step 5 rehearsal on two clients. The Milvus rebuild is the release's own publisher, so the live host's
+    rehearsal covers it; here it is recorded, and the snapshot, restore and removal run for real."""
+    cameras(f, "delta", 1, 2)
+    assert f.provision("delta") == 0
+    delta, beta = f.env("delta"), f.env("beta")
+    check_own(f, delta, "delta")
+    site = f.sites / "delta"
+    person = site / recovery.VECTORS / "person1"
+    person.mkdir(parents=True)
+    (person / "vectors.parquet").write_bytes(b"synthetic vectors")
+    (site / "DISPLAY-FACE-DATASET").mkdir()
+    (site / "DISPLAY-FACE-DATASET/person1.jpg").write_bytes(b"synthetic photo")
+    table = "delta_cctv_camera_surveillance"
+    watched = fingerprint(f, beta, "beta")
+    want = psql(f, delta, table, "SELECT who FROM r ORDER BY who;\n").stdout
+    options = ["--sites", str(f.sites), "--admin-env", str(f.admin_env), "--postgres", f.pg, "--kafka", f.kafka,
+               "--store", f.store, "--milvus", f.milvus, "--proxy", f"{PROJECT}-no-proxy"]  # never the live proxy
+    recover = lambda *args: recovery.main([*args, *options])  # noqa: E731
+
+    assert recover("snapshot", "delta") == 0
+    folder = sorted((site / "snapshots").iterdir())[-1]
+    assert not any(b"PASSWORD" in path.read_bytes() for path in folder.iterdir()), "a password in the snapshot"
+    assert ".env" not in str(recovery.tarfile.open(folder / "site.tar.gz").getnames())
+
+    # Damage to one client: rows, an object and the site's files
+    assert psql(f, delta, table, "DROP TABLE r;\n").returncode == 0
+    assert mc(f, delta, "mc rm c/delta-enrolment/probe.txt")[0] == 0
+    assert mc(f, delta, "echo extra | mc pipe c/delta-enrolment/extra.txt >/dev/null")[0] == 0
+    recovery.shutil.rmtree(site / recovery.VECTORS)
+
+    # Refusals come before anything is touched: another client's snapshot, a changed file, a running stack
+    assert recover("restore", "beta", str(folder)) == 1
+    bad = f.tmp / "bad"
+    recovery.shutil.copytree(folder, bad)
+    with open(bad / "bucket.tar", "ab") as tampered:
+        tampered.write(b"x")
+    assert recover("restore", "delta", str(bad)) == 1
+    with mock.patch.object(recovery, "containers", lambda client: ["abc"]):
+        assert recover("restore", "delta", str(folder)) == 1
+        assert recover("remove", "delta", "--confirm", "delta") == 1
+    assert psql(f, delta, table, "SELECT 1 FROM r;\n").returncode != 0, "a refused restore changed the database"
+
+    published = []
+    with mock.patch.object(recovery, "publish", lambda client, sites: published.append(client)):
+        assert recover("restore", "delta", str(folder)) == 0
+    assert published == ["delta"]
+    assert psql(f, delta, table, "SELECT who FROM r ORDER BY who;\n").stdout == want, "rows not restored"
+    code, out = mc(f, delta, "mc cat c/delta-enrolment/probe.txt && mc ls c/delta-enrolment")
+    assert code == 0 and "delta" in out and "extra.txt" not in out, out[-300:]
+    assert (person / "vectors.parquet").read_bytes() == b"synthetic vectors"
+    assert (site / "DISPLAY-FACE-DATASET/person1.jpg").read_bytes() == b"synthetic photo"
+    owner = psql(f, delta, table, "SELECT tableowner FROM pg_tables WHERE tablename = 'r';\n").stdout
+    assert "delta_app" in owner, owner
+    check_own(f, delta, "delta")
+    check_refused(f, delta, "delta", "beta")
+    check_refused(f, beta, "beta", "delta")
+    assert fingerprint(f, beta, "beta")[:3] == watched[:3] and fingerprint(f, beta, "beta")[4] == watched[4], "beta changed"
+
+    # Removal: the owner is refused outright, and a wrong confirmation removes nothing
+    assert recover("remove", "owner", "--confirm", "owner") == 1
+    assert recover("remove", "delta", "--confirm", "beta") == 1 and recover("remove", "delta") == 1
+    assert site.is_dir()
+    assert recover("remove", "delta", "--confirm", "delta") == 0
+    assert not site.exists() and not (f.sites.parent / "proxy/delta.caddy").exists()
+    assert psql(f, delta, table, "SELECT 1;\n").returncode != 0, "database or role survived"
+    root = {"MILVUS_APP_USER": "root", "MILVUS_APP_PASSWORD": provision.read_env(f.admin_env)["MILVUS_ROOT_PASSWORD"]}
+    assert "delta_default" not in milvus(f, root, "databases/list", {})
+    assert "delta_app" not in milvus(f, root, "users/list", {}) and "delta_role" not in milvus(f, root, "roles/list", {})
+    assert isinstance(milvus(f, delta, "collections/list", {"dbName": "delta_default"}), Exception)
+    topics = sh("docker", "exec", f.kafka, "kafka-topics", "--bootstrap-server", "localhost:29092", "--list").stdout
+    assert "delta." not in topics, topics
+    # The names stay on purpose: deleting a SCRAM login loses every login at the next restart (D-042). The old password is dead
+    assert "Authentication failed" in produce(f, delta, "KAFKA_APP_USER", "beta.maingate_entry")
+    acls = sh("docker", "exec", f.kafka, "kafka-acls", "--bootstrap-server", "localhost:29092", "--list").stdout
+    assert "delta" not in acls, acls
+    assert not provision.store_user_exists(f.store, "delta-app")
+    assert mc(f, delta, "mc ls c/delta-enrolment")[0] != 0, "bucket or key survived"
+    check_own(f, beta, "beta")
+
+    # The spent ID is refused, not reset: its Kafka name still exists and nobody holds the password
+    cameras(f, "delta", 1, 2)
+    assert f.provision("delta") == 1
+    assert not (site / ".env").exists()
+
+
 def test():
     tmp = Path(tempfile.mkdtemp(prefix="isotest-"))
     f = Fixture(tmp)
@@ -353,6 +451,7 @@ def test():
         check_refused(f, acme, "acme", "beta")
         check_refused(f, beta, "beta", "acme")
         check_kafka_boundary(f)
+        check_recovery(f)
 
         # The owner's cutover rehearsal, on data made the old way by the admin login
         seed_owner(f, root)
