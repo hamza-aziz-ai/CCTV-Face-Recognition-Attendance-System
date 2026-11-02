@@ -7,6 +7,8 @@ LABEL org.opencontainers.image.source=https://github.com/hamza-aziz-ai/CCTV-Face
 RUN python3 -m pip install --upgrade pip --no-cache-dir
 
 ENV TZ=Asia/Kolkata
+# OpenCV's warnings can quote a camera URL with its password (a % in it reads as an image-sequence pattern); our own logs report camera failures
+ENV OPENCV_LOG_LEVEL=ERROR
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Install ffmpeg, libsm6, libxext6
