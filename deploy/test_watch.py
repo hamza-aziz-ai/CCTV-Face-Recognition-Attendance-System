@@ -251,7 +251,7 @@ def test_stage():
 def test_prune():
     """Bundles and images of other releases go; the kept releases' images, dev builds and InsightFace stay."""
     tmp = Path(tempfile.mkdtemp())
-    for tag in ("v9.9.9", "v9.9.8", "v9.9.7"):
+    for tag in ("v9.9.9", "v9.9.8", "v9.9.7", "v9.9.6", "v9.9.5"):
         sample_bundle(tmp / "releases" / tag, tag)
     used = json.loads((tmp / "releases/v9.9.9/release-manifest.json").read_text())["images"]
     api = next(ref for ref in used.values() if "-api@" in ref)
@@ -262,6 +262,11 @@ def test_prune():
     removed = []
 
     def fake_run(*cmd):
+        if cmd[:2] == ("docker", "ps"):
+            return "abc123\ndef456"
+        if cmd[:2] == ("docker", "inspect") and "Mounts" in cmd[3]:  # Docker Desktop reports both path styles
+            return (r"/run/desktop/mnt/host/c/deploy/host/releases/v9.9.7/STANDALONE-SERVICES/Proxy/Caddyfile /data "
+                    r"C:\deploy\host\releases\v9.9.6\STANDALONE-SERVICES\auth\milvus-user.yaml C:\deploy\host\proxy ")
         if cmd[:2] == ("docker", "inspect"):
             return f"{p}deploy@sha256:{'d' * 64}"
         if cmd[:2] == ("docker", "images"):
@@ -271,7 +276,8 @@ def test_prune():
 
     with mock.patch.multiple(watch, RELEASES=tmp / "releases", run=fake_run, log=lambda msg: None):
         watch.prune({"v9.9.9", "v9.9.8"})
-    assert sorted(p.name for p in (tmp / "releases").iterdir()) == ["v9.9.8", "v9.9.9"]
+    # v9.9.5 goes; v9.9.6 and v9.9.7 stay because a running service mounts their files
+    assert sorted(p.name for p in (tmp / "releases").iterdir()) == ["v9.9.6", "v9.9.7", "v9.9.8", "v9.9.9"]
     assert sorted(removed) == ["id-old", "id-old-bundle"], removed
 
 
