@@ -19,11 +19,7 @@ updates:
       base-images:
         patterns: ["*"]
 
-  # Kafka-WebApp is versioned in its own repository; each update is a PR that bumps the pinned commit here.
-  - package-ecosystem: gitsubmodule
-    directory: /
-    schedule:
-      interval: weekly
+  # Submodule pins follow each submodule's main through .github/workflows/submodules.yml, not Dependabot
 
   # The Kafka-WebApp image pin in docker-compose-main.yml
   - package-ecosystem: docker-compose
