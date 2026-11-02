@@ -105,6 +105,8 @@ With `NUM_WORKERS=2` the same load test, on warm workers:
 
 That is about 55% more than one worker: 216 faces/s with four faces per request. The container uses 2.37 GB, and the board 3.3 GB in all. Each worker's first request after a start took about 26 s, so a client with a 30 s timeout can fail once; send a warm-up request before taking traffic.
 
+Three workers reached 90.4 requests/s with one face and 246.8 faces/s with four, only 14 to 17% more than two, for 3.7 GB, 1.35 GB more. Two workers is the setting for this board, leaving memory for the producer-consumer and the controllers.
+
 ## Live camera through the Jetson
 
 On 2026-11-02 the producer-consumer, database controller and feedback controller ran on the Jetson as arm64 images, built there from the unchanged `main.Dockerfile`, `database-server.Dockerfile` and `feedback-server.Dockerfile` (2.06, 1.58 and 1.53 GB). Recognition used the Jetson's InsightFace-REST, published on 6385, while Milvus, Kafka and PostgreSQL stayed on the laptop, reached over the LAN. `master.env` on the Jetson kept `IP_ADDRESS` as the laptop and set `INSIGHTFACE_HOST=http://<jetson>`. The dynamic face dataset collector was left out, so no face crops were kept on the Jetson.
@@ -144,4 +146,4 @@ Records grew with the cameras, nothing was purged from the frame buffer, and no 
 
 ## Not yet tested
 
-Accuracy on a labelled set, an unenrolled person, real separate cameras, more than 4 cameras, the display with more than one camera, the dynamic face dataset collector and where an edge node's face crops should go, Milvus or Kafka on this board, three or more workers, and an image build in CI. The load test repeats one image; real frames vary.
+Accuracy on a labelled set, an unenrolled person, real separate cameras, more than 4 cameras, the display with more than one camera, the dynamic face dataset collector and where an edge node's face crops should go, Milvus or Kafka on this board, and an image build in CI. The load test repeats one image; real frames vary.
