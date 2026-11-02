@@ -145,7 +145,7 @@ Containers and ports:
 | Main        | `automate-milvus-update`                                       | `...-automate-milvus-update:${IMAGE_TAG}`                                      | none                                 | none |
 | Main        | `display-image-server`                                         | `...-front-face-image-display:${IMAGE_TAG}`                                    | `${DISPLAY_IMAGE_PORT:-20013}:20013` | none |
 | Main        | `roi-provisioning` (profile `roi`)                             | `...-roi:${IMAGE_TAG}`                                                         | `127.0.0.1:${ROI_PORT:-8069}:8069`   | none |
-| Main        | `kafka-webapp`                                                 | `ghcr.io/hamza-aziz-ai/kafka-webapp:v0.4.0`, pinned by digest                  | `${DISPLAY_PORT:-9095}:9090`         | none |
+| Main        | `kafka-webapp`                                                 | `ghcr.io/hamza-aziz-ai/kafka-webapp:v0.4.1`, pinned by digest                  | `${DISPLAY_PORT:-9095}:9090`         | none |
 | PostgreSQL  | `postgresql` (container `cctv-postgresql`)                     | `postgres:18.6-trixie`                                                         | `${POSTGRES_HOST_PORT:-5432}:5432`   | none |
 | InsightFace | `insightface-rest-trt-0`                                       | `ghcr.io/hamza-aziz-ai/cctv-face-recognition-insightface-rest:v0.9.5.0-<tree>` | 19000:18080                          | 0    |
 | InsightFace | `docker-nginx-insightface`                                     | `nginx`                                                                        | 6385:18080                           | none |
