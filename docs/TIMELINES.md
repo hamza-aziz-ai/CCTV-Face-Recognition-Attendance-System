@@ -104,6 +104,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #82 | 2026-11-01 16:30 | 1h 42m             | 3m                   | +49/-1 3f      | chore(deploy): restart containers whose published ports die after a reboot                               |
 | #83 | 2026-11-01 16:40 | 10m                | 7m                   | +420/-42 14f   | feat: add per-client accounts, sessions and machine tokens to the API (D-039)                            |
 | #84 | 2026-11-01 17:52 | 1h 12m             | 6m                   | +275/-6 17f    | feat: serve each client over HTTPS behind a shared proxy (D-040)                                         |
+| #85 | 2026-11-02 04:10 | overnight gap      | 7m                   | +252/-16 7f    | feat: fix live updates over HTTPS and theme the sign-in page |
 
 ## Incidents that cost time
 
@@ -130,6 +131,10 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | 2026-11-01 05:50                           | Removing a digest name deleted the whole image on a throwaway; a peer session's test had only covered a running image                                                  | about 10 min                                          | estimate                                   | Test destructive commands on a throwaway first, with and without a container                           |
 | 2026-11-01 12:42                           | Real camera test saved 2 rows in one second: parallel batches both passed the duplicate check                                                                          | about 30 min, with the release                        | estimate                                   | Test with parallel batches; clips hid it                                                               |
 | 2026-11-01 15:47 to 16:28                  | Windows rebooted itself; after sign-in the API, display and portrait server were healthy but their published ports gave empty replies, unnoticed until a routine check | about 40 min, and 25 min down before sign-in          | measured (logs)                            | A healthy container does not prove its published port works; the watcher now checks and restarts (#82) |
+| 2026-11-02 morning | The display got no live updates over HTTPS: the page hardcoded `http://`, and a curl WebSocket test had missed it | About 1h (estimate) | Session record, no exact timing | Test live pages in a real browser, not with curl |
+| 2026-11-02 morning | The browser kept showing "Not secure": the proxy's CA was not installed, then Brave was still running in the background | About 30m (estimate) | Session record, no exact timing | Close every browser process after installing a CA |
+| 2026-11-02 06:30 to 07:10 | Jetson spike: detection needed a fixed-size model per batch, the image build used the wrong apt repo, and a time limit cut off the final export | About 25m (estimate) | Session timestamps | On this board, run image builds with no time limit; exporting took over 4 minutes |
+| 2026-11-02 07:17 | v0.4.0 display squeezes a single person's name into a vertical column, seen only in the first live recognition on the HTTPS page | Fix pending | Owner's screenshot | Check the display with one card and a long ID before releasing it |
 
 ## Estimating from this
 

@@ -20,13 +20,40 @@ Peak RAM is the whole board's memory in use during the run, and the GPU shares t
 
 Batching gains little on detection, about 10%, and adds latency, so small batches suit this board. Each engine takes minutes to build, so engines should be built once and kept with the host's data, as the x86 deployment does.
 
+## TensorRT in a container
+
+TensorRT 10.16.2.10 installs on plain Ubuntu 24.04 and runs on the GPU in a container. Engines built on the host loaded and ran inside it, with no material speed loss:
+
+| Engine | Host | Container |
+|---|---|---|
+| `rec_b1` | 369 batches/s, 2.6 ms | 340 batches/s, 3.0 ms |
+| `rec_b32` | 19.7 batches/s, 51 ms | 19.8 batches/s, 50 ms |
+| `det_b1` | 188 batches/s, 5.8 ms | 190 batches/s, 5.5 ms |
+| `det_b8` | 25.9 batches/s, 41 ms | 26.0 batches/s, 41 ms |
+
+The image is 6.18 GB, and it took about 5.5 minutes to build, 4 of them exporting layers. Build it with no time limit. It needs `jetson-ota-public.asc` beside the Dockerfile, copied from `/etc/apt/trusted.gpg.d/` on the Jetson.
+
+```dockerfile
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+COPY jetson-ota-public.asc /etc/apt/trusted.gpg.d/jetson-ota-public.asc
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates python3 python3-numpy \
+    && printf 'deb https://repo.download.nvidia.com/jetson/common r39.2 main\ndeb https://repo.download.nvidia.com/jetson/som r39.2 main\n' > /etc/apt/sources.list.d/nvidia-l4t.list \
+    && mkdir -p /opt/nvidia/l4t-packages && touch /opt/nvidia/l4t-packages/.nv-l4t-disable-boot-fw-update-in-preinstall \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends libnvinfer-bin python3-libnvinfer \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+The apt repo is `som`, not `t234`, on JetPack 7.2.1. An image only fits the JetPack release in its repo line, here r39.2.
+
 ## What this means
 
 - The x86 image cannot run here: it is amd64, on TensorRT 11, and its base image has no `l4t` build for r39.2.1.
-- The GPU and CUDA libraries reach a plain `ubuntu:24.04` container with `--runtime nvidia --gpus all`, but TensorRT does not, so it has to be added to the image.
+- The GPU and CUDA libraries reach a plain `ubuntu:24.04` container with `--runtime nvidia --gpus all`, but TensorRT does not, so the image must install it. The Dockerfile below does this from NVIDIA's Jetson apt repo.
 - SCRFD must be reshaped with the project's `reshape_onnx.py` before building; a fixed model per batch size worked.
 - The Orin Nano has no hardware encoder (NVENC), so nothing here should re-encode video.
 
 ## Not yet tested
 
-Real faces, real accuracy on TensorRT 10, InsightFace-REST itself, TensorRT inside a container, CPU load, several camera streams at once, and Milvus on this board.
+Real faces, real accuracy on TensorRT 10, InsightFace-REST itself, building engines inside a container, CPU load, several camera streams at once, and Milvus on this board.
