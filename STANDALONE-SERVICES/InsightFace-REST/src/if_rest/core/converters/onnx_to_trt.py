@@ -32,19 +32,25 @@ def _build_engine_onnx(input_onnx: bytes, force_fp16: bool = False, max_batch_si
 
     # TensorRT 11 dropped the FP16 builder flag: networks are strongly typed, so precision comes from the ONNX
     # types. Inputs and outputs stay FP32, so the inference code is unchanged.
-    if force_fp16:
+    # The Jetson image is on TensorRT 10, which still has that flag.
+    trt11 = int(trt.__version__.split('.')[0]) >= 11
+    if force_fp16 and trt11:
         logger.info('Building TensorRT engine in FP16 (ONNX weights converted to FP16).')
         model = float16.convert_float_to_float16(onnx.load_from_string(input_onnx), keep_io_types=True)
         input_onnx = model.SerializeToString()
-    else:
+    elif not force_fp16:
         logger.warning('Building engine in FP32 mode.')
 
-    flags = 1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)
+    flags = 1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED) if trt11 else 0
     with trt.Builder(TRT_LOGGER) as builder, \
             builder.create_network(flags) as network, \
             builder.create_builder_config() as config, \
             trt.OnnxParser(network, TRT_LOGGER) as parser:
-        config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, max_workspace * 1024 * 1024)
+        if trt11:
+            config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, max_workspace * 1024 * 1024)
+        elif force_fp16:
+            logger.info('Building TensorRT engine in FP16 (builder flag).')
+            config.set_flag(trt.BuilderFlag.FP16)
         if not parser.parse(input_onnx):
             print('ERROR: Failed to parse the ONNX')
             for error in range(parser.num_errors):
@@ -69,7 +75,7 @@ def _build_engine_onnx(input_onnx: bytes, force_fp16: bool = False, max_batch_si
 
 def check_fp16():
     """
-    Every GPU TensorRT 11 supports has fast FP16, and TensorRT 11 no longer reports it.
+    Every GPU TensorRT 11 supports has fast FP16, as does the Jetson, and TensorRT 11 no longer reports it.
 
     Returns:
         bool: True
