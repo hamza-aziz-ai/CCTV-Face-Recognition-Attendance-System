@@ -1,0 +1,46 @@
+# Points Kafka-WebApp and Face-Dataset-Collector at the latest commit of their main branch, straight on main with [skip ci],
+# as submodule pins are a small chore (owner, 2026-11-02). Each submodule's own CI sends `submodule-main` after a push to main;
+# the daily run catches a missed one. SUBMODULES_TOKEN is a fine-grained token: Contents read on both submodule repos, and
+# read and write on this one, because GITHUB_TOKEN cannot read other private repos.
+name: submodules
+
+on:
+  repository_dispatch:
+    types: [submodule-main]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 21 * * *"  # 02:47 IST
+
+permissions:
+  contents: read
+
+concurrency:
+  group: submodules
+  cancel-in-progress: false
+
+jobs:
+  pin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          submodules: true
+          token: ${{ secrets.SUBMODULES_TOKEN }}
+      - name: Pin each submodule to its main
+        run: |
+          git submodule update --remote
+          if git diff --quiet; then
+            echo "Already at the latest main"
+            exit 0
+          fi
+          git submodule status | sed 's/^/  /'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -qam "chore: point submodules at their latest main [skip ci]"
+          for attempt in 1 2 3; do
+            git push origin HEAD:main && exit 0
+            git pull --rebase -q origin main
+          done
+          exit 1
