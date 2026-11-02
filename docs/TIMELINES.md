@@ -106,6 +106,8 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #84 | 2026-11-01 17:52 | 1h 12m             | 6m                   | +275/-6 17f    | feat: serve each client over HTTPS behind a shared proxy (D-040)                                         |
 | #85 | 2026-11-02 04:10 | overnight gap      | 7m                   | +252/-16 7f    | feat: fix live updates over HTTPS and theme the sign-in page |
 | #86 | 2026-11-02 07:32 | same-day gap       | 3m                   | +4/-4 4f       | fix: pin the display with the single-person card fix |
+| #87 | 2026-11-02 09:33 | same-day gap       | 25m                  | +78/-7 3f      | chore: run InsightFace-REST on the Jetson with TensorRT 10 |
+| #88 | 2026-11-02 09:59 | 1m                 | 3m                   | +2/-2 1f       | fix: start automerge when the InsightFace image build ends |
 
 ## Incidents that cost time
 
@@ -136,6 +138,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | 2026-11-02 morning | The browser kept showing "Not secure": the proxy's CA was not installed, then Brave was still running in the background | About 30m (estimate) | Session record, no exact timing | Close every browser process after installing a CA |
 | 2026-11-02 06:30 to 07:10 | Jetson spike: detection needed a fixed-size model per batch, the image build used the wrong apt repo, and a time limit cut off the final export | About 25m (estimate) | Session timestamps | On this board, run image builds with no time limit; exporting took over 4 minutes |
 | 2026-11-02 07:17 | The display squeezed a single person's name into a vertical column, seen only in the first live recognition on the HTTPS page; `v0.3.0` had the same CSS, and `v0.4.1` fixed it (#86) | Under 1h (estimate) | Owner's screenshot, Kafka-WebApp's report | Check the display with one card and a long ID before releasing it |
+| 2026-11-02 09:44 to 09:58 | #87 sat open after green checks: `ci` ended before `insightface-image`, automerge skipped it, and nothing started automerge again while Claude Code Review is paused | 14m | Run timestamps | Every check that gates a merge must also start automerge |
 
 ## Estimating from this
 
