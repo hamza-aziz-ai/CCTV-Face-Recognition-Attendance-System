@@ -672,3 +672,18 @@ Why: a client's removal must never reach another client, and one deleted login r
 Trade-off: each removed client leaves two disabled login names on the broker, and its ID cannot be used again there: provisioning stops on it, as it does for any login whose password is not saved. Snapshots sit on the same host, so they are not off-host backups, and `remove` deletes them with the site. `restore` also needs the site's `.env`, which no snapshot holds.
 Revisit if: a Kafka upgrade fixes the login deletion. Prove it with a restart on a throwaway broker first. Never run `--delete-config` on a live broker.
 Proof on the live host, 2026-11-02: a temporary client `rehearsal` on v2.9.2 was provisioned, given synthetic vectors for 3 people (16 rows) and published. Its snapshot was taken, then its Milvus collections and dataset folder were deleted. `restore` rebuilt Milvus with the release's real `face_vectors.py publish`: 16 rows in use, and a search for one vector of each person returned that person. `remove` then left no site folder and no Milvus database. The owner's Milvus versions, 22 running containers and 0 unhealthy were the same before and after. The ID `rehearsal` is spent on this broker.
+
+## D-043: Edge nodes keep face crops, stored with the client's own data
+Date: 2026-11-03   Model: Claude Opus 5.5   Decided by: owner
+Context: the dynamic face dataset collector keeps the best `NUMBER_OF_PICTURES` (3) crops of each recognised person per camera cluster, in `DYNAMIC-FACIAL-RECOGNITION-DATASET/<person>/<cluster>/` and the `face_images` table. The nightly updater re-embeds them into the Milvus staging collection, and a score down to 0.45 is accepted when staging also matches (`inference_data_cleaner.py`). A Jetson edge node (roadmap item 12) ran without the collector, so it kept no crops. The Jetson must serve two layouts: everything on the Jetson, or the Jetson as an edge node of a central host.
+Options:
+
+1. keep crops: the edge node sends them to the client's collector, which stores them beside that client's PostgreSQL and Milvus
+2. send vectors only, no images
+3. keep no crops from edge nodes
+
+Chosen: 1. In the Jetson-only layout the collector runs on the Jetson. In the edge layout the producer-consumer posts crops to the central host's collector for that client, never to a store on the edge node.
+Why: staging is how recognition follows a person's changing appearance, and edge cameras would otherwise never feed it. Vectors alone cannot be re-embedded when the model changes, and option 3 makes edge cameras recognise worse over time than central ones. One store per client keeps the crops inside snapshot, restore and removal (D-042) and inside a person's deletion, and losing an edge node loses no data.
+Trade-off: face images cross the network from the edge node. Over a LAN the volume is small, as only a better crop replaces a kept one. An edge node outside the client's LAN needs the collector behind the proxy with TLS and a per-node token before it is used.
+Needed before an edge node keeps crops: a `DYNAMIC_FACE_DATA_COLLECTOR_API` override in `master.env`, as `INSIGHTFACE_HOST` has; camera clusters read from the camera configuration, as `face_saver.py` hardcodes maingate cameras 1 to 10 and raises `KeyError` for any other camera; and the deletion tests (8e) covering crops.
+Revisit if: a client forbids face images leaving the edge site. Then use option 1 with the collector, PostgreSQL and Milvus staging on the edge node.

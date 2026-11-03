@@ -146,4 +146,4 @@ Records grew with the cameras, nothing was purged from the frame buffer, and no 
 
 ## Not yet tested
 
-Accuracy on a labelled set, an unenrolled person, real separate cameras, more than 4 cameras, the display with more than one camera, the dynamic face dataset collector and where an edge node's face crops should go, Milvus or Kafka on this board, and an image build in CI. The load test repeats one image; real frames vary.
+Accuracy on a labelled set, an unenrolled person, real separate cameras, more than 4 cameras, the display with more than one camera, the dynamic face dataset collector (an edge node's crops go to its client's collector, D-043), Milvus or Kafka on this board, and an image build in CI. The load test repeats one image; real frames vary.
