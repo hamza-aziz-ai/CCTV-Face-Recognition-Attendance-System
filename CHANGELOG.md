@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.14.0 (2026-11-03)
+
+## What's Changed
+* feat(display): send null for a missing portrait so the display draws a silhouette, pin Kafka-WebApp v0.7.2, and bring the model manifest up to date by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/106
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.13.0...v2.14.0
+
 ## v2.13.0 (2026-11-03)
 
 ## What's Changed
