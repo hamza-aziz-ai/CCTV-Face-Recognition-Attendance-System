@@ -9,7 +9,7 @@ Roadmap 8f, D-049. In an organisation whose departments are physically separate,
    ```bash
    python3 src/api/enrolment.py departments EMP-1042 Dispatch Stores   # other departments; "all" for every camera; none to clear
    ```
-3. Publish so cameras follow (the enrolment worker also does this at every accepted enrolment):
+3. Publish so cameras follow, in the `enrolment-worker` container, which mounts the dataset and reaches the roster (the worker also does this at every accepted enrolment; `producer-consumer` has no dataset and refuses):
    ```bash
    python3 src/util/face_vectors.py publish
    ```
@@ -36,3 +36,5 @@ Both use the same vectors and the same collection. The vectors are unit length, 
 ## Checks
 
 `python3 src/util/face_vectors.py demo` checks department lists and the search grouping. On 2026-11-03 against the laptop's Milvus (GPU_IVF_FLAT), with a temporary collection: each face matched only within its camera's department, a person in "all" was found by a department camera, a camera without a department found the person with none, a dispatch-only person's face at a stores camera came back only as stores people (best 0.107), and squared L2 equalled 2 - 2 x cosine.
+
+On the laptop, 2026-11-03, after v2.13.0 deployed: one publish moved Milvus to `FACE_DATA_COLLECTION_FOR_COSINE_v4`, with fields `name_id`, `embeddings` and `departments`. The owner has no department and no camera has one, so recognition is unchanged; the consumer logged no errors.
