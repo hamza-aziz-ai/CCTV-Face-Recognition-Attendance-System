@@ -118,6 +118,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #96 | 2026-11-02 17:39 | n/a (Dependabot) | 3m | +2/-2 2f | chore(deps): Bump actions/checkout from 4 to 7 in the actions group |
 | #97 | 2026-11-02 17:58 | 19m | 3m | +7/-4 1f | ci: push submodule pins with GITHUB_TOKEN, so SUBMODULES_TOKEN stays read-only |
 | #98 | 2026-11-03 02:40 | n/a (night) | 4m | +85/-9 5f | ci: build arm64 images for the Jetson on GitHub's arm64 runners |
+| #99 | 2026-11-03 03:38 | 58m | 6m | +88/-133 6f | ci: publish the images CI tested and merge the small jobs, to save Actions minutes |
 
 ## Incidents that cost time
 
