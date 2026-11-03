@@ -11,6 +11,8 @@ The producer can decode camera streams on the GPU's video decoder (NVDEC) instea
 
 Restart the producer-consumer after changing either. A camera with a region of interest gets full-size frames from the GPU, as the region is cropped from them, so only the decoding moves to the GPU for it.
 
+RTSP is read over TCP, as OpenCV reads it. FFmpeg's default, UDP, failed from Docker Desktop on the owner's phone camera (`Error during demuxing: Operation not permitted`), so v2.10.0 fell back to the CPU for every real camera; with TCP the same stream decoded on NVDEC at 17 fps with 1% Python CPU, against 35% on the CPU path (2026-11-03).
+
 The producer-consumer service reserves the GPU with `capabilities: [gpu, compute, video]`. `video` gives the container the NVDEC library, `libnvcuvid`; Docker Desktop on WSL2 also mounts it once asked, so no host-specific mount is needed.
 
 ## Measured on the laptop (2026-11-03)
