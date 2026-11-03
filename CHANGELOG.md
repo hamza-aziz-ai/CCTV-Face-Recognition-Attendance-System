@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.14.2 (2026-11-03)
+
+## What's Changed
+* ci: build images only when what they are built from changes, and reuse the last release's images otherwise by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/108
+* fix(display): pin Kafka-WebApp v0.7.4, which hides camera warnings while the whole system is shown as down by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/109
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.14.1...v2.14.2
+
 ## v2.14.1 (2026-11-03)
 
 ## What's Changed
