@@ -58,5 +58,5 @@ Through the HTTPS proxy with a temporary operator account: `/auth/token`, consen
 ## Not covered
 
 - Encryption of the bucket with a key per client, and deletion of an accepted enrolment (8e).
-- The notice text and the legal basis need the owner's sign-off before real people are enrolled; no notice ships with the bundle.
-- Retention after withdrawal or leaving (30 days, owner decision 2026-10-31) is not automated yet.
+- Scope (owner, 2026-11-04, Face-Dataset-Collector D-025): only the owner's own face is enrolled. Enrolling anyone else waits for legal advice (legal basis, notice 1.2, the open end date for attendance records, controller or processor in central deployments) and for 8e on main, so deletion is automated first. Signed off: every re-enrolment records a new consent; a withdrawal during a re-enrolment ends only that attempt.
+- Retention is not automated yet (8e): notice 1.2 promises deletion within 90 days of withdrawing or leaving, attendance records kept, and their camera pictures deleted 3 years after that (owner, 2026-11-03).
