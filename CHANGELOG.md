@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.13.0 (2026-11-03)
+
+## What's Changed
+* feat(recognition): match each camera's faces within its department, and toggle between COSINE and L2 by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/105
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.12.0...v2.13.0
+
 ## v2.12.0 (2026-11-03)
 
 ## What's Changed
