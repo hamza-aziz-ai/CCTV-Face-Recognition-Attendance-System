@@ -744,3 +744,17 @@ Chosen: HLS, `client_admin` and `viewer`, one per client stack (docs/features/li
 Why: HLS needs no new port or auth and passes the existing sign-in. Live video of people is not needed for enrolment work. Per-client MediaMTX keeps each client's camera passwords and streams in its own stack, as D-036 does for data.
 Trade-off: measured 3.8 s glass to glass with the owner's phone (0.9 s median of it the phone's RTSP stream over Wi-Fi, up to 2 s), 2.8 s until the player's first stall. The owner sees a similar delay on the recognition display without HLS and attributes it to the RTSP stream; the batch collection was benchmarked by the owner as far smaller. One more container per client. Each client's proxy route must be regenerated after the release that adds it. Containers of other clients on `cctv-edge` can reach MediaMTX directly, as with the display (D-040).
 Revisit if: a client needs under about 1.5 s; then tune HLS with our own player or move to WebRTC.
+
+## D-048: Enrolment API in the client's stack, photos in its bucket, checks and publishing in a worker
+Date: 2026-11-03   Model: Claude Opus 5.5   Decided by: owner (login and storage), engineering defaults (worker, lock)
+Context: roadmap 8c, the server side of the enrolment app's provisional contract (Face-Dataset-Collector FEATURE-001). The app needs a token it can send as a header, durable uploads, per-photo reasons, and one open job per person. Accounts give browsers an HttpOnly cookie with a CSRF token (D-039).
+Options:
+
+1. login: the contract's `/auth/login` returning `{token}`, or a separate `/auth/token`
+2. photos: the client's MinIO bucket `<client>-enrolment` (D-037), or the site folder as the command line uses
+3. checking and publishing: a thread in the API, or a worker of its own
+
+Chosen: `/auth/token` and the bucket (owner), and a worker (docs/features/enrolment-api.md). `/auth/token` opens the same session as the cookie login and returns it for a Bearer header, which `accounts.identify` now accepts. The API stores uploads and job rows; `enrolment-worker` runs on the producer-consumer image, checks with `enrol_person.check_photos`, and publishes under a PostgreSQL advisory lock.
+Why: browsers keep a session out of script reach while the app gets a header token. The bucket keeps photos per client, inside snapshot and restore (D-042), and off the host's site folder. The API image has neither the Milvus nor the Parquet library, while the producer-consumer image has them and the InsightFace client, so the worker needs no new image; only `psycopg2-binary` and `minio` were added. Publishing rebuilds the whole collection (D-030), so one at a time.
+Trade-off: one more container per client. Every acceptance rebuilds Milvus, about 10 s for one person on the laptop. A rejection names no other person to the operator, only to the server log. Pose and blur limits come from one person's photos and are provisional. The roster is filled by command line until an admin page exists.
+Revisit if: enrolments queue behind each other, then publish incrementally instead of rebuilding.

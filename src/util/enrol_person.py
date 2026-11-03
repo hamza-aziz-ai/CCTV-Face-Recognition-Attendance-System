@@ -11,26 +11,59 @@ import sys
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 # Relative issue - https://www.geeksforgeeks.org/python-import-from-parent-directory/
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
 
-from enrolment_checks import check_face, check_files, check_not_enrolled, check_same_person
+from enrolment_checks import check_face, check_files, check_not_enrolled, check_photo_file, check_poses, \
+    check_same_person, check_sharpness
 from insightface_face_detection import IFRClient
 from face_vectors import publish, save
 from milvus_server import create_connection, create_collection
-from parameters import ENROLMENT_MIN_CONFIDENCE, FACE_MATCHING_TOLERANCE, INSIGHTFACE_HOST, INSIGHTFACE_PORT, \
-    METRIC_TYPE, MILVUS_COLLECTION_NAME, MILVUS_HOST, MILVUS_PORT, PUPIL_DISTANCE_THRESHOLD
+from parameters import ENROLMENT_MAX_FRONT_TURN, ENROLMENT_MAX_PHOTO_BYTES, ENROLMENT_MIN_CONFIDENCE, \
+    ENROLMENT_MIN_SHARPNESS, ENROLMENT_MIN_SHORT_SIDE, ENROLMENT_MIN_TILT, ENROLMENT_MIN_TURN, FACE_MATCHING_TOLERANCE, \
+    INSIGHTFACE_HOST, INSIGHTFACE_PORT, METRIC_TYPE, MILVUS_COLLECTION_NAME, MILVUS_HOST, MILVUS_PORT, \
+    PUPIL_DISTANCE_THRESHOLD
 
 
-def extract_faces(client, photo):
-    img = cv2.imread(str(photo))
+def face_sharpness(img, bbox):
+    """Laplacian variance of the face scaled to 112 x 112, so the score does not depend on the photo's size."""
+    x1, y1, x2, y2 = (max(0, int(v)) for v in bbox)
+    crop = cv2.cvtColor(img[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY) if y2 > y1 and x2 > x1 else None
+    return cv2.Laplacian(cv2.resize(crop, (112, 112)), cv2.CV_64F).var() if crop is not None else 0.0
+
+
+def extract_faces(client, img):
     _, buffer = cv2.imencode(".jpg", img)
     data = base64.b64encode(buffer.tobytes()).decode("ascii")
-    faces = client.extract(data=[data], extract_embedding=True, return_landmarks=True)["data"][0]["faces"]
-    return faces, cv2.Laplacian(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()
+    return client.extract(data=[data], extract_embedding=True, return_landmarks=True)["data"][0]["faces"]
+
+
+def check_photos(client, photos):
+    """{stem: JPEG bytes} to ({stem: embedding}, problems): every photo check of D-026 and 8c in one place, for the
+    command line and the enrolment API."""
+    problems = check_files(photos)
+    if problems:
+        return {}, problems
+    vectors, landmarks = {}, {}
+    for stem, data in photos.items():
+        img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+        short_side = min(img.shape[:2]) if img is not None else 0
+        found = check_photo_file(stem, data, ENROLMENT_MAX_PHOTO_BYTES, short_side, ENROLMENT_MIN_SHORT_SIDE)
+        if not found:
+            faces = extract_faces(client, img)
+            found = check_face(stem, faces, ENROLMENT_MIN_CONFIDENCE, PUPIL_DISTANCE_THRESHOLD)
+            if not found:
+                found = check_sharpness(stem, face_sharpness(img, faces[0]["bbox"]), ENROLMENT_MIN_SHARPNESS)
+                vectors[stem], landmarks[stem] = faces[0]["vec"], faces[0]["landmarks"]
+        problems += found
+    problems += check_poses(landmarks, ENROLMENT_MIN_TURN, ENROLMENT_MIN_TILT, ENROLMENT_MAX_FRONT_TURN)
+    if problems:
+        return {}, problems
+    return vectors, check_same_person(vectors, FACE_MATCHING_TOLERANCE)
 
 
 def best_match(collection, vector):
@@ -41,23 +74,8 @@ def best_match(collection, vector):
 
 def vectors_for(folder):
     """The embedding of each photo in the folder, keyed by pose, and the problems that stop enrolment."""
-    photos = {photo.stem: photo for photo in sorted(folder.glob("*.jpg"))}
-    problems = check_files(photos)
-    if problems:
-        return {}, problems
-
-    client = IFRClient(host=INSIGHTFACE_HOST, port=INSIGHTFACE_PORT)
-    vectors = {}
-    for stem, photo in photos.items():
-        faces, sharpness = extract_faces(client, photo)
-        found = check_face(stem, faces, ENROLMENT_MIN_CONFIDENCE, PUPIL_DISTANCE_THRESHOLD)
-        problems += found
-        if not found:
-            vectors[stem] = faces[0]["vec"]
-        print(f"{stem}: {len(faces)} face(s), sharpness {sharpness:.0f}")  # shown only: no pass mark from real data yet
-    if problems:
-        return {}, problems
-    return vectors, check_same_person(vectors, FACE_MATCHING_TOLERANCE)
+    photos = {photo.stem: photo.read_bytes() for photo in sorted(folder.glob("*.jpg"))}
+    return check_photos(IFRClient(host=INSIGHTFACE_HOST, port=INSIGHTFACE_PORT), photos)
 
 
 def main(folder):

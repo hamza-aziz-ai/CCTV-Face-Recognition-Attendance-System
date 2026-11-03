@@ -13,6 +13,7 @@ import hmac
 import os
 import secrets
 import sys
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -94,9 +95,16 @@ def identify(request: Request) -> Optional[dict]:
     header = request.headers.get("authorization", "")
     with cursor_source(commit=False) as cursor:
         if header.lower().startswith("bearer "):
-            cursor.execute("SELECT name, role FROM machine_tokens WHERE token_hash = %s AND revoked_at IS NULL", (digest(header[7:].strip()),))
+            token_hash = digest(header[7:].strip())
+            cursor.execute("SELECT name, role FROM machine_tokens WHERE token_hash = %s AND revoked_at IS NULL", (token_hash,))
             row = cursor.fetchone()
-            return {"name": row["name"], "role": row["role"], "csrf": None} if row else None
+            if row:
+                return {"name": row["name"], "role": row["role"], "csrf": None}
+            # A person's session from /auth/token, as the enrolment app sends it: a header, not a cookie, so no CSRF
+            cursor.execute("""SELECT a.username, a.role FROM sessions s JOIN accounts a ON a.id = s.account_id
+                              WHERE s.token_hash = %s AND s.expires_at > now() AND a.disabled_at IS NULL""", (token_hash,))
+            row = cursor.fetchone()
+            return {"name": row["username"], "role": row["role"], "csrf": None, "session": token_hash} if row else None
         token = request.cookies.get(COOKIE)
         if not token:
             return None
@@ -135,8 +143,8 @@ def sign_in_page():
     return SIGN_IN_PAGE
 
 
-@router.post("/login")
-def login(credentials: Login, response: Response):
+def start_session(credentials: Login) -> tuple:
+    """Checks a login, with throttling, and opens a session: (account, token, csrf token). Raises 401 or 429."""
     with cursor_source(commit=True) as cursor:
         cursor.execute("DELETE FROM login_failures WHERE failed_at < now() - make_interval(mins => %s)", (LOGIN_WINDOW_MINUTES,))
         cursor.execute("DELETE FROM sessions WHERE expires_at < now()")
@@ -159,9 +167,25 @@ def login(credentials: Login, response: Response):
                            (digest(token), account["id"], csrf, SESSION_HOURS))
     if failed:  # raised out here, so the failure above commits
         raise HTTPException(status_code=401, detail="Wrong username or password")
-    response.set_cookie(COOKIE, token, max_age=SESSION_HOURS * 3600, secure=True, httponly=True, samesite="lax", path="/")
     api_logger.info(f"Login by {credentials.username}")
+    return account, token, csrf
+
+
+@router.post("/login")
+def login(credentials: Login, response: Response):
+    """Browsers: the session goes in an HttpOnly cookie, out of reach of page scripts, and writes need the CSRF token."""
+    account, token, csrf = start_session(credentials)
+    response.set_cookie(COOKIE, token, max_age=SESSION_HOURS * 3600, secure=True, httponly=True, samesite="lax", path="/")
     return {"username": credentials.username, "role": account["role"], "csrf_token": csrf}
+
+
+@router.post("/token")
+def token(credentials: Login):
+    """The enrolment app (owner, 2026-11-03): the same session, returned for an Authorization: Bearer header. No cookie,
+    so the browser pages keep theirs out of script reach."""
+    account, session_token, _ = start_session(credentials)
+    expires = datetime.now(timezone.utc) + timedelta(hours=SESSION_HOURS)
+    return {"token": session_token, "role": account["role"], "expires_at": expires.isoformat(timespec="seconds")}
 
 
 @router.post("/logout", status_code=204)

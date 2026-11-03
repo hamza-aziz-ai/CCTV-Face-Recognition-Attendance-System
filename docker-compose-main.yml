@@ -91,12 +91,17 @@ services:
       # The admin login, used only while master.env has LEGACY_SHARED_SERVICES=1 (owner, until step 3c, D-037)
       POSTGRES_USER: ${POSTGRES_USER:-}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      # This client's key to its own enrolment bucket, written to its site .env by deploy/provision.py (D-037, D-048)
+      STORE_APP_ACCESS_KEY: ${STORE_APP_ACCESS_KEY:-}
+      STORE_APP_SECRET_KEY: ${STORE_APP_SECRET_KEY:-}
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
       - ./logs:/Multi-Person-Face-Recognition/logs
       # The API writes MediaMTX's configuration here at start, from the camera configuration
       - live-video-config:/live-video
+      # The privacy notice the enrolment app shows before consent (notice.json), supplied by the client's admin
+      - ./enrolment:/Multi-Person-Face-Recognition/enrolment:ro
     ports:
       # On this machine only, for the watcher; everyone else comes through the HTTPS proxy (D-040)
       - "127.0.0.1:${API_PORT:-9090}:8000"
@@ -155,6 +160,33 @@ services:
     # Reads Face_Recognition_Database, which the collector creates
     depends_on:
       dynamic-face-dataset-collector:
+        condition: service_healthy
+
+  # Checks the enrolment app's jobs and publishes accepted people to Milvus (D-048). The producer-consumer image already
+  # has the InsightFace client, OpenCV and the Milvus client, so this needs no image of its own
+  enrolment-worker:
+    image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-producer-consumer:${IMAGE_TAG:-v-beta}
+    restart: unless-stopped
+    command: ["python3", "src/util/enrolment_worker.py"]
+    volumes:
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      # Accepted people's vectors.parquet, which face_vectors.publish rebuilds Milvus from (D-030)
+      - ./FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/FACIAL-RECOGNITION-DATASET
+      - ./logs:/Multi-Person-Face-Recognition/logs
+    environment:
+      POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
+      PG_APP_USER: ${PG_APP_USER:-}
+      PG_APP_PASSWORD: ${PG_APP_PASSWORD:-}
+      # The admin login, used only while master.env has LEGACY_SHARED_SERVICES=1 (owner, until step 3c, D-037)
+      POSTGRES_USER: ${POSTGRES_USER:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      MILVUS_APP_USER: ${MILVUS_APP_USER:-}
+      MILVUS_APP_PASSWORD: ${MILVUS_APP_PASSWORD:-}
+      STORE_APP_ACCESS_KEY: ${STORE_APP_ACCESS_KEY:-}
+      STORE_APP_SECRET_KEY: ${STORE_APP_SECRET_KEY:-}
+    # The API creates the enrolment tables at start
+    depends_on:
+      mfr-api-service:
         condition: service_healthy
 
   display-image-server:

@@ -8,3 +8,5 @@ pymilvus~=3.0.2
 pyarrow~=26.0.0
 opencv-python~=5.0.0.93
 python-dotenv~=1.2.4
+minio~=7.2.20
+psycopg2-binary~=2.9.13

@@ -216,6 +216,22 @@ SAVE_FACE = True
 # Threshold value for distance between two eye landmarks to decide whether the face is large enough to save
 PUPIL_DISTANCE_THRESHOLD = 28    # px
 ENROLMENT_MIN_CONFIDENCE = 0.7    # lowest face detection confidence accepted for an enrolment photo
+# Enrolment photo checks (src/util/enrolment_checks.py). The pose and blur limits were calibrated on one person's 10 real
+# photos on 2026-11-03, which turned 0.12 to 0.17 sideways, tilted 0.06 to 0.19 and scored 330 to 595 sharp: provisional
+ENROLMENT_MIN_TURN = 0.08          # nose offset over eye distance, left_30 and right_30 against front
+ENROLMENT_MIN_TILT = 0.04          # nose height between eyes and mouth, chin_up and chin_down against front
+ENROLMENT_MAX_FRONT_TURN = 0.10    # the front photo must face the camera
+ENROLMENT_MIN_SHARPNESS = 40       # Laplacian variance of the face at 112 x 112; 3 px of added blur gave 54, 5 px gave 20
+ENROLMENT_MAX_PHOTO_BYTES = 2_000_000   # "2 MB" read the strict way, as the enrolment app checks it
+ENROLMENT_MIN_SHORT_SIDE = 480     # px
+ENROLMENT_MAX_BODY_BYTES = 25_000_000   # one upload: 10 photos and the form fields
+ENROLMENT_PENDING_HOURS = 24       # a job not finished by then expires and its photos are deleted
+# This client's enrolment bucket in the shared dataset store, with its own access key from provisioning (D-037)
+DATASET_STORE_ENDPOINT = os.getenv("DATASET_STORE_ENDPOINT") or f"{IP_ADDRESS}:9010"
+ENROLMENT_BUCKET = f"{CLIENT_ID}-enrolment"
+# The privacy notice the enrolment app shows before consent, supplied by the client's admin (JSON, FEATURE-001 format)
+ENROLMENT_NOTICE_FILE = "enrolment/notice.json"
+CLIENT_NAME = os.getenv("CLIENT_NAME") or CLIENT_ID
 
 # Maximum number of images saved per cluster per person
 NUMBER_OF_PICTURES = 3
