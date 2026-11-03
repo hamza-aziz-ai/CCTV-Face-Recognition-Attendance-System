@@ -232,7 +232,7 @@ services:
 
   # Recognition display for this host (Raspberry Pis run the same image with its default ports); versioned in the Kafka-WebApp repository
   kafka-webapp:
-    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.7.0@sha256:2fa32e4f46dd1522c8c7b09ff53e2d32005d11b249baee0d8f7faaea919747f8
+    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.7.2@sha256:691e7b00388daf6402c182d9f15387dae710e5c17be05384a779ccaf1cfce860
     restart: unless-stopped
     env_file:
       - path: ./master.env
