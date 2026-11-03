@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.12.0 (2026-11-03)
+
+## What's Changed
+* feat(enrolment): enrolment API for the app, with bearer login, photos in the client's bucket and a publishing worker by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/103
+* feat(enrolment): register people by organisational ID and name, and serve names to the display by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/104
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.11.0...v2.12.0
+
 ## v2.11.0 (2026-11-03)
 
 ## What's Changed
