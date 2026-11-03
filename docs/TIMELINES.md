@@ -112,6 +112,12 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #90 | 2026-11-02 11:16 | 17m                | 5m                   | +18/-3 2f      | chore(deploy): keep release folders that containers still mount |
 | #91 | 2026-11-02 11:54 | 38m                | 8m                   | +375/-4 6f     | chore(deploy): add client snapshot, restore and remove (D-042) |
 | #92 | 2026-11-02 16:30 | same-day gap       | 50m (estimate)       | +32/-3 2f      | chore(edge): let an edge node use its own InsightFace-REST |
+| #93 | 2026-11-02 17:30 | 1h 00m | 4m | +4/-0 2f | fix(camera): keep camera passwords out of OpenCV's logs |
+| #94 | 2026-11-02 17:31 | 1m (prepared with #93) | 3m | +2/-2 2f | fix(display): pin Kafka-WebApp v0.4.2, which keeps names on one line |
+| #95 | 2026-11-02 17:31 | 1m (prepared with #93) | 6m | +47/-5 2f | ci: point submodules at their latest main automatically |
+| #96 | 2026-11-02 17:39 | n/a (Dependabot) | 3m | +2/-2 2f | chore(deps): Bump actions/checkout from 4 to 7 in the actions group |
+| #97 | 2026-11-02 17:58 | 19m | 3m | +7/-4 1f | ci: push submodule pins with GITHUB_TOKEN, so SUBMODULES_TOKEN stays read-only |
+| #98 | 2026-11-03 02:40 | n/a (night) | 4m | +85/-9 5f | ci: build arm64 images for the Jetson on GitHub's arm64 runners |
 
 ## Incidents that cost time
 
@@ -145,6 +151,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | 2026-11-02 09:44 to 09:58 | #87 sat open after green checks: `ci` ended before `insightface-image`, automerge skipped it, and nothing started automerge again while Claude Code Review is paused | 14m | Run timestamps | Every check that gates a merge must also start automerge |
 | 2026-11-02 11:10 | Found while testing `remove`: the watcher had deleted the release folders holding the proxy's and Milvus's mounted config, so the next restart could have stopped either from starting. Files restored and #90 merged with no downtime | About 20m (estimate) | Session timestamps | Cleanup must check what is still in use, not only what the current release needs |
 | 2026-11-02 11:30 to 12:00 | The rehearsal showed that deleting one Kafka SCRAM login loses every login at the next broker restart. A low-memory stop cost one rerun, and a wrong race theory cost another | About 30m (estimate) | Session timestamps | Restart services after destructive steps in a rehearsal; a retry that still fails is not a race |
+| 2026-11-02 17:34 to 18:21 | v2.9.3 took 3 release runs: #95 to #97 changed workflow files while releases ran, so GitHub refused the tag (HTTP 403) twice and each run handed over to a release of main. The first submodule run also failed (HTTP 403) on a token scope, fixed by #97 | About 47m (measured, mostly waiting) | Run timestamps | Merge workflow changes only when no release is running |
 
 ## Estimating from this
 
