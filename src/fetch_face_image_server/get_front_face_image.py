@@ -10,10 +10,9 @@ from custom_logging import feedback_server_logger
 from parameters import DISPLAY_FACE_IMAGE_PATH
 
 
-DEFAULT_IMAGE = "src/fetch_face_image_server/placeholder.jpg"
-# Placeholder image path for non-existing directories
-default_image = cv2.imread(DEFAULT_IMAGE)
-default_image = cv2.resize(default_image, (256, 256))
+# A missing portrait is null: the display draws a silhouette coloured from the ID (Kafka-WebApp v0.6.0+). Needs a
+# display at v0.6.0 or later; an older one shows a broken image, so roll this back before rolling the display below it
+default_image = None
 
 
 # Function to get image IDs and their corresponding images

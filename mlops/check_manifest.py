@@ -47,10 +47,12 @@ def check(m, root="."):
     models = json.loads((root / "STANDALONE-SERVICES/InsightFace-REST/models/models.json").read_text(encoding="utf-8"))
     milvus = (root / "src/milvus_server.py").read_text(encoding="utf-8")
     params_text = (root / "src/parameters.py").read_text(encoding="utf-8")
+    dockerfile = (root / "STANDALONE-SERVICES/InsightFace-REST/src/Dockerfile_trt").read_text(encoding="utf-8")
     det, rec, vs, pipe, svc = m["detector"], m["recognizer"], m["vector_store"], m["pipeline"], m["inference_service"]
 
     expected = {
         "inference_service.image": (svc["image"], f"{e['IMAGE']}:{e['TAG']}"),  # CI appends -<git tree of src>
+        "inference_service.base_image": (svc["base_image"], re.search(r"^FROM (\S+)", dockerfile, re.M).group(1)),
         "inference_service.fp16": (svc["fp16"], e["FP16"] == "True"),
         "inference_service.max_size": (svc["max_size"], [int(x) for x in e["MAX_SIZE"].split(",")]),
         "detector.name": (det["name"], e["DETECTION_MODEL"]),
@@ -70,6 +72,8 @@ def check(m, root="."):
         "vector_store.top_k": (vs["top_k"], int(number(r"limit=(\d+)", milvus))),
         # FACE_MATCHING_TOLERANCE depends on MATCH_METRIC in master.env (D-049), so ast cannot evaluate it; take the COSINE default
         "vector_store.match_distance_tolerance": (vs["match_distance_tolerance"], number(r'os\.getenv\("COSINE_THRESHOLD", "([\d.]+)"\)', params_text)),
+        "vector_store.match_metric_toggle.L2.default": (vs["match_metric_toggle"]["L2"]["default"], number(r'os\.getenv\("L2_THRESHOLD", "([\d.]+)"\)', params_text)),
+        "vector_store.filter_fields": (sorted(vs["filter_fields"]), sorted(re.findall(r'name="(departments)"', milvus))),
         "pipeline.frame_size": (pipe["frame_size"], [p["FRAME_WIDTH"], p["FRAME_HEIGHT"]]),
         "pipeline.batch_size": (pipe["batch_size"], p["BATCH_SIZE"]),
         "pipeline.pupil_distance_threshold_px": (pipe["pupil_distance_threshold_px"], p["PUPIL_DISTANCE_THRESHOLD"]),

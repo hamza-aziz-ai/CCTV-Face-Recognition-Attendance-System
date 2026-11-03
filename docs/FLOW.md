@@ -217,7 +217,7 @@ sequenceDiagram
     else person ID
         KW->>KW: add the ID to the front of the list, no duplicates, at most 4
         KW->>D: POST /post_images with the list
-        D-->>KW: per ID a 256x256 portrait in base64, or a placeholder
+        D-->>KW: per ID a 256x256 portrait in base64, or null
     end
     B->>KW: Socket.IO check_updates
     KW-->>B: new_message with the latest list and the camera status strip
@@ -236,7 +236,7 @@ sequenceDiagram
 9. An `ERROR <camera>: ...` or `SUCCESS <camera>: ...` text updates that camera's entry in a status strip and never enters the recognition list or `/post_images`. An `ERROR` stays until the same camera's `SUCCESS`; a `SUCCESS` shows for 5 s.
 10. A person ID goes to the front of the list unless it is already there; the list holds at most `DISPLAY_LIST_SIZE = 4`.
 11. After each person ID Kafka-WebApp posts the list to `IMAGE_SERVER_ADDRESS`, which the compose file sets to this client's own server, `http://display-image-server:20013/post_images`, with a 5 s timeout.
-12. The display image server returns, for each ID, `DISPLAY-FACE-DATASET/<id>/front_face.jpg` resized to 256x256 as base64, or `placeholder.jpg` if there is none. It still turns an `ERROR` or `SUCCESS` text into `{"ERROR": text}` or `{"SUCCESS": text}`, but v0.3.0 no longer sends those. It has no authentication and allows any origin.
+12. The display image server returns, for each ID, `DISPLAY-FACE-DATASET/<id>/front_face.jpg` resized to 256x256 as base64, or null if there is none, for which the display (v0.6.0 or later) draws a silhouette coloured from the ID. It still turns an `ERROR` or `SUCCESS` text into `{"ERROR": text}` or `{"SUCCESS": text}`, but v0.3.0 no longer sends those. It has no authentication and allows any origin.
 13. The browser asks for updates over Socket.IO.
 14. Kafka-WebApp sends the latest list and the current camera status strip, which the page shows. The list clears after 15 s without a new recognition.
 
