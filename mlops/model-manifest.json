@@ -8,8 +8,9 @@
       "local_changes": ["src/Dockerfile_cpu", "src/Dockerfile_trt", "src/requirements.txt", "src/if_rest/core/converters/onnx_to_trt.py", "src/if_rest/core/model_zoo/getter.py", "src/if_rest/core/utils/fast_face_align.py", "src/if_rest/core/face_model.py", "src/if_rest/core/model_zoo/detectors/retinaface.py"]
     },
     "image": "ghcr.io/hamza-aziz-ai/cctv-face-recognition-insightface-rest:v0.9.5.0",
-    "image_digest": null,
-    "base_image": "nvcr.io/nvidia/tensorrt:26.07-py3",
+    "image_digest": "sha256:beef1ebb688ee16c8318e6659b55d1eeaec3398ae9c9a169cfd62e85b9380dce",
+    "image_digest_tag": "v0.9.5.0-d50bbc98a83f",
+    "base_image": "nvcr.io/nvidia/tensorrt:26.03-py3@sha256:ade1b30517b3d66b911a3cd7faf0146484ab8956098abe66b96b944fa36f4861",
     "backend": "tensorrt",
     "fp16": true,
     "max_size": [640, 640]
@@ -38,6 +39,12 @@
     "search_params": {"nprobe": 10},
     "top_k": 5,
     "match_distance_tolerance": 0.5,
+    "match_metric_toggle": {
+      "setting": "MATCH_METRIC in master.env (D-049)",
+      "COSINE": {"threshold_setting": "COSINE_THRESHOLD", "default": 0.5, "match": "cosine >= threshold"},
+      "L2": {"threshold_setting": "L2_THRESHOLD", "default": 0.95, "match": "squared L2 <= threshold, searched as cosine >= 1 - threshold/2 on unit vectors"}
+    },
+    "filter_fields": {"departments": "array of up to 16 names on the versioned known-faces collections, filled at publish from the roster; filtered per camera department (D-049)"},
     "collections": [
       "FACE_DATA_COLLECTION_FOR_COSINE",
       "FACE_DATA_STAGING_COLLECTION_FOR_COSINE"
@@ -55,7 +62,6 @@
     "DISPLAY-FACE-DATASET": {"dvc_md5": "80e9276468ddcb23eae6ff8bcce6044b.dir", "files": 1, "bytes": 220557}
   },
   "unverified": {
-    "inference_service.image_digest": "Printed by the insightface-image workflow for the current InsightFace-REST/src tree (tag v0.9.5.0-<tree>)",
     "detector.engine_sha256": "On the GPU host: sha256sum of the built scrfd_10g_gnkps TensorRT engine under the InsightFace-REST models volume",
     "recognizer.engine_sha256": "On the GPU host: sha256sum of the built w600k_r50 TensorRT engine under the InsightFace-REST models volume"
   }
