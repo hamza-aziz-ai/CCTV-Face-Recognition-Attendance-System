@@ -119,6 +119,8 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #97 | 2026-11-02 17:58 | 19m | 3m | +7/-4 1f | ci: push submodule pins with GITHUB_TOKEN, so SUBMODULES_TOKEN stays read-only |
 | #98 | 2026-11-03 02:40 | n/a (night) | 4m | +85/-9 5f | ci: build arm64 images for the Jetson on GitHub's arm64 runners |
 | #99 | 2026-11-03 03:38 | 58m | 6m | +88/-133 6f | ci: publish the images CI tested and merge the small jobs, to save Actions minutes |
+| #100 | 2026-11-03 08:17 | n/a (gap over 3h) | 13m | +254/-30 8f | feat(camera): decode camera streams on the GPU, with the CPU as fallback |
+| #101 | 2026-11-03 10:00 | 1h 43m | 16m | +108/-107 9f | chore(insightface): one image for amd64 and arm64 on TensorRT 26.03, to match DeepStream 9.1 |
 
 ## Incidents that cost time
 
