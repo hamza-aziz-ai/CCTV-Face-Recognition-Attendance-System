@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.10.0 (2026-11-03)
+
+## What's Changed
+* ci: build arm64 images for the Jetson on GitHub's arm64 runners by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/98
+* ci: publish the images CI tested and merge the small jobs, to save Actions minutes by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/99
+* feat(camera): decode camera streams on the GPU, with the CPU as fallback by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/100
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.9.3...v2.10.0
+
 ## v2.9.3 (2026-11-02)
 
 ## What's Changed
