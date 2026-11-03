@@ -232,7 +232,7 @@ def withdraw_consent(consent_id: str, caller: dict = Depends(enroller)):
         if not db.fetchone():
             return error(404, "consent_not_found")
         db.execute("""UPDATE enrolment_jobs SET status = 'rejected', finished_at = now(),
-                             problems = '[{"pose": null, "problem": "consent withdrawn"}]'
+                             problems = '[{"pose": null, "problem": "consent withdrawn", "code": "withdrawn"}]'
                       WHERE consent_id::text = %s AND status = 'pending' RETURNING id, poses""", (consent_id,))
         cancelled = db.fetchall()
     for job in cancelled:

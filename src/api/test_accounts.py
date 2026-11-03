@@ -252,7 +252,7 @@ def check_enrolment():
 
     # Withdrawal cancels the open job and deletes its photos at once
     assert requests.delete(f"{BASE}/v1/consents/{consent_id}", headers=bearer).status_code == 202
-    assert requests.get(f"{BASE}/v1/enrolments/{job_id}", headers=bearer).json() == {"status": "rejected", "problems": [{"pose": None, "problem": "consent withdrawn"}]}
+    assert requests.get(f"{BASE}/v1/enrolments/{job_id}", headers=bearer).json() == {"status": "rejected", "problems": [{"pose": None, "problem": "consent withdrawn", "code": "withdrawn"}]}
     assert PHOTOS.objects == {}
     assert upload("k3")[1]().json() == {"error": "no_active_consent"}
     print("enrolment ok (bearer login, roles, registration with ID rules, roster paging, notice and consent, idempotency, one open job, withdrawal deletes photos)")

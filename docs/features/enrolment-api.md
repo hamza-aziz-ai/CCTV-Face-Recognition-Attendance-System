@@ -16,7 +16,7 @@ Through the proxy as `https://<site host>/api/...`; the proxy strips `/api`.
 | `POST /api/v1/consents` | same | `{person_id, notice_version, captured_at, method: "staff_attested_in_app"}` to 201 `{consent_id}` |
 | `DELETE /api/v1/consents/{id}` | same | Withdraws the consent and cancels its open job, deleting its photos; 202 `{deletion_id}`. Deleting an accepted enrolment is 8e. |
 | `POST /api/v1/enrolments` | same | Multipart: `person_id`, `consent_id`, optional `reason`, one part per pose named by the pose. Needs `Idempotency-Key`. 202 `{job_id}` once every photo is in the bucket and the job is committed. |
-| `GET /api/v1/enrolments/{job_id}` | same | `{status: pending\|accepted\|rejected, problems: [{pose, problem}]}`; `pose` is null for a set-level problem |
+| `GET /api/v1/enrolments/{job_id}` | same | `{status: pending\|accepted\|rejected, problems: [{pose, problem, code}]}`; `pose` is null for a set-level problem. `problem` is text for display; `code` is stable for the app to act on: `already_enrolled` (a retake can't fix it; check the roster), `photo_set`, `file`, `too_small`, `face_count`, `low_confidence`, `blurred`, `mismatch`, `pose`, `expired`, `withdrawn`, or `other`. Jobs from before 2026-11-04 have no `code`. |
 
 Errors are `{"error": code}`, the codes the app maps: `signed_out` (401), `role_cannot_enrol` (403), `no_notice` (503), `notice_version_superseded`, `no_active_consent`, `invalid_pose_set`, `not_jpeg`, `reason_required`, `invalid_reason` (422), `photo_too_large`, `body_too_large` (413), `idempotency_key_required` (400), `idempotency_key_reused` (409), and `enrolment_open` (409, with the open `job_id`). The same key with the same body returns the same job.
 

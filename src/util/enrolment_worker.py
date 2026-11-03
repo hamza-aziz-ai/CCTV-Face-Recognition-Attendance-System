@@ -51,7 +51,7 @@ def connect():
 def expire(conn, store):
     with conn, conn.cursor() as db:
         db.execute("""UPDATE enrolment_jobs SET status = 'expired', finished_at = now(),
-                             problems = '[{"pose": null, "problem": "not checked within the time limit; retake the photos"}]'
+                             problems = '[{"pose": null, "problem": "not checked within the time limit; retake the photos", "code": "expired"}]'
                       WHERE status = 'pending' AND created_at < now() - make_interval(hours => %s) RETURNING id, poses""",
                    (ENROLMENT_PENDING_HOURS,))
         jobs = db.fetchall()
