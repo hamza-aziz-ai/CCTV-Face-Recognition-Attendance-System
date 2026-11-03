@@ -307,6 +307,16 @@ def proxy_route(client, host):
 		respond /openapi.json 404
 		reverse_proxy {api}
 	}}
+	handle /live/* {{
+		forward_auth {api} {{
+			uri /live/check
+			@signed_out status 401
+			handle_response @signed_out {{
+				redir * /auth/sign-in
+			}}
+		}}
+		reverse_proxy {project}-live-video-1:8888
+	}}
 	handle {{
 		forward_auth {api} {{
 			uri /auth/check

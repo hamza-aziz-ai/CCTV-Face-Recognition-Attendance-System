@@ -1,4 +1,4 @@
-"""The HTTPS route of deploy/provision.py on a real Caddy, with stand-ins for the API and display: signed-out visitors go to the sign-in page, and the API's docs stay closed. Needs Docker. Run: python3 -I deploy/test_proxy.py"""
+"""The HTTPS route of deploy/provision.py on a real Caddy, with stand-ins for the API and display: signed-out visitors go to the sign-in page, the API's docs stay closed, and live video reaches only roles allowed to watch. Needs Docker. Run: python3 -I deploy/test_proxy.py"""
 import os
 import subprocess
 import sys
@@ -16,8 +16,15 @@ PORT = "18443"
 HOST = "acme.localhost"
 API = """:8000 {
 	@signed_in header Cookie *good*
+	@operator header Cookie *operator*
 	handle /auth/check {
 		respond @signed_in 204
+		respond @operator 204
+		respond 401
+	}
+	handle /live/check {
+		respond @signed_in 204
+		respond @operator 403
 		respond 401
 	}
 	respond "api {path}" 200
@@ -25,6 +32,10 @@ API = """:8000 {
 """
 DISPLAY = """:9090 {
 	respond "display {path}" 200
+}
+"""
+LIVE = """:8888 {
+	respond "live {path}" 200
 }
 """
 
@@ -65,12 +76,13 @@ def test():
             pass
         else:
             raise AssertionError("a host name with Caddy syntax was accepted")
-        names = ("cctv-acme-mfr-api-service-1", "cctv-acme-kafka-webapp-1", "proxytest-caddy")
+        names = ("cctv-acme-mfr-api-service-1", "cctv-acme-kafka-webapp-1", "cctv-acme-live-video-1", "proxytest-caddy")
         docker("network", "create", NETWORK)
         try:
             stand_in(names[0], API, folder)
             stand_in(names[1], DISPLAY, folder)
-            docker("run", "-d", "--name", names[2], "--network", NETWORK, "-p", f"127.0.0.1:{PORT}:443", "-v", f"{ROOT / 'STANDALONE-SERVICES/Proxy/Caddyfile'}:/etc/caddy/Caddyfile:ro", "-v", f"{sites.parent / 'proxy'}:/routes:ro", IMAGE)
+            stand_in(names[2], LIVE, folder)
+            docker("run", "-d", "--name", names[3], "--network", NETWORK, "-p", f"127.0.0.1:{PORT}:443", "-v", f"{ROOT / 'STANDALONE-SERVICES/Proxy/Caddyfile'}:/etc/caddy/Caddyfile:ro", "-v", f"{sites.parent / 'proxy'}:/routes:ro", IMAGE)
             for _ in range(40):
                 if fetch("/auth/sign-in")[0] == "200":
                     break
@@ -89,10 +101,15 @@ def test():
             for closed in ("/api/docs", "/api/redoc", "/api/openapi.json"):
                 assert fetch(closed)[0] == "404", closed
             assert fetch("/docs")[0] == "302"
+            # Live video (D-047): signed-out visitors go to sign-in, enrolment staff are refused, viewers reach MediaMTX
+            live = fetch("/live/maingate_entry_cctv-camera-1/index.m3u8")
+            assert live[0] == "302" and live[1].endswith("/auth/sign-in"), live
+            assert fetch("/live/maingate_entry_cctv-camera-1/", "session=operator")[0] == "403"
+            assert fetch("/live/maingate_entry_cctv-camera-1/", "session=good")[::2] == ("200", "live /live/maingate_entry_cctv-camera-1/")
         finally:
             docker("rm", "-f", *names, check=False)
             docker("network", "rm", NETWORK, check=False)
-    print("proxy ok (signed-out visitors sent to sign-in, display and WebSockets need a session, API routes reachable, API docs closed, bad host names refused)")
+    print("proxy ok (signed-out visitors sent to sign-in, display and WebSockets need a session, API routes reachable, API docs closed, live video for viewers only, bad host names refused)")
 
 
 if __name__ == "__main__":

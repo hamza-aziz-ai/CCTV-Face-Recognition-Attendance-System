@@ -19,7 +19,8 @@ sys.path[:0] = [HERE, os.path.dirname(HERE)]
 os.chdir(tempfile.mkdtemp())
 os.makedirs("src/Camera-Configuration")
 with open("src/Camera-Configuration/camera_configuration.json", "w") as f:
-    json.dump({"maingate": {"api-endpoint": "http://127.0.0.1:9/erp", "cctv-cameras": {"entry": {"cctv-camera-1": {}}, "exit": None}}}, f)
+    json.dump({"maingate": {"api-endpoint": "http://127.0.0.1:9/erp", "cctv-cameras": {"entry": {"cctv-camera-1": {}, "cctv-camera-2": {
+        "username": "u", "password": "p@ss", "ip_address": "10.0.0.2", "port": 554, "endpoint": "stream1", "masking-coordinates": None}}, "exit": None}}}, f)
 
 from parameters import LOGIN_ATTEMPTS, POSTGRESQL_DATABASE, POSTGRESQL_HOST, POSTGRESQL_PORT, postgres_login  # noqa: E402
 
@@ -75,11 +76,19 @@ def test():
         else:
             raise AssertionError(bad)
 
+    with psycopg2.connect(dbname=POSTGRESQL_DATABASE, **LOGIN) as conn, conn.cursor() as cursor:
+        # The database controller creates this table on a host; the live view reads each camera's latest rows from it
+        cursor.execute("CREATE TABLE IF NOT EXISTS recognition_results (person_id TEXT, camera_name TEXT, recognition_date DATE, recognition_time TIME, confidence_score REAL)")
+        cursor.executemany("INSERT INTO recognition_results VALUES (%s, %s, CURRENT_DATE, %s, %s)",
+                           [(f"p{i}", "maingate_entry_cctv-camera-2", f"10:{i:02d}:00", 0.5 + i / 100) for i in range(12)] +
+                           [("q", "maingate_exit_cctv-camera-1", "09:00:00", None)])
+
     route = "/fetch_module_data?date=01-11-2026&module=maingate"
     # No login, and the old key in the URL, are refused
     assert get(route) == 401
     assert get(f"{route}&api_key=anything") == 401
     assert get("/auth/check") == 401
+    assert get("/live/check") == 401 and get("/live/events") == 401
     assert requests.post(f"{BASE}/manual_post?date=01-11-2026&location=maingate").status_code == 401
 
     # Role matrix: every role reads, only the client admin posts to the ERP
@@ -90,6 +99,19 @@ def test():
         assert get(route, headers) not in (401, 403), name
         assert get("/auth/check", headers) == 204, name
         assert (requests.post(write, headers=headers).status_code == 403) != may_write, name
+        # Live video (D-047): administrators and viewers watch, enrolment staff do not
+        may_watch = name != "staff"
+        assert get("/live/check", headers) == (204 if may_watch else 403), name
+        assert get("/live/cameras", headers) == (200 if may_watch else 403), name
+        assert get("/live/events", headers) == (200 if may_watch else 403), name
+        assert get("/live", headers) == (200 if may_watch else 403), name
+
+    _, headers = sign_in("guest")
+    latest = requests.get(f"{BASE}/live/events", headers=headers).json()
+    entry = latest["maingate_entry_cctv-camera-2"]
+    assert len(entry) == 10 and entry[0]["person_id"] == "p11" and entry[0]["score"] == 0.61, entry[:2]
+    assert latest["maingate_exit_cctv-camera-1"] == [{"person_id": "q", "date": entry[0]["date"], "time": "09:00:00", "score": None}]
+    assert requests.get(f"{BASE}/live/cameras", headers=headers).json() == [{"name": "maingate_entry_cctv-camera-2", "path": "maingate_entry_cctv-camera-2"}]
 
     # CSRF: a session's write needs the token, a read does not
     _, headers = sign_in("boss")
@@ -150,8 +172,25 @@ def test():
     assert requests.post(f"{BASE}/auth/login", json={"username": "nobody", "password": GOOD}).status_code == 401
 
     server.should_exit = True
-    print("accounts ok (role matrix, CSRF, logout, expiry, disabled users, password change, machine tokens, throttling, no key in the URL)")
+    print("accounts ok (role matrix, live view roles and latest recognitions, CSRF, logout, expiry, disabled users, password change, machine tokens, throttling, no key in the URL)")
+
+
+def test_live_config():
+    """MediaMTX serves HLS only, pulls each camera on demand over TCP, and its file, which holds passwords, is private."""
+    import live
+    text = live.mediamtx_config(live.cameras())
+    for line in ("rtsp: no", "rtmp: no", "webrtc: no", "srt: no", "moq: no", "api: no", "hls: yes", "  live/maingate_entry_cctv-camera-2:",
+                 '    source: "rtsp://u:p%40ss@10.0.0.2:554/stream1"', "    sourceOnDemand: yes", "    rtspTransport: tcp"):
+        assert line in text.splitlines(), line
+    assert "cctv-camera-1" not in text, "an entry with no address must be left out"
+    assert live.mediamtx_config({}).splitlines()[-1] == "paths: {}"
+    assert live.path_name("gate 1/a") == "gate_1_a"
+    path = os.path.join(tempfile.mkdtemp(), "mediamtx.yml")
+    assert live.write_config(path) == 1 and open(path).read() == text
+    assert os.stat(path).st_mode & 0o077 == 0, oct(os.stat(path).st_mode)
+    print("live view config ok (HLS only, on demand over TCP, unfinished cameras left out, file private)")
 
 
 if __name__ == "__main__":
+    test_live_config()
     test()
