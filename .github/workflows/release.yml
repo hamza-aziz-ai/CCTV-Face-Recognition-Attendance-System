@@ -29,6 +29,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       tag: ${{ steps.plan.outputs.tag }}
+      last: ${{ steps.plan.outputs.last }}
+      build: ${{ steps.plan.outputs.build }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,6 +61,17 @@ jobs:
           tag="v$major.$minor.$patch"
           echo "Releasing $tag ($BUMP) at $GITHUB_SHA; previous: ${last:-none}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # The app images are built from src/, requirements.txt and the ROI page only (see ci.yml). When none of those, the
+          # Dockerfiles, .dockerignore or these workflows changed since the last release, its images are reused under the
+          # new tag instead of rebuilt: a display pin alone cost about 60 billed minutes of identical builds (2026-11-03)
+          # Captured first: with pipefail, grep -q closing the pipe early could make the test read as "unchanged"
+          changed=$(git diff --name-only "${last:-HEAD}" HEAD)
+          if [ -n "$last" ] && ! grep -qE '^src/|^requirements\.txt$|^Custom-ROI-Provisioning/|^[^/]*Dockerfile$|^\.dockerignore$|^\.github/workflows/(ci|release)\.yml$' <<<"$changed"; then
+            echo "Image inputs unchanged since $last: its images are reused"; build=false
+          else
+            build=true
+          fi
+          printf 'last=%s\nbuild=%s\n' "$last" "$build" >> "$GITHUB_OUTPUT"
 
   # Every CI gate again on the exact commit being released (a squash merge is a new commit). Its image jobs push the
   # images that passed as <tag>-amd64 and <tag>-arm64 (arm64 is the Jetson, D-044), so nothing is built twice.
@@ -68,6 +81,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       tag: ${{ needs.plan.outputs.tag }}
+      images: ${{ needs.plan.outputs.build == 'true' }}
     permissions:
       contents: read
       pull-requests: read
@@ -85,6 +99,8 @@ jobs:
       packages: write
     env:
       TAG: ${{ needs.plan.outputs.tag }}
+      LAST: ${{ needs.plan.outputs.last }}
+      BUILD: ${{ needs.plan.outputs.build }}
       TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -92,6 +108,8 @@ jobs:
           set -euo pipefail
           echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           for name in $(grep -oE 'ghcr\.io/hamza-aziz-ai/cctv-face-recognition-[a-z-]+:\$\{IMAGE_TAG' docker-compose-main.yml | cut -d: -f1 | sort -u); do
+            # Reused: the last release's index, both architectures, under the new tag (plan decided nothing they are built from changed)
+            if [ "$BUILD" = false ]; then docker buildx imagetools create -t "$name:$TAG" "$name:$LAST"; continue; fi
             docker buildx imagetools create -t "$name:$TAG" "$name:$TAG-amd64" "$name:$TAG-arm64"
           done
 

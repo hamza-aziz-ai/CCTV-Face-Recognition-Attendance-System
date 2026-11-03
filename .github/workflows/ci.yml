@@ -11,6 +11,10 @@ on:
         description: Release tag; the images that pass are pushed as <tag>-<arch>
         type: string
         default: ''
+      images:
+        description: Build and test the images; a release whose image inputs are unchanged reuses the last release's
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -37,20 +41,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      # Whether a PR changes anything an image is built from. The image builds used most of the monthly Actions minutes,
-      # and docs-only PRs were common. Pushes and release runs always build.
+      # Whether a PR changes anything an image is built from. The image builds used most of the monthly Actions minutes.
+      # Pushes build; a release builds unless its image inputs are unchanged since the last release (release.yml).
       - id: diff
         env:
           EVENT: ${{ github.event_name }}
+          IMAGES: ${{ inputs.images }}
         run: |
           set -euo pipefail
           both='arches=["amd64","arm64"]'
-          if [ "$EVENT" != pull_request ]; then printf 'images=true\n%s\n' "$both" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$EVENT" != pull_request ]; then printf 'images=%s\n%s\n' "${IMAGES:-true}" "$both" >> "$GITHUB_OUTPUT"; exit 0; fi
           changed=$(git diff --name-only "origin/$BASE...HEAD")
           echo "$changed"
-          # Only docs/, Markdown, InsightFace-REST (built by insightface-image.yml) or the DeepStream dev recipe (built by
-          # hand on each machine, never in CI): nothing an app image is built from
-          if grep -qvE '^docs/|\.md$|^STANDALONE-SERVICES/InsightFace-REST/|^deepstream/' <<<"$changed"; then echo "images=true"; else echo "images=false"; fi >> "$GITHUB_OUTPUT"
+          # What the app images are built from: every Dockerfile copies only src/, requirements.txt and the ROI page, and
+          # .dockerignore keeps the rest out, so a compose pin or a deploy script builds no image (the checks here still
+          # cover them). These workflows count too, as the image tests live here. Keep in step with release.yml's plan
+          if grep -qE '^src/|^requirements\.txt$|^Custom-ROI-Provisioning/|^[^/]*Dockerfile$|^\.dockerignore$|^\.github/workflows/(ci|release)\.yml$' <<<"$changed"; then echo "images=true"; else echo "images=false"; fi >> "$GITHUB_OUTPUT"
           # arm64 (Jetson, D-044) is built on PRs only when what it is built from changes: the app Dockerfiles and
           # requirements at the top level or the ROI page's, or these workflows. Releases always build it
           if grep -qE '^[^/]*Dockerfile|^(Custom-ROI-Provisioning/)?requirements\.txt$|^\.github/workflows/(ci|release)\.yml$' <<<"$changed"; then echo "$both"; else echo 'arches=["amd64"]'; fi >> "$GITHUB_OUTPUT"
