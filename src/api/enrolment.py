@@ -6,6 +6,7 @@ API container to manage the roster:
   python3 src/api/enrolment.py import-persons FILE.csv     columns: person_id,name,employee_code,department
 """
 import csv
+import re
 import email.parser
 import email.policy
 import hashlib
@@ -66,6 +67,8 @@ CREATE TABLE IF NOT EXISTS enrolment_jobs (
     finished_at TIMESTAMPTZ
 );
 CREATE UNIQUE INDEX IF NOT EXISTS enrolment_jobs_one_open ON enrolment_jobs (person_id) WHERE status = 'pending';
+-- "AB12" and "ab12" would share a folder on Windows and macOS, so they are one person
+CREATE UNIQUE INDEX IF NOT EXISTS persons_id_any_case ON persons (lower(person_id));
 """
 
 router = APIRouter(prefix="/v1")
@@ -147,6 +150,46 @@ def persons(query: str = "", limit: int = 50, cursor: str = "", caller: dict = D
                          **({"department": r["department"]} if r["department"] else {}), "enrolment_status": status_of(r)}
                         for r in rows],
             "next_cursor": rows[-1]["person_id"] if more else None}
+
+
+# The person's organisational or institutional ID, shown large on the display (owner, 2026-11-03). It names a folder
+# and a key prefix, so it starts with a letter or digit (no "." or ".." or hidden folder), and Windows device names
+# are refused, as the site folders sit on a Windows host. In Milvus it is only a field value, so "." and "-" are safe.
+PERSON_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+WINDOWS_DEVICES = re.compile(r"(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?", re.IGNORECASE)
+
+
+def person_id_problem(person_id: str) -> Optional[str]:
+    if not PERSON_ID.fullmatch(person_id or "") or WINDOWS_DEVICES.fullmatch(person_id):
+        return "invalid_person_id"
+    return None
+
+
+class PersonIn(BaseModel):
+    person_id: str
+    name: str
+    department: Optional[str] = None
+
+
+@router.post("/persons", status_code=201)
+def register_person(person: PersonIn, caller: dict = Depends(enroller)):
+    """Staff register a person with their organisational ID and full name; the display shows the ID large and the
+    name beneath it. The ID is stored as typed, and unique in any letter case."""
+    if person_id_problem(person.person_id):
+        return error(422, "invalid_person_id")
+    name, department = person.name.strip(), (person.department or "").strip() or None
+    if not 1 <= len(name) <= 120 or (department and len(department) > 120):
+        return error(422, "invalid_name")
+    with cursor_source(commit=True) as db:
+        db.execute("SELECT 1 FROM persons WHERE lower(person_id) = lower(%s)", (person.person_id,))
+        if db.fetchone():
+            return error(409, "person_exists")
+        db.execute("INSERT INTO persons (person_id, name, department) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING RETURNING person_id",
+                   (person.person_id, name, department))
+        if not db.fetchone():  # registered by someone else a moment ago
+            return error(409, "person_exists")
+    api_logger.info(f"Person {person.person_id} registered by {caller['name']}")
+    return {"person_id": person.person_id}
 
 
 class ConsentIn(BaseModel):
@@ -308,8 +351,8 @@ def command(args: list) -> str:
         cursor.execute(SCHEMA)
         for row in rows:
             person_id, name, code, department = (list(row) + [None, None, None, None])[:4]
-            if not person_id or not name:
-                raise SystemExit(f"person_id and name are required: {row}")
+            if not person_id or not name or person_id_problem(person_id):
+                raise SystemExit(f"a valid person_id (letter or digit first, then letters, digits, . _ -; at most 64) and a name are required: {row}")
             cursor.execute("""INSERT INTO persons (person_id, name, employee_code, department) VALUES (%s, %s, %s, %s)
                               ON CONFLICT (person_id) DO UPDATE SET name = EXCLUDED.name, employee_code = EXCLUDED.employee_code,
                               department = EXCLUDED.department""", (person_id, name, code or None, department or None))

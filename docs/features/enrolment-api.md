@@ -12,6 +12,7 @@ Through the proxy as `https://<site host>/api/...`; the proxy strips `/api`.
 | `GET /api/v1/server-info` | no login | `{client_id, client_name, notice_version, notice_url}` |
 | `GET /api/v1/notice` | no login | The client's notice from the site's `enrolment/notice.json`, or 503 `no_notice` until it exists |
 | `GET /api/v1/persons?query=&limit=50&cursor=` | `client_admin`, `enrolment_operator` | The roster, paged by `person_id`, with `enrolment_status` `none`, `pending` or `enrolled` |
+| `POST /api/v1/persons` | `client_admin`, `enrolment_operator` | Registers a person: `{person_id, name, department?}` to 201 `{person_id}`. `person_id` is the organisational or institutional ID: a letter or digit first, then up to 63 of `A-Z a-z 0-9 . _ -`, no Windows device names (`CON`, `NUL`, `COM1`...), unique in any letter case (409 `person_exists`). `name` is 1 to 120 characters. |
 | `POST /api/v1/consents` | same | `{person_id, notice_version, captured_at, method: "staff_attested_in_app"}` to 201 `{consent_id}` |
 | `DELETE /api/v1/consents/{id}` | same | Withdraws the consent and cancels its open job, deleting its photos; 202 `{deletion_id}`. Deleting an accepted enrolment is 8e. |
 | `POST /api/v1/enrolments` | same | Multipart: `person_id`, `consent_id`, optional `reason`, one part per pose named by the pose. Needs `Idempotency-Key`. 202 `{job_id}` once every photo is in the bucket and the job is committed. |
@@ -19,7 +20,11 @@ Through the proxy as `https://<site host>/api/...`; the proxy strips `/api`.
 
 Errors are `{"error": code}`, the codes the app maps: `signed_out` (401), `role_cannot_enrol` (403), `no_notice` (503), `notice_version_superseded`, `no_active_consent`, `invalid_pose_set`, `not_jpeg`, `reason_required`, `invalid_reason` (422), `photo_too_large`, `body_too_large` (413), `idempotency_key_required` (400), `idempotency_key_reused` (409), and `enrolment_open` (409, with the open `job_id`). The same key with the same body returns the same job.
 
-The roster is the client's to fill, in the API container:
+## On the display
+
+The display shows the person's ID large and the registered name beneath it (owner, 2026-11-03). The portrait server answers `POST /post_names` with `{"messages": [ids]}` beside `/post_images`: a JSON object with every requested ID and its name as a plain string, or null when unknown or when the database cannot be reached. Names are never logged; a failed lookup logs only the error type. A display that gets no name shows the ID alone.
+
+Besides registration in the app, the roster can be filled in the API container:
 
 ```bash
 python3 src/api/enrolment.py add-person PERSON_ID "NAME" [EMPLOYEE_CODE] [DEPARTMENT]

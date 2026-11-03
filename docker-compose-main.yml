@@ -192,6 +192,14 @@ services:
   display-image-server:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-front-face-image-display:${IMAGE_TAG:-v-beta}
     restart: unless-stopped
+    # /post_names reads registered names from this client's persons table for the display (D-048)
+    environment:
+      POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
+      PG_APP_USER: ${PG_APP_USER:-}
+      PG_APP_PASSWORD: ${PG_APP_PASSWORD:-}
+      # The admin login, used only while master.env has LEGACY_SHARED_SERVICES=1 (owner, until step 3c, D-037)
+      POSTGRES_USER: ${POSTGRES_USER:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./DISPLAY-FACE-DATASET:/Multi-Person-Face-Recognition/DISPLAY-FACE-DATASET
