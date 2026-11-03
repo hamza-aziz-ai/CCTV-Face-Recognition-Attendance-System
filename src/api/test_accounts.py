@@ -32,6 +32,10 @@ admin_connection.cursor().execute(f'CREATE DATABASE "{POSTGRESQL_DATABASE}"')
 
 import accounts  # noqa: E402
 import app as api  # noqa: E402
+import enrolment  # noqa: E402
+from enrolment_store import MemoryStore  # noqa: E402
+
+api.enrolment_store_override = PHOTOS = MemoryStore()  # MinIO stands in as a dict; the real bucket is tested live
 
 BASE = "http://127.0.0.1:8123"
 GOOD = "correct horse battery"
@@ -171,8 +175,75 @@ def test():
     assert requests.post(f"{BASE}/auth/login", json={"username": "boss", "password": "x" * 129}).status_code == 422
     assert requests.post(f"{BASE}/auth/login", json={"username": "nobody", "password": GOOD}).status_code == 401
 
+    check_enrolment()
     server.should_exit = True
     print("accounts ok (role matrix, live view roles and latest recognitions, CSRF, logout, expiry, disabled users, password change, machine tokens, throttling, no key in the URL)")
+
+
+def check_enrolment():
+    """The enrolment app's contract (D-048): codes it maps, idempotency, one open job, withdrawal, bearer login."""
+    cli("add-user", "operator", "enrolment_operator", stdin=GOOD)
+    cli("add-user", "watcher", "viewer", stdin=GOOD)
+    enrolment.command(["add-person", "p-001", "Asha Rao", "E-1", "Stores"])
+    enrolment.command(["add-person", "p-002", "Ravi Kumar"])
+    info = requests.get(f"{BASE}/v1/server-info").json()  # no login: the app checks the client before anyone signs in
+    assert info == {"client_id": "owner", "client_name": "owner", "notice_version": None, "notice_url": "/api/v1/notice"}, info
+    assert requests.get(f"{BASE}/v1/notice").json() == {"error": "no_notice"}
+
+    r = requests.post(f"{BASE}/auth/token", json={"username": "operator", "password": GOOD})
+    assert r.status_code == 200 and set(r.json()) == {"token", "role", "expires_at"} and "set-cookie" not in r.headers, r.text
+    bearer = {"Authorization": f"Bearer {r.json()['token']}"}
+    viewer = {"Authorization": f"Bearer {requests.post(f'{BASE}/auth/token', json={'username': 'watcher', 'password': GOOD}).json()['token']}"}
+    assert requests.post(f"{BASE}/auth/token", json={"username": "operator", "password": "wrong password!"}).status_code == 401
+    assert requests.get(f"{BASE}/v1/persons").json() == {"error": "signed_out"}
+    assert requests.get(f"{BASE}/v1/persons", headers=viewer).json() == {"error": "role_cannot_enrol"}
+    roster = requests.get(f"{BASE}/v1/persons?query=asha", headers=bearer).json()
+    assert roster == {"persons": [{"person_id": "p-001", "name": "Asha Rao", "employee_code": "E-1", "department": "Stores",
+                                   "enrolment_status": "none"}], "next_cursor": None}, roster
+    page = requests.get(f"{BASE}/v1/persons?limit=1", headers=bearer).json()
+    assert page["next_cursor"] == "p-001" and len(page["persons"]) == 1
+    assert requests.get(f"{BASE}/v1/persons?limit=1&cursor=p-001", headers=bearer).json()["persons"][0]["person_id"] == "p-002"
+
+    consent = {"person_id": "p-001", "notice_version": "1", "captured_at": "2026-11-03T12:00:00+05:30", "method": "staff_attested_in_app"}
+    assert requests.post(f"{BASE}/v1/consents", json=consent, headers=bearer).json() == {"error": "no_notice"}
+    os.makedirs("enrolment", exist_ok=True)
+    with open("enrolment/notice.json", "w") as f:
+        json.dump({"version": "2", "effective_date": "2026-11-03", "controller": "Test", "contact": {"name": "x", "email": "x@example.com"}, "sections": []}, f)
+    assert requests.get(f"{BASE}/v1/server-info").json()["notice_version"] == "2"
+    assert requests.post(f"{BASE}/v1/consents", json=consent, headers=bearer).json() == {"error": "notice_version_superseded"}
+    r = requests.post(f"{BASE}/v1/consents", json={**consent, "notice_version": "2"}, headers=bearer)
+    assert r.status_code == 201, r.text
+    consent_id = r.json()["consent_id"]
+
+    jpeg = bytes.fromhex("ffd8ffe0") + b"0" * 100
+    def upload(key, poses=enrolment.POSES, person="p-001", consent_to=None, **extra):
+        files = [(pose, (f"{pose}.jpg", jpeg, "image/jpeg")) for pose in poses]
+        prepared = requests.Request("POST", f"{BASE}/v1/enrolments", files=files,
+                                    data={"person_id": person, "consent_id": consent_to or consent_id, **extra}).prepare()
+        return prepared, (lambda body=prepared.body, headers=None: requests.post(
+            f"{BASE}/v1/enrolments", data=body, headers={**bearer, "Content-Type": prepared.headers["Content-Type"], **({"Idempotency-Key": key} if key else {}), **(headers or {})}))
+    _, send = upload(None)
+    assert send().json() == {"error": "idempotency_key_required"}
+    assert upload("k0", enrolment.POSES[:4])[1]().json() == {"error": "invalid_pose_set"}
+    assert upload("k0", person="p-002")[1]().json() == {"error": "no_active_consent"}
+    prepared, send = upload("k1")
+    first = send()
+    assert first.status_code == 202, first.text
+    job_id = first.json()["job_id"]
+    assert sorted(PHOTOS.objects) == sorted(f"jobs/{job_id}/{pose}.jpg" for pose in enrolment.POSES)
+    assert send().json() == {"job_id": job_id}, "the same key and body must return the same job"
+    assert upload("k1", reason="other")[1]().json() == {"error": "idempotency_key_reused"}
+    assert upload("k2")[1]().json() == {"error": "enrolment_open", "job_id": job_id}
+    assert requests.get(f"{BASE}/v1/enrolments/{job_id}", headers=bearer).json() == {"status": "pending", "problems": []}
+    assert requests.get(f"{BASE}/v1/enrolments/{job_id}", headers=viewer).status_code == 403
+    assert requests.get(f"{BASE}/v1/persons?query=p-001", headers=bearer).json()["persons"][0]["enrolment_status"] == "pending"
+
+    # Withdrawal cancels the open job and deletes its photos at once
+    assert requests.delete(f"{BASE}/v1/consents/{consent_id}", headers=bearer).status_code == 202
+    assert requests.get(f"{BASE}/v1/enrolments/{job_id}", headers=bearer).json() == {"status": "rejected", "problems": [{"pose": None, "problem": "consent withdrawn"}]}
+    assert PHOTOS.objects == {}
+    assert upload("k3")[1]().json() == {"error": "no_active_consent"}
+    print("enrolment ok (bearer login, roles, roster paging, notice and consent, idempotency, one open job, withdrawal deletes photos)")
 
 
 def test_live_config():

@@ -105,6 +105,16 @@ def check_not_enrolled(matches, person_id, tolerance):
             for stem, (name, score) in matches.items() if name != person_id and score >= tolerance]
 
 
+def as_problems(lines):
+    """Problem lines to the enrolment app's {pose, problem}: 'left_30: text' names its photo, while set-level lines such
+    as 'missing photo: front' carry no pose."""
+    problems = []
+    for line in lines:
+        pose, sep, text = line.partition(": ")
+        problems.append({"pose": pose, "problem": text} if sep and " " not in pose else {"pose": None, "problem": line})
+    return problems
+
+
 def demo():
     assert check_files(POSES) == []
     assert check_files(POSES + GLASSES) == []
@@ -145,6 +155,8 @@ def demo():
     assert check_not_enrolled({"front": ("hamza_aziz", 0.9)}, "hamza_aziz", 0.5) == []
     assert check_not_enrolled({"front": ("someone", 0.3)}, "hamza_aziz", 0.5) == []
     assert "someone" in check_not_enrolled({"front": ("someone", 0.8)}, "hamza_aziz", 0.5)[0]
+    assert as_problems(["left_30: the face is blurred (sharpness 14, below 40)", "missing photo: front"]) == [
+        {"pose": "left_30", "problem": "the face is blurred (sharpness 14, below 40)"}, {"pose": None, "problem": "missing photo: front"}]
     print("enrolment checks ok")
 
 

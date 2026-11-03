@@ -7,3 +7,4 @@ requests~=2.34.2
 apscheduler~=3.11.3
 python-dotenv~=1.2.4
 opencv-python~=5.0.0.93
+minio~=7.2.20

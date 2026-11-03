@@ -39,7 +39,10 @@ from parameters import (
 )
 from custom_logging import api_logger
 import accounts
+import enrolment
 import live
+
+enrolment_store_override = None  # tests set an enrolment_store.MemoryStore here before the app starts
 
 # -------------------- Global Configuration & Globals --------------------
 
@@ -309,6 +312,8 @@ async def lifespan(app: FastAPI):
     live.setup(get_db_cursor)
     # MediaMTX starts after this service is healthy and reloads the file whenever it changes (D-047)
     live.write_config()
+    # The enrolment app's API (D-048); photos go to this client's bucket, tests pass a memory store instead
+    enrolment.setup(get_db_cursor, photo_store=enrolment_store_override)
 
     # Load camera configuration (can be cached globally if needed)
     load_camera_configuration()
@@ -328,6 +333,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.include_router(accounts.router)
 app.include_router(live.router)
+app.include_router(enrolment.router)
+
+
+@app.exception_handler(enrolment.Refused)
+def refused(request, exc: enrolment.Refused):
+    return exc.response
 
 # -------------------- API Endpoints --------------------
 

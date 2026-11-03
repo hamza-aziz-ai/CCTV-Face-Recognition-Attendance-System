@@ -121,6 +121,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #99 | 2026-11-03 03:38 | 58m | 6m | +88/-133 6f | ci: publish the images CI tested and merge the small jobs, to save Actions minutes |
 | #100 | 2026-11-03 08:17 | n/a (gap over 3h) | 13m | +254/-30 8f | feat(camera): decode camera streams on the GPU, with the CPU as fallback |
 | #101 | 2026-11-03 10:00 | 1h 43m | 16m | +108/-107 9f | chore(insightface): one image for amd64 and arm64 on TensorRT 26.03, to match DeepStream 9.1 |
+| #102 | 2026-11-03 12:16 | 2h 16m | 12m | +669/-35 17f | feat(live): live view of each camera through its client's MediaMTX, behind the sign-in |
 
 ## Incidents that cost time
 
