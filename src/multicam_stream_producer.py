@@ -32,6 +32,7 @@ from parameters import FRAME_HEIGHT, \
     CAMERA_CONFIGURATION_FILE
 from util.generic_utilities import map_camera_to_kafka_topic_and_partition, resize_roi_to_area, crop_and_mask_roi, \
     camera_stream_url
+from util.video_source import open_stream
 
 # A list of all the active cameras
 cameras = []
@@ -99,8 +100,9 @@ class IPCamera:
         # Create Kafka Producer
         self.producer = create_kafka_producer()
         # initialize the video camera stream and read the first frame
-        # Shared with the ROI tool, so both open the camera the same way
-        self.stream = cv2.VideoCapture(camera_stream_url(camera_config))
+        # The URL is shared with the ROI tool, so both open the camera the same way. VIDEO_DECODE picks the GPU or the
+        # CPU decoder; a region of interest needs full frames, so the GPU does not scale those down
+        self.stream = open_stream(camera_stream_url(camera_config), full_frame=CROP_ROI and self.roi is not None)
         # self.stream = cv2.VideoCapture(f"http://{self.cam_ip}:4747/video")
         # we need to read the first frame to initialize the stream
         # _, _ = self.stream.read()
@@ -181,18 +183,18 @@ class IPCamera:
                 self.is_initialized = False
                 # frame_stats_manager.record_discarded(self.cam_name)
             else:
-                # Create a copy of the original frame
-                frame_copy = self.frame.copy()
-                # rgb_frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB)
-
-                # print(self.roi)
+                # Darkness is judged on the whole scene at FRAME_WIDTH x FRAME_HEIGHT: blurring full camera frames was
+                # the producer's largest CPU cost (23 ms of 39 ms per 1080p frame), and the mean brightness barely changes
                 if CROP_ROI and self.roi is not None:
+                    if DARKNESS_DETECTION:
+                        frame_copy = cv2.resize(self.frame, (FRAME_WIDTH, FRAME_HEIGHT), interpolation=cv2.INTER_AREA)
                     # Separate Region of Interest from the frame
                     roi_frame = crop_and_mask_roi(self.frame, self.roi)
                     self.frame = resize_roi_to_area(roi_frame)
-                elif RESIZE_FRAME:
-                    if self.frame.shape[0] > FRAME_HEIGHT or self.frame.shape[1] > FRAME_WIDTH:
+                else:
+                    if RESIZE_FRAME and (self.frame.shape[0] > FRAME_HEIGHT or self.frame.shape[1] > FRAME_WIDTH):
                         self.frame = cv2.resize(self.frame, (FRAME_WIDTH, FRAME_HEIGHT), interpolation=cv2.INTER_AREA)
+                    frame_copy = self.frame
 
                 if DARKNESS_DETECTION:
                     # Reduce noise from the frame
@@ -338,6 +340,9 @@ def create_camera(camera_name: str, camera_configuration: dict,  shared_buffer):
 
 
 def producer_main(shared_buffer):
+    # Each camera has its own thread; OpenCV's own thread pool on top of them cost about 40% more CPU per frame, measured
+    # on a 1080p stream. This process only runs the producer, so the consumer keeps its threads
+    cv2.setNumThreads(1)
     with open(CAMERA_CONFIGURATION_FILE, "r") as camera_configuration_file:
         camera_configuration_data = json.load(camera_configuration_file)
 

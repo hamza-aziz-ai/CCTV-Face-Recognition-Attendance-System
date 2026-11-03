@@ -101,6 +101,10 @@ RESIZE_FRAME = True
 # Decide whether to crop ROI from camera feed
 CROP_ROI = True
 
+# Video decoder for camera streams, from master.env: cpu (OpenCV, the original path), gpu (NVDEC through FFmpeg, which
+# also scales frames down on the GPU), or auto (gpu, falling back to cpu for a stream the GPU cannot open). See src/util/video_source.py
+VIDEO_DECODE = os.getenv("VIDEO_DECODE", "auto").lower()
+
 # set BATCH_SIZE for face detection
 BATCH_SIZE = 32  # frames per InsightFace request; lower it on a small GPU, 8 for CPU
 
@@ -138,6 +142,10 @@ LIGHTING_ALERT_SECONDS = 30
 ########################################################################################################################
 # InsightFace-REST host; an edge node such as the Jetson sets INSIGHTFACE_HOST in master.env to use its own, while the shared services stay on IP_ADDRESS
 INSIGHTFACE_HOST = os.getenv("INSIGHTFACE_HOST") or f"http://{IP_ADDRESS}"
+
+# How frames travel to InsightFace-REST, from master.env: jpeg (base64 JPEG in JSON, the original) or bmp (uncompressed, in
+# msgpack: less CPU on both ends, about 15x the bytes, so only for InsightFace on the same machine)
+FRAME_TRANSPORT = os.getenv("FRAME_TRANSPORT", "jpeg").lower()
 
 # InsightFace-REST port
 INSIGHTFACE_PORT = "6385"  # the nginx load balancer in front of the InsightFace-REST containers
