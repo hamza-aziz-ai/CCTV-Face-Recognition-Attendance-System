@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.14.1 (2026-11-03)
+
+## What's Changed
+* fix(display): pin Kafka-WebApp v0.7.3, so a refreshed page keeps the down status instead of showing ready by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/107
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.14.0...v2.14.1
+
 ## v2.14.0 (2026-11-03)
 
 ## What's Changed
