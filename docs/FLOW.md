@@ -475,7 +475,7 @@ flowchart TB
     end
     NUDGE["`(21) Owner's laptop: nudge_automerge.py starts automerge for PRs green over 15 minutes`"]:::step
     subgraph HOST["`Deployment host, deploy folder, one site folder per client`"]
-        TICK["`(11) Task Scheduler runs watch.py every 10 minutes`"]:::entry
+        TICK["`(11) Task Scheduler runs watch.py every 2 minutes`"]:::entry
         ENR{"`(12) Any client enrolled, and Docker running?`"}:::decision
         IDLE["`Nothing to do`"]:::outcome
         PULL["`(13) Pull the bundle's stable tag once for every client, read the release from its label`"]:::step
@@ -534,7 +534,7 @@ flowchart TB
 8. `bundle` collects each image's digest and runs `make_bundle.py`, which copies 21 allow-listed files (compose files, the shared Kafka and Milvus auth settings, ops scripts, templates, the InsightFace-REST license, and the host tools `deploy/watch.py` and `deploy/provision.py`), pins every image by digest and writes `release-manifest.json`. It pushes `cctv-face-recognition-deploy:<tag>`, retrying up to three times (D-033).
 9. `publish` runs `check_manifest.py`, then creates the tag. If tagging fails and main has moved on, it starts a release of main instead and stops. Any failed job opens an issue assigned to the owner.
 10. It creates the GitHub Release with `mlops/model-manifest.json` attached, moves the bundle's `stable` tag unless it already points at a newer release, and adds the notes to `CHANGELOG.md`. Release-failure issues opened earlier are closed. Only this workflow moves `stable`, so hosts trust it for what to deploy.
-11. On the host, Task Scheduler runs `pythonw watch.py` in the deploy folder every 10 minutes while the owner is signed in. A lock file stops overlapping runs. The host holds no repository and no GitHub login, only a pull-only registry login (D-034).
+11. On the host, Task Scheduler runs `pythonw watch.py` in the deploy folder every 2 minutes (owner, 2026-11-03; was 10) while the owner is signed in. A lock file stops overlapping runs. The host holds no repository and no GitHub login, only a pull-only registry login (D-034).
 12. The watcher does nothing until at least one client has a `sites\<client>\state.json` (the owner ran `--enroll <client>`) and Docker answers. `--enroll <client>` deploys that client alone.
 13. One pull serves every client: it pulls `ghcr.io/hamza-aziz-ai/cctv-face-recognition-deploy:stable` and reads the release tag from the image's `org.opencontainers.image.version` label, and the bundle's digest.
 14. If the pull fails, most often because the registry token expired, every client gets the problem. For each client, the folder name must be a valid ID and equal `CLIENT_ID` in its `master.env`, since the folder decides the state, data and project name; and `.env`, `master.env` and `src\Camera-Configuration\camera_configuration.json` must exist in it. Otherwise deploys stop for that client, and the owner gets one Windows message per new problem, not one every 10 minutes.

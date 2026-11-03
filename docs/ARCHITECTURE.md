@@ -174,7 +174,7 @@ flowchart TB
     end
     NUDGE["`Owner's laptop: nudge_automerge.py with the owner's gh login`"]:::step
     subgraph HOST["`Deployment host: deploy folder, no repository, no GitHub login`"]
-        TASK["`Task Scheduler, every 10 minutes while signed in`"]:::entry
+        TASK["`Task Scheduler, every 2 minutes while signed in`"]:::entry
         WATCH["`watch.py, installed by hand from a bundle`"]:::step
         BUNDLES[("`releases: current and previous bundles`")]:::store
         SITE[("`sites/client, one per client: .env, master.env, camera configuration, datasets, logs`")]:::store
@@ -370,7 +370,7 @@ schtasks /Create /TN "CCTV deploy watcher" /SC MINUTE /MO 10 /IT /F `
   /TR "\"C:\ProgramData\anaconda3\pythonw.exe\" \"C:\deploy\cctv\watch.py\""
 ```
 
-Every 10 minutes, while the owner is signed in and Docker Desktop is running, the watcher deploys a new release as traced in [FLOW.md, section 8](FLOW.md#8-release-and-deploy). It never starts a stack the owner stopped, and never replaces itself: to update it, copy `deploy/watch.py` out of a newer bundle the same way. Its log is `C:\deploy\cctv\watch.log`. To retry a failed release, run `python watch.py --enroll <client>`. To add a client, create `sites\<client>\` with its own files and ports (`API_PORT`, `DISPLAY_IMAGE_PORT`, `DISPLAY_PORT` in its `.env`), then enroll it. To stop watching, run `schtasks /Delete /TN "CCTV deploy watcher" /F`.
+Every 2 minutes, while the owner is signed in and Docker Desktop is running, the watcher deploys a new release as traced in [FLOW.md, section 8](FLOW.md#8-release-and-deploy). It never starts a stack the owner stopped, and never replaces itself: to update it, copy `deploy/watch.py` out of a newer bundle the same way. Its log is `C:\deploy\cctv\watch.log`. To retry a failed release, run `python watch.py --enroll <client>`. To add a client, create `sites\<client>\` with its own files and ports (`API_PORT`, `DISPLAY_IMAGE_PORT`, `DISPLAY_PORT` in its `.env`), then enroll it. To stop watching, run `schtasks /Delete /TN "CCTV deploy watcher" /F`.
 
 The automerge nudge needs the owner's `gh` login, so it runs only on the owner's laptop, from the dev checkout:
 
