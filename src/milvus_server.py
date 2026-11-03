@@ -10,6 +10,8 @@ Authors: Hamza Aziz and Kshitij Parashar
 """
 
 # Import Dependencies
+import json
+
 from pymilvus import (
     MilvusClient,
     connections,
@@ -48,15 +50,18 @@ def create_connection(host: str = MILVUS_HOST, port: str = MILVUS_PORT):
 
 
 # PART 2: CREATE COLLECTION
-def create_collection(collection_name: str = "Embeddings_Collection"):
+def create_collection(collection_name: str = "Embeddings_Collection", with_departments: bool = False):
     if utility.has_collection(collection_name):
         multicam_server_logger.info(f"Collection {collection_name} already exists.")
         return ensure_index(Collection(collection_name))
 
     fields = [
-        FieldSchema(name="name_id", dtype=DataType.VARCHAR, is_primary=True, max_length=60, description="Unique ID of an individual"),
+        FieldSchema(name="name_id", dtype=DataType.VARCHAR, is_primary=True, max_length=64, description="Unique ID of an individual"),
         FieldSchema(name="embeddings", dtype=DataType.FLOAT_VECTOR, dim=512, description="Face vector of an individual")
     ]
+    if with_departments:  # the versioned known-faces collections only (D-049); staging keeps two columns
+        fields.append(FieldSchema(name="departments", dtype=DataType.ARRAY, element_type=DataType.VARCHAR, max_capacity=16,
+                                  max_length=64, description="Departments whose cameras recognise this person, or all"))
     schema = CollectionSchema(fields=fields, collection_name=collection_name)
 
     embeddings_collection = Collection(name=collection_name, schema=schema)
@@ -112,6 +117,25 @@ def search_embedding(collection: Collection, current_face_embeddings):
     )
 
     return result
+
+
+def search_by_department(collection: Collection, vectors: list, departments: list) -> list:
+    """Each face searched among its camera's department only (D-049): one search per department in the batch, and a
+    camera without a department searches everyone. A person in "all" is found by every camera. A failed search, such as
+    a department camera before the collection has the field, leaves its faces unmatched rather than searching everyone."""
+    hits = [[] for _ in vectors]
+    for department in set(departments):
+        rows = [i for i, name in enumerate(departments) if name == department]
+        expr = f"array_contains_any(departments, {json.dumps([department, 'all'])})" if department else ""
+        try:
+            found = collection.search(data=[vectors[i] for i in rows], anns_field="embeddings", limit=5, expr=expr,
+                                      param={"metric_type": METRIC_TYPE, "params": {"nprobe": 10}}, output_fields=["name_id"])
+        except Exception as error:
+            multicam_server_logger.error(f"Search for department {department!r} failed, its faces stay unmatched: {error}")
+            continue
+        for i, row_hits in zip(rows, found):
+            hits[i] = row_hits
+    return hits
 
 
 # PART 5: DELETING A COLLECTION IF IT ALREADY EXISTS

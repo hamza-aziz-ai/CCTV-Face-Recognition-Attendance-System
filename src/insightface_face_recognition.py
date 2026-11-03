@@ -13,7 +13,8 @@ import requests
 from custom_logging import multicam_server_logger
 from face_liveness_detection import face_liveness_detection
 from inference_data_cleaner import feedback_data_formatter, data_formatter, collect_cropped_face_data
-from milvus_server import search_embedding
+import functools
+from milvus_server import search_by_department, search_embedding
 from parameters import ENABLE_FEEDBACK_SERVER, \
     ENABLE_DATABASE_SERVER, \
     DATABASE_HOST, \
@@ -22,12 +23,25 @@ from parameters import ENABLE_FEEDBACK_SERVER, \
     FEEDBACK_PORT, \
     ENABLE_FACE_LIVENESS_DETECTION, \
     DYNAMIC_FACE_DATA_COLLECTOR_API, \
-    SAVE_FACE
+    SAVE_FACE, \
+    CAMERA_CONFIGURATION_FILE
 from custom_logging import database_server_logger, dynamic_face_data_collector_logger
 from util.face_data_client import submit_faces_async
 
 # kafka_CONSUMER = create_kafka_CONSUMER()
 error_encounter = 0
+
+
+@functools.cache
+def camera_departments(path: str = CAMERA_CONFIGURATION_FILE) -> dict:
+    """Each camera's department (D-049): its own "department", else its location's; none searches everyone. Names
+    match the producer's location_point_camera and are compared lowercase. Read once: a change needs a restart, as
+    adding a camera does."""
+    with open(path, encoding="utf-8") as file:
+        config = json.load(file)
+    return {f"{location}_{point}_{camera}": (settings.get("department") or place.get("department") or "").strip().lower()
+            for location, place in config.items() for point, cameras in place["cctv-cameras"].items()
+            for camera, settings in (cameras or {}).items()}
 
 
 def load_with_retry(collection, retry_interval=10):
@@ -99,7 +113,8 @@ def batched_frame_face_recognition(
 
         # Perform face recognition on the batch of frames by searching the embeddings in Milvus server
         # similarity_search_start_time = time.perf_counter()
-        result = search_embedding(embeddings_collection, face_encodings_list)
+        departments = camera_departments()
+        result = search_by_department(embeddings_collection, face_encodings_list, [departments.get(c, "") for c in cameras_list])
         # multicam_server_logger.debug(f"Result: {result}")
         cctv_result = search_embedding(staging_collection, face_encodings_list)
         # multicam_server_logger.debug(f"CCTV Result: {cctv_result}")

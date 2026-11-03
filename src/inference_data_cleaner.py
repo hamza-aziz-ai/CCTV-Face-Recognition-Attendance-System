@@ -48,6 +48,8 @@ def collect_cropped_face_data(inference_result, camera_list: list, face_array_li
     single_batch_result = dict()
 
     for i, hit in enumerate(inference_result):
+        if not hit:  # nobody in the camera's department (D-049)
+            continue
         name_of_person = hit[0].id
         cropped_face = face_array_list[i]
         camera_name = camera_list[i]
@@ -162,6 +164,8 @@ def feedback_data_formatter(inference_result, camera_list: list, ip_list: list) 
     single_batch_result = {}
 
     for i, hit in enumerate(inference_result):
+        if not hit:  # nobody in the camera's department (D-049)
+            continue
         name_of_person = hit[0].id
         cam_name = camera_list[i]
         cam_ip = ip_list[i]
