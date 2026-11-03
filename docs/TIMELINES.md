@@ -122,6 +122,9 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #100 | 2026-11-03 08:17 | n/a (gap over 3h) | 13m | +254/-30 8f | feat(camera): decode camera streams on the GPU, with the CPU as fallback |
 | #101 | 2026-11-03 10:00 | 1h 43m | 16m | +108/-107 9f | chore(insightface): one image for amd64 and arm64 on TensorRT 26.03, to match DeepStream 9.1 |
 | #102 | 2026-11-03 12:16 | 2h 16m | 12m | +669/-35 17f | feat(live): live view of each camera through its client's MediaMTX, behind the sign-in |
+| #103 | 2026-11-03 12:57 | 41m | 15m | +866/-30 16f | feat(enrolment): enrolment API for the app, with bearer login, photos in the client's bucket and a publishing worker |
+| #104 | 2026-11-03 13:17 | 20m | 6m | +98/-5 6f | feat(enrolment): register people by organisational ID and name, and serve names to the display |
+| #105 | 2026-11-03 13:51 | 34m | 25m | +171/-14 12f | feat(recognition): match each camera's faces within its department, and toggle between COSINE and L2 |
 
 ## Incidents that cost time
 
@@ -156,6 +159,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | 2026-11-02 11:10 | Found while testing `remove`: the watcher had deleted the release folders holding the proxy's and Milvus's mounted config, so the next restart could have stopped either from starting. Files restored and #90 merged with no downtime | About 20m (estimate) | Session timestamps | Cleanup must check what is still in use, not only what the current release needs |
 | 2026-11-02 11:30 to 12:00 | The rehearsal showed that deleting one Kafka SCRAM login loses every login at the next broker restart. A low-memory stop cost one rerun, and a wrong race theory cost another | About 30m (estimate) | Session timestamps | Restart services after destructive steps in a rehearsal; a retry that still fails is not a race |
 | 2026-11-02 17:34 to 18:21 | v2.9.3 took 3 release runs: #95 to #97 changed workflow files while releases ran, so GitHub refused the tag (HTTP 403) twice and each run handed over to a release of main. The first submodule run also failed (HTTP 403) on a token scope, fixed by #97 | About 47m (measured, mostly waiting) | Run timestamps | Merge workflow changes only when no release is running |
+| 2026-11-03 13:55 to 14:01 | PR #105 conflicted with main: `git commit -a` swept the local submodule pointers into it; merged main and reset both pins, and CI ran again |
 
 ## Estimating from this
 
