@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.11.0 (2026-11-03)
+
+## What's Changed
+* chore(insightface): one image for amd64 and arm64 on TensorRT 26.03, to match DeepStream 9.1 by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/101
+* feat(live): live view of each camera through its client's MediaMTX, behind the sign-in by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/102
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.10.0...v2.11.0
+
 ## v2.10.0 (2026-11-03)
 
 ## What's Changed
