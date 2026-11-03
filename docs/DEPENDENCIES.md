@@ -14,7 +14,7 @@ Exact versions live in the requirements files and compose files. This log says w
 | Confluent cp-kafka and tools | Feedback messages                                                                         | Confluent, community edition                    |
 | `cnfldemos/*`                | Connect and Flink, from the official compose file; the app does not use them              | Confluent demo images                           |
 | InsightFace-REST             | Detection and embeddings. Vendored 0.9.5.0, upstream `fb854d8` with local changes (D-031) | SthPhoenix, one maintainer, last commit 2025-06 |
-| TensorRT container           | GPU inference: `26.07-py3` (TensorRT 11.1, CUDA 13.3), pinned by digest                   | NVIDIA                                          |
+| TensorRT container           | GPU inference: `26.03-py3` (TensorRT 10.16, CUDA 13.2), multi-arch, pinned by digest (D-046) | NVIDIA                                          |
 | nginx                        | Load balancer for InsightFace                                                             | nginx project; not pinned yet                   |
 
 ## Python

@@ -3,16 +3,17 @@ name: insightface-image
 # Builds our patched InsightFace-REST (D-031) and pushes it to ghcr.io, once per source tree: the tag is the upstream
 # version plus the git tree of InsightFace-REST/src, so a change to our patches, the Dockerfile or its base image gets a
 # new tag. Deployment hosts pull this image and never build it. release.yml calls this before it publishes; a PR that
-# changes InsightFace builds it too, so the build and the runner's disk are proven before the merge.
+# changes InsightFace builds it too, so the build and the runner's disk are proven before the merge. One Dockerfile, on
+# TensorRT 26.03, builds natively on an amd64 and an arm64 runner; both join under one tag, which the Jetson pulls too (D-046).
 on:
   workflow_call:
     outputs:
       ref:
         description: The image by tag
-        value: ${{ jobs.build.outputs.ref }}
+        value: ${{ jobs.image.outputs.ref }}
       digest:
         description: Its digest
-        value: ${{ jobs.build.outputs.digest }}
+        value: ${{ jobs.image.outputs.digest }}
   pull_request:
     branches: [main]
     paths:
@@ -25,87 +26,84 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     permissions:
       contents: read
       packages: write
-    outputs:
-      ref: ${{ steps.ref.outputs.ref }}
-      digest: ${{ steps.push.outputs.digest }}
     env:
       TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Work out the image tag
-        id: ref
+      - name: Build and push, unless this source tree is already published
         run: |
           set -euo pipefail
           eval "$(grep -E '^(IMAGE|TAG)=' STANDALONE-SERVICES/standalone-services.env)"
-          echo "ref=$IMAGE:$TAG-$(git rev-parse --short=12 HEAD:STANDALONE-SERVICES/InsightFace-REST/src)" >> "$GITHUB_OUTPUT"
-      - name: Build and push, unless this source tree is already published
-        id: push
-        env:
-          REF: ${{ steps.ref.outputs.ref }}
-        run: |
-          set -euo pipefail
+          REF=$IMAGE:$TAG-$(git rev-parse --short=12 HEAD:STANDALONE-SERVICES/InsightFace-REST/src)
           echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          if docker buildx imagetools inspect "$REF" > /dev/null 2>&1; then
-            echo "$REF is already published"
-          else
-            # The TensorRT base image filled the runner's disk and crashed the runner itself, losing the log. Free the
-            # preinstalled toolchains this job does not use, put Docker's data on the disk with the most room, and stop
-            # with a readable error if that is still too small.
-            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost \
-              /usr/share/swift /usr/local/julia* /usr/local/share/powershell /usr/local/share/chromium
-            docker system prune -af > /dev/null
-            disk=$(df --output=avail,target -B1G / /mnt 2> /dev/null | tail -n +2 | sort -n | tail -n 1 | awk '{print $2}')
-            if [ "$disk" != / ]; then
-              cfg=$( (sudo cat /etc/docker/daemon.json 2> /dev/null || echo '{}') | jq --arg d "$disk/docker" '. + {"data-root": $d}')
-              echo "$cfg" | sudo tee /etc/docker/daemon.json > /dev/null
-              sudo systemctl restart docker
-              echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-            fi
-            df -h / /mnt 2> /dev/null || df -h /
-            free=$(df --output=avail -B1G "$disk" | tail -n 1 | tr -d ' ')
-            if [ "$free" -lt 45 ]; then
-              echo "::error::Only ${free} GB free on $disk; the TensorRT build needs about 45 GB"; exit 1
-            fi
-            docker build -t "$REF" -f STANDALONE-SERVICES/InsightFace-REST/src/Dockerfile_trt STANDALONE-SERVICES/InsightFace-REST/src
-            # ghcr.io refused the first push into the new package after every layer was uploaded ("denied"), as it did
-            # for the app images; a retry skips the layers already there
-            for attempt in 1 2 3; do
-              docker push "$REF" && break
-              [ "$attempt" -lt 3 ] || exit 1
-              echo "Push attempt $attempt refused; retrying"; sleep 20
-            done
-            df -h "$disk"
+          if docker buildx imagetools inspect "$REF" > /dev/null 2>&1 || docker buildx imagetools inspect "$REF-${{ matrix.arch }}" > /dev/null 2>&1; then
+            echo "$REF is already published for ${{ matrix.arch }}"; exit 0
           fi
-          digest=$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest.Digest}}' | tr -d '"')
-          echo "digest=$digest" >> "$GITHUB_OUTPUT"
-          echo "$REF is ${REF%:*}@$digest"
+          # The TensorRT base image filled the runner's disk and crashed the runner itself, losing the log. Free the
+          # preinstalled toolchains this job does not use, put Docker's data on the disk with the most room, and stop
+          # with a readable error if that is still too small.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost \
+            /usr/share/swift /usr/local/julia* /usr/local/share/powershell /usr/local/share/chromium
+          docker system prune -af > /dev/null
+          disk=$(df --output=avail,target -B1G / /mnt 2> /dev/null | tail -n +2 | sort -n | tail -n 1 | awk '{print $2}')
+          if [ "$disk" != / ]; then
+            cfg=$( (sudo cat /etc/docker/daemon.json 2> /dev/null || echo '{}') | jq --arg d "$disk/docker" '. + {"data-root": $d}')
+            echo "$cfg" | sudo tee /etc/docker/daemon.json > /dev/null
+            sudo systemctl restart docker
+            echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          fi
+          df -h / /mnt 2> /dev/null || df -h /
+          free=$(df --output=avail -B1G "$disk" | tail -n 1 | tr -d ' ')
+          if [ "$free" -lt 40 ]; then
+            echo "::error::Only ${free} GB free on $disk; the TensorRT build needs about 40 GB"; exit 1
+          fi
+          docker build -t "$REF-${{ matrix.arch }}" -f STANDALONE-SERVICES/InsightFace-REST/src/Dockerfile_trt STANDALONE-SERVICES/InsightFace-REST/src
+          # ghcr.io refused the first push into the new package after every layer was uploaded ("denied"), as it did
+          # for the app images; a retry skips the layers already there
+          for attempt in 1 2 3; do
+            docker push "$REF-${{ matrix.arch }}" && break
+            [ "$attempt" -lt 3 ] || exit 1
+            echo "Push attempt $attempt refused; retrying"; sleep 20
+          done
+          df -h "$disk"
 
-  # The Jetson's own image (D-044): a separate Dockerfile on NVIDIA's L4T TensorRT 10.3 base, built natively on arm64.
-  # Not in the bundle yet; the Jetson layouts add it.
-  jetson:
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
+  # One tag for both architectures: the laptop and the Jetson pull the same reference, and the bundle pins its digest
+  image:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       packages: write
+    outputs:
+      ref: ${{ steps.join.outputs.ref }}
+      digest: ${{ steps.join.outputs.digest }}
     env:
       TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build and push, unless this source tree is already published
+      - id: join
         run: |
           set -euo pipefail
           eval "$(grep -E '^(IMAGE|TAG)=' STANDALONE-SERVICES/standalone-services.env)"
-          REF=$IMAGE:$TAG-$(git rev-parse --short=12 HEAD:STANDALONE-SERVICES/InsightFace-REST/src)-jetson
+          REF=$IMAGE:$TAG-$(git rev-parse --short=12 HEAD:STANDALONE-SERVICES/InsightFace-REST/src)
           echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          if docker buildx imagetools inspect "$REF" > /dev/null 2>&1; then echo "$REF is already published"; exit 0; fi
-          df -h /
-          docker build -t "$REF" -f STANDALONE-SERVICES/InsightFace-REST/src/Dockerfile_trt_jetson STANDALONE-SERVICES/InsightFace-REST/src
-          for attempt in 1 2 3; do docker push "$REF" && break; [ "$attempt" -lt 3 ] || exit 1; sleep 20; done
-          df -h /
-          echo "$REF is ${REF%:*}@$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          if ! docker buildx imagetools inspect "$REF" > /dev/null 2>&1; then
+            docker buildx imagetools create -t "$REF" "$REF-amd64" "$REF-arm64"
+          fi
+          digest=$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "$REF is ${REF%:*}@$digest"

@@ -136,10 +136,27 @@ The same phone stream entered as 1, 2 and 4 cameras, 60 s each, with InsightFace
 
 Records grew with the cameras, nothing was purged from the frame buffer, and no stream dropped. The board's 6 CPU cores carry the producer-consumer at about 4.4 of them with 4 cameras, so CPU, not the GPU, is the likely limit beyond that; frames here are 640x360 after resizing. Every display message in these runs went to camera 1's partition, because the feedback controller reads its camera map once at start and only the producer-consumer was restarted between runs. A rerun with all three restarted caught too few recognitions to check. The feedback controller must be restarted after cameras change.
 
+## One image on TensorRT 26.03
+
+Since D-046, InsightFace-REST is one image for both architectures, built from `Dockerfile_trt` on `nvcr.io/nvidia/tensorrt:26.03-py3` (TensorRT 10.16.0.72, CUDA 13.2), whose arm64 build runs on the Orin Nano under JetPack 7.2.1. `Dockerfile_trt_jetson` and its `l4t-tensorrt:r10.3.0` base are gone. Compared on 2026-11-03 against each machine's previous image, with the same 5 test images and settings:
+
+| | Laptop, against TensorRT 11.1 | Jetson, against `l4t-tensorrt` TensorRT 10.3 |
+|---|---|---|
+| Faces found | 119 and 119, the same faces | 119 and 119, the same faces |
+| Embedding cosine | Minimum 0.9988, mean 0.9998 | Minimum 0.9983, mean 0.9998 |
+| Detection confidence | Within 0.0016 | Within 0.0009 |
+| Face position | Within 1 px | Within 1 px |
+| One image per request | 18.3 ms before, 17.4 ms after | 30.7 ms before, 29.9 ms after |
+| Image build | 26 s, base already pulled | 353 s |
+| First start, building engines | About 170 s | 345 s, board peak 3.7 GB |
+| Image size | 19.1 GB | 21.5 GB, against 6.18 GB before |
+
+`trtexec` on the base alone ran `w600k_r50` at 291 batches/s at batch 1 on the Jetson. Engine file names carry the TensorRT version, so the new engines sit beside the old ones and either image can start.
+
 ## What this means
 
-- The x86 image cannot run here: it is amd64 and on TensorRT 11.
-- NVIDIA's `l4t-tensorrt:r10.3.0-runtime` is the planned base. It carries its own CUDA and TensorRT, runs on this board, and can build engines, which InsightFace-REST does at startup.
+- An amd64-only image cannot run here; every image we publish now has an arm64 build (D-044, D-046).
+- InsightFace-REST runs on NVIDIA's multi-arch `tensorrt:26.03-py3`, the same image as on x86 (D-046). It carries its own CUDA and TensorRT and builds engines at startup.
 - A plain `ubuntu:24.04` container also gets the GPU and CUDA libraries with `--runtime nvidia --gpus all`, but not TensorRT. The Dockerfile above is the fallback for that route.
 - SCRFD must be reshaped with the project's `reshape_onnx.py` before building; a fixed model per batch size worked.
 - The Orin Nano has no hardware encoder (NVENC), so nothing here should re-encode video.
