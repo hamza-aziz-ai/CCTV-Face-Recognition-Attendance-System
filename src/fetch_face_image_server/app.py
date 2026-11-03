@@ -13,7 +13,7 @@ current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
 
-from parameters import DISPLAY_FACE_IMAGE_SERVER_PORT
+from parameters import DISPLAY_FACE_IMAGE_SERVER_PORT, POSTGRESQL_DATABASE, POSTGRESQL_HOST, POSTGRESQL_PORT, postgres_login
 
 app = FastAPI()
 
@@ -45,6 +45,30 @@ async def get_images(request: ImageRequest):
             result[id_key] = image_value
 
     return results
+
+
+def names_for(ids: List[str]) -> dict:
+    """Each ID's registered name from this client's persons table (D-048), or None. Best-effort: the display shows the
+    ID alone when a name is missing, so any database problem answers None for all."""
+    import psycopg2
+    found = {}
+    try:
+        user, password = postgres_login()
+        with psycopg2.connect(dbname=POSTGRESQL_DATABASE, user=user, password=password, host=POSTGRESQL_HOST,
+                              port=POSTGRESQL_PORT, connect_timeout=3) as conn, conn.cursor() as cursor:
+            cursor.execute("SELECT person_id, name FROM persons WHERE person_id = ANY(%s)", (list(ids),))
+            found = dict(cursor.fetchall())
+    except Exception as error:
+        # Never the names themselves: the log says only why the lookup failed
+        print(f"Name lookup failed for {len(ids)} ID(s): {type(error).__name__}", flush=True)
+    return {person_id: found.get(person_id) for person_id in ids}
+
+
+@app.post("/post_names")
+def get_names(request: ImageRequest):
+    """For the display (owner, 2026-11-03): the ID is shown large and the name beneath it. Every requested ID is in the
+    reply, with its name as a plain string or null; names are never logged."""
+    return names_for(request.messages[:100])
 
 
 if __name__ == "__main__":

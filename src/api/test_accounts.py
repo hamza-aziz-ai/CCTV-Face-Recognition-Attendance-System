@@ -204,6 +204,18 @@ def check_enrolment():
     assert page["next_cursor"] == "p-001" and len(page["persons"]) == 1
     assert requests.get(f"{BASE}/v1/persons?limit=1&cursor=p-001", headers=bearer).json()["persons"][0]["person_id"] == "p-002"
 
+    # Registration (owner, 2026-11-03): the organisational ID and the full name, ID unique in any letter case
+    register = lambda body, who=bearer: requests.post(f"{BASE}/v1/persons", json=body, headers=who)
+    r = register({"person_id": "EMP-0042.a", "name": "  Meera Iyer  ", "department": "HR"})
+    assert r.status_code == 201 and r.json() == {"person_id": "EMP-0042.a"}, r.text
+    assert register({"person_id": "emp-0042.A", "name": "Someone"}).json() == {"error": "person_exists"}
+    for bad in (".hidden", "..", "CON", "nul.txt", "a b", "x/y", "a" * 65, ""):
+        assert register({"person_id": bad, "name": "X"}).json() == {"error": "invalid_person_id"}, bad
+    assert register({"person_id": "ok-1", "name": "   "}).json() == {"error": "invalid_name"}
+    assert register({"person_id": "ok-1", "name": "X"}, viewer).json() == {"error": "role_cannot_enrol"}
+    meera = requests.get(f"{BASE}/v1/persons?query=meera", headers=bearer).json()["persons"]
+    assert meera == [{"person_id": "EMP-0042.a", "name": "Meera Iyer", "employee_code": None, "department": "HR", "enrolment_status": "none"}], meera
+
     consent = {"person_id": "p-001", "notice_version": "1", "captured_at": "2026-11-03T12:00:00+05:30", "method": "staff_attested_in_app"}
     assert requests.post(f"{BASE}/v1/consents", json=consent, headers=bearer).json() == {"error": "no_notice"}
     os.makedirs("enrolment", exist_ok=True)
@@ -243,7 +255,7 @@ def check_enrolment():
     assert requests.get(f"{BASE}/v1/enrolments/{job_id}", headers=bearer).json() == {"status": "rejected", "problems": [{"pose": None, "problem": "consent withdrawn"}]}
     assert PHOTOS.objects == {}
     assert upload("k3")[1]().json() == {"error": "no_active_consent"}
-    print("enrolment ok (bearer login, roles, roster paging, notice and consent, idempotency, one open job, withdrawal deletes photos)")
+    print("enrolment ok (bearer login, roles, registration with ID rules, roster paging, notice and consent, idempotency, one open job, withdrawal deletes photos)")
 
 
 def test_live_config():
