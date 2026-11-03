@@ -125,6 +125,10 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #103 | 2026-11-03 12:57 | 41m | 15m | +866/-30 16f | feat(enrolment): enrolment API for the app, with bearer login, photos in the client's bucket and a publishing worker |
 | #104 | 2026-11-03 13:17 | 20m | 6m | +98/-5 6f | feat(enrolment): register people by organisational ID and name, and serve names to the display |
 | #105 | 2026-11-03 13:51 | 34m | 25m | +171/-14 12f | feat(recognition): match each camera's faces within its department, and toggle between COSINE and L2 |
+| #106 | 2026-11-03 15:24 | 1h 33m | 6m | +19/-10 6f | feat(display): send null for a missing portrait so the display draws a silhouette, pin Kafka-WebApp v0.7.2, and bring the model manifest up to date |
+| #107 | 2026-11-03 16:27 | 1h 3m | 6m | +1/-1 1f | fix(display): pin Kafka-WebApp v0.7.3, so a refreshed page keeps the down status instead of showing ready |
+| #108 | 2026-11-03 16:46 | 19m | 5m | +32/-8 3f | ci: build images only when what they are built from changes, and reuse the last release's images otherwise |
+| #109 | 2026-11-03 17:27 | 41m | 3m | +1/-1 1f | fix(display): pin Kafka-WebApp v0.7.4, which hides camera warnings while the whole system is shown as down |
 
 ## Incidents that cost time
 
@@ -160,6 +164,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | 2026-11-02 11:30 to 12:00 | The rehearsal showed that deleting one Kafka SCRAM login loses every login at the next broker restart. A low-memory stop cost one rerun, and a wrong race theory cost another | About 30m (estimate) | Session timestamps | Restart services after destructive steps in a rehearsal; a retry that still fails is not a race |
 | 2026-11-02 17:34 to 18:21 | v2.9.3 took 3 release runs: #95 to #97 changed workflow files while releases ran, so GitHub refused the tag (HTTP 403) twice and each run handed over to a release of main. The first submodule run also failed (HTTP 403) on a token scope, fixed by #97 | About 47m (measured, mostly waiting) | Run timestamps | Merge workflow changes only when no release is running |
 | 2026-11-03 13:55 to 14:01 | PR #105 conflicted with main: `git commit -a` swept the local submodule pointers into it; merged main and reset both pins, and CI ran again |
+| 2026-11-03 21:00 to 22:20 | A display pin (#107) rebuilt every image twice, about 60 billed minutes, with Actions already past the 3,000 included; fixed by #108 (images built only when their inputs change, otherwise re-tagged) |
 
 ## Estimating from this
 
