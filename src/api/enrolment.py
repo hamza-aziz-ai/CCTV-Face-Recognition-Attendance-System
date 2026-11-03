@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS consents (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     withdrawn_at TIMESTAMPTZ
 );
+-- The notice as the person was shown it, so each consent records who was responsible and whom to contact then
+ALTER TABLE consents ADD COLUMN IF NOT EXISTS notice JSONB;
 CREATE TABLE IF NOT EXISTS enrolment_jobs (
     id UUID PRIMARY KEY,
     person_id TEXT NOT NULL REFERENCES persons,
@@ -111,12 +113,30 @@ class Refused(Exception):
         self.response = response
 
 
+def notice_problem(current: dict) -> Optional[str]:
+    """Who is responsible and whom to contact come only from the site's notice, never from code (owner, 2026-11-03): a
+    dedicated deployment names the client, a central one the operator. A notice without them, or still holding a
+    template's <placeholders>, is not served, so nobody consents to an unfilled notice."""
+    contact = current.get("contact") if isinstance(current.get("contact"), dict) else {}
+    named = [current.get("version"), current.get("controller"), contact.get("name"), contact.get("email"), current.get("processor")]
+    if not all(str(value or "").strip() for value in named[:4]):
+        return "version, controller, contact name and contact email are required"
+    if any("<" in str(value or "") for value in named) or "<" in json.dumps(current.get("sections", [])):
+        return "a <placeholder> from the template is still in it"
+    return None
+
+
 def notice() -> Optional[dict]:
     try:
         with open(ENROLMENT_NOTICE_FILE, encoding="utf-8") as file:
-            return json.load(file)
+            current = json.load(file)
     except (OSError, ValueError):
         return None
+    problem = notice_problem(current) if isinstance(current, dict) else "not a JSON object"
+    if problem:
+        api_logger.error(f"{ENROLMENT_NOTICE_FILE} is not served: {problem}")
+        return None
+    return current
 
 
 @router.get("/server-info")
@@ -217,8 +237,8 @@ def record_consent(consent: ConsentIn, caller: dict = Depends(enroller)):
         db.execute("SELECT 1 FROM persons WHERE person_id = %s", (consent.person_id,))
         if not db.fetchone():
             return error(404, "person_not_found")
-        db.execute("INSERT INTO consents (id, person_id, notice_version, captured_at, method, recorded_by) VALUES (%s, %s, %s, %s, %s, %s)",
-                   (consent_id, consent.person_id, consent.notice_version, consent.captured_at, consent.method, caller["name"]))
+        db.execute("INSERT INTO consents (id, person_id, notice_version, captured_at, method, recorded_by, notice) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                   (consent_id, consent.person_id, consent.notice_version, consent.captured_at, consent.method, caller["name"], json.dumps(current_notice)))
     api_logger.info(f"Consent {consent_id} for {consent.person_id} recorded by {caller['name']}")
     return {"consent_id": consent_id}
 

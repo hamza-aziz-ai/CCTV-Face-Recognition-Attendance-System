@@ -1,0 +1,44 @@
+{
+  "version": "<version, e.g. 1.0>",
+  "effective_date": "<YYYY-MM-DD>",
+  "controller": "<client organisation's legal name>",
+  "contact": {
+    "name": "<client's privacy contact>",
+    "email": "<client's privacy email>",
+    "phone": "<optional; delete this line if none>"
+  },
+  "sections": [
+    {
+      "heading": "What we collect",
+      "body": "5 face photos, or 10 with glasses, and face data from them. When a camera recognises you, we record your ID, the camera, the time and the match score, and keep a few clear face images to keep recognising you."
+    },
+    {
+      "heading": "Why",
+      "body": "Only to mark your attendance here. Your photos and face data are not used for anything else or shared."
+    },
+    {
+      "heading": "Legal basis",
+      "body": "Your consent, under India's Digital Personal Data Protection Act, 2023, recorded by staff before photos are taken."
+    },
+    {
+      "heading": "Where they go",
+      "body": "This organisation's own server, database and storage. No one outside it receives your photos or face data."
+    },
+    {
+      "heading": "How long",
+      "body": "While you are enrolled. Failed photos are deleted at once, unprocessed uploads after 24 hours, and everything within 30 days after you withdraw or leave."
+    },
+    {
+      "heading": "Re-enrolment",
+      "body": "A retake needs your consent again. Withdrawing during one cancels only the new photos, not your earlier enrolment."
+    },
+    {
+      "heading": "The enrolment app",
+      "body": "Google ML Kit guides the photos and sends Google device and usage data (device model, OS, country, language, network, time zone, app and ML Kit versions, install ID, frame size, timings, counts), never your photos or face data."
+    },
+    {
+      "heading": "Your choice and your rights",
+      "body": "You can refuse, withdraw later, ask to see, correct or delete your data, or complain, through the contact below."
+    }
+  ]
+}

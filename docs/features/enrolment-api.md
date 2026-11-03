@@ -20,6 +20,16 @@ Through the proxy as `https://<site host>/api/...`; the proxy strips `/api`.
 
 Errors are `{"error": code}`, the codes the app maps: `signed_out` (401), `role_cannot_enrol` (403), `no_notice` (503), `notice_version_superseded`, `no_active_consent`, `invalid_pose_set`, `not_jpeg`, `reason_required`, `invalid_reason` (422), `photo_too_large`, `body_too_large` (413), `idempotency_key_required` (400), `idempotency_key_reused` (409), and `enrolment_open` (409, with the open `job_id`). The same key with the same body returns the same job.
 
+## The notice: who is responsible, per deployment
+
+Who is responsible for the data (`controller`, with an optional `processor`) and whom to contact (`contact`: `name`, `email`, optional `phone`) come only from the site's `enrolment/notice.json`. The code names nobody, and the app shows whatever the file says (owner, 2026-11-03).
+
+- Dedicated deployment: copy `enrolment/notice.dedicated.example.json`. The client organisation is responsible and is the contact; the operator does not appear.
+- Central deployment: copy `enrolment/notice.central.example.json`. The operator (the owner, or their company once it exists) is responsible and is the contact.
+- The owner's own site names the owner.
+
+The API refuses to serve a notice with no version, controller, contact name or contact email, or with a template `<placeholder>` left in, and answers `no_notice`, so nobody consents to an unfilled notice. Each consent stores the notice as it was shown, so the record keeps who was responsible at the time. Whether the operator in a central deployment is the controller or a processor under India's DPDP Act is part of the legal advice still needed (Face-Dataset-Collector D-005).
+
 ## On the display
 
 The display shows the person's ID large and the registered name beneath it (owner, 2026-11-03). The portrait server answers `POST /post_names` with `{"messages": [ids]}` beside `/post_images`: a JSON object with every requested ID and its name as a plain string, or null when unknown or when the database cannot be reached. Names are never logged; a failed lookup logs only the error type. A display that gets no name shows the ID alone.

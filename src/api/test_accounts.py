@@ -219,6 +219,12 @@ def check_enrolment():
     consent = {"person_id": "p-001", "notice_version": "1", "captured_at": "2026-11-03T12:00:00+05:30", "method": "staff_attested_in_app"}
     assert requests.post(f"{BASE}/v1/consents", json=consent, headers=bearer).json() == {"error": "no_notice"}
     os.makedirs("enrolment", exist_ok=True)
+    # Responsible party and contact come only from the site's notice: one missing, or a template placeholder left in, is not served
+    for unfilled in ({"version": "2", "controller": "Test", "contact": {"name": "x"}, "sections": []},
+                     {"version": "2", "controller": "<client organisation>", "contact": {"name": "x", "email": "x@example.com"}, "sections": []}):
+        with open("enrolment/notice.json", "w") as f:
+            json.dump(unfilled, f)
+        assert requests.get(f"{BASE}/v1/notice").json() == {"error": "no_notice"}, unfilled
     with open("enrolment/notice.json", "w") as f:
         json.dump({"version": "2", "effective_date": "2026-11-03", "controller": "Test", "contact": {"name": "x", "email": "x@example.com"}, "sections": []}, f)
     assert requests.get(f"{BASE}/v1/server-info").json()["notice_version"] == "2"
@@ -226,6 +232,9 @@ def check_enrolment():
     r = requests.post(f"{BASE}/v1/consents", json={**consent, "notice_version": "2"}, headers=bearer)
     assert r.status_code == 201, r.text
     consent_id = r.json()["consent_id"]
+    with psycopg2.connect(dbname=POSTGRESQL_DATABASE, **LOGIN) as conn, conn.cursor() as db:
+        db.execute("SELECT notice->>'controller', notice->'contact'->>'email' FROM consents WHERE id = %s", (consent_id,))
+        assert db.fetchone() == ("Test", "x@example.com")  # the consent keeps who was responsible when it was given
 
     jpeg = bytes.fromhex("ffd8ffe0") + b"0" * 100
     def upload(key, poses=enrolment.POSES, person="p-001", consent_to=None, **extra):
