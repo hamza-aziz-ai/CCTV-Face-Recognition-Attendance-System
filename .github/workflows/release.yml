@@ -71,15 +71,23 @@ jobs:
 
   # The deployable images, pushed before the tag exists so a release is never published without them (D-017).
   # Names and tags come from docker-compose-main.yml; the dev override only adds the build sections.
-  images:
+  # Each architecture builds natively on its own runner as <tag>-amd64 or <tag>-arm64 (arm64 is the Jetson, D-044).
+  build:
     needs: [plan, ci]
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     permissions:
       contents: read
       packages: write
     env:
-      IMAGE_TAG: ${{ needs.plan.outputs.tag }}
+      IMAGE_TAG: ${{ needs.plan.outputs.tag }}-${{ matrix.arch }}
       TOKEN: ${{ github.token }}
       # The ROI page is behind a compose profile; build and publish it with the rest
       COMPOSE_PROFILES: roi
@@ -100,6 +108,26 @@ jobs:
             docker compose --parallel 1 -f docker-compose-main.yml -f docker-compose.dev.yml push && break
             [ "$attempt" -lt 3 ] || exit 1
             sleep 20
+          done
+
+  # One tag per image for both architectures: each host pulls its own, and the bundle pins the index digest
+  images:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TAG: ${{ needs.plan.outputs.tag }}
+      TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: |
+          set -euo pipefail
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          for name in $(grep -oE 'ghcr\.io/hamza-aziz-ai/cctv-face-recognition-[a-z-]+:\$\{IMAGE_TAG' docker-compose-main.yml | cut -d: -f1 | sort -u); do
+            docker buildx imagetools create -t "$name:$TAG" "$name:$TAG-amd64" "$name:$TAG-arm64"
           done
 
   # Our InsightFace-REST image, built only when its source changed (insightface-image.yml)
@@ -235,7 +263,7 @@ jobs:
   # Releases run unattended, and GitHub only emails whoever started a run, which here is the automerge bot.
   # An issue assigned to the owner reaches them by email and in the app, even with the deployment host off.
   notify-failure:
-    needs: [plan, ci, images, insightface, bundle, publish]
+    needs: [plan, ci, build, images, insightface, bundle, publish]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5

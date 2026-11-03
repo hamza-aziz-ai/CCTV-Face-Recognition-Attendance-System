@@ -84,3 +84,28 @@ jobs:
           digest=$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "$REF is ${REF%:*}@$digest"
+
+  # The Jetson's own image (D-044): a separate Dockerfile on NVIDIA's L4T TensorRT 10.3 base, built natively on arm64.
+  # Not in the bundle yet; the Jetson layouts add it.
+  jetson:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build and push, unless this source tree is already published
+        run: |
+          set -euo pipefail
+          eval "$(grep -E '^(IMAGE|TAG)=' STANDALONE-SERVICES/standalone-services.env)"
+          REF=$IMAGE:$TAG-$(git rev-parse --short=12 HEAD:STANDALONE-SERVICES/InsightFace-REST/src)-jetson
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          if docker buildx imagetools inspect "$REF" > /dev/null 2>&1; then echo "$REF is already published"; exit 0; fi
+          df -h /
+          docker build -t "$REF" -f STANDALONE-SERVICES/InsightFace-REST/src/Dockerfile_trt_jetson STANDALONE-SERVICES/InsightFace-REST/src
+          for attempt in 1 2 3; do docker push "$REF" && break; [ "$attempt" -lt 3 ] || exit 1; sleep 20; done
+          df -h /
+          echo "$REF is ${REF%:*}@$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest.Digest}}' | tr -d '"')"
