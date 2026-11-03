@@ -25,7 +25,7 @@ In `api`, against a throwaway PostgreSQL, `python3 src/api/test_accounts.py` pri
 
 In `producer-consumer`, `python3 src/util/client_checks.py` prints `clients ok (bad IDs refused, owner names kept, two clients share no name, Milvus bound to the client's database)` (D-036).
 
-## Client isolation (CI job `isolation`, on PRs that touch provisioning or the shared services)
+## Client isolation (a step of the CI `checks` job, on PRs that touch provisioning or the shared services)
 
 `python -I deploy/test_isolation.py` prints `isolation ok (2 clients: own access on 4 services, cross-client and admin actions refused, Kafka plaintext unreachable, reruns and interruptions safe, lost password stops, Milvus root replaced, holds after restart)` (D-037). It runs throwaway copies of PostgreSQL, Kafka, Milvus and MinIO and never touches the live ones.
 

@@ -6,6 +6,11 @@ on:
     branches: [main]
   # Reused by the release workflow so images are only published from a commit that passed these checks
   workflow_call:
+    inputs:
+      tag:
+        description: Release tag; the images that pass are pushed as <tag>-<arch>
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -15,11 +20,38 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  lint:
+  # Every check that needs no image, in one job: GitHub bills each job by the whole minute, and these each took seconds
+  checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
+    # gitleaks lists a PR's commits through the API; read-only, and comments are off so it never needs write
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      images: ${{ steps.diff.outputs.images }}
+      arches: ${{ steps.diff.outputs.arches }}
+    env:
+      BASE: ${{ github.base_ref }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # Whether a PR changes anything an image is built from. The image builds used most of the monthly Actions minutes,
+      # and docs-only PRs were common. Pushes and release runs always build.
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          both='arches=["amd64","arm64"]'
+          if [ "$EVENT" != pull_request ]; then printf 'images=true\n%s\n' "$both" >> "$GITHUB_OUTPUT"; exit 0; fi
+          changed=$(git diff --name-only "origin/$BASE...HEAD")
+          echo "$changed"
+          # Only docs/ and Markdown files: nothing an image is built from
+          if grep -qvE '^docs/|\.md$' <<<"$changed"; then echo "images=true"; else echo "images=false"; fi >> "$GITHUB_OUTPUT"
+          # arm64 (Jetson, D-044) is built on PRs only when what it is built from changes; releases always build it
+          if grep -qE 'Dockerfile|requirements\.txt$|^\.github/workflows/(ci|release)\.yml$' <<<"$changed"; then echo "$both"; else echo 'arches=["amd64"]'; fi >> "$GITHUB_OUTPUT"
       # Syntax errors and undefined names only; the codebase predates any style config
       - run: pipx run ruff==0.17.3 check --select E9,F63,F7,F82 --target-version py314 --extend-exclude STANDALONE-SERVICES,graphify-out --output-format github .
       # Model manifest must match the code and config it describes; unverified (null) fields only block releases
@@ -29,30 +61,12 @@ jobs:
       - run: python3 -I deploy/nudge_automerge.py demo
       # Enrolment photo checks (D-026)
       - run: python3 -I src/util/enrolment_checks.py
-
-  secrets:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # The action lists a PR's commits through the API; read-only, and comments are off so it never needs write
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
       # Personal-account repo: no GITLEAKS_LICENSE needed
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
           GITLEAKS_ENABLE_COMMENTS: false
-
-  compose:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Unset credentials only produce warnings; this catches YAML and schema errors
       - run: |
           docker compose -f docker-compose-main.yml config --quiet
@@ -71,67 +85,59 @@ jobs:
           docker compose -f /tmp/bundle/docker-compose-main.yml config --quiet
       # The standalone scripts from a bundle with a separate site folder, and from the checkout, with Docker stubbed
       - run: bash deploy/test_standalone_scripts.sh
-
-  # Whether a PR changes anything an image is built from. The image builds used most of the monthly Actions minutes,
-  # and docs-only PRs were common. Pushes and release runs always build.
-  changes:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      images: ${{ steps.diff.outputs.images }}
-      arches: ${{ steps.diff.outputs.arches }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - id: diff
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE: ${{ github.base_ref }}
+      # Client isolation on throwaway copies of the shared services (D-036). About 5 minutes and 3.5 GB of images, so only
+      # pull requests that touch provisioning, the services' settings or the code that logs in to them run it
+      - name: Client isolation
         run: |
-          set -euo pipefail
-          both='arches=["amd64","arm64"]'
-          if [ "$EVENT" != pull_request ]; then printf 'images=true\n%s\n' "$both" >> "$GITHUB_OUTPUT"; exit 0; fi
-          changed=$(git diff --name-only "origin/$BASE...HEAD")
-          echo "$changed"
-          # Only docs/ and Markdown files: nothing an image is built from
-          if grep -qvE '^docs/|\.md$' <<<"$changed"; then echo "images=true"; else echo "images=false"; fi >> "$GITHUB_OUTPUT"
-          # arm64 (Jetson, D-044) is built on PRs only when what it is built from changes; releases always build it
-          if grep -qE 'Dockerfile|requirements\.txt$|^\.github/workflows/(ci|release)\.yml$' <<<"$changed"; then echo "$both"; else echo 'arches=["amd64"]'; fi >> "$GITHUB_OUTPUT"
+          if [ -n "$BASE" ] && git diff --name-only "origin/$BASE...HEAD" | grep -qE '^(deploy/(provision|recovery|test_isolation)\.py|STANDALONE-SERVICES/|src/(parameters|milvus_server)\.py|src/util/face_vectors\.py)'; then
+            python3 -I deploy/test_isolation.py
+          fi
 
   images:
-    needs: changes
-    if: needs.changes.outputs.images == 'true'
+    needs: checks
+    if: needs.checks.outputs.images == 'true'
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 30
+    # packages: write is only used by the push step, which only a release runs
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
-        arch: ${{ fromJSON(needs.changes.outputs.arches) }}
+        arch: ${{ fromJSON(needs.checks.outputs.arches) }}
         service: [producer-consumer, database-controller, feedback-controller, api, display-image, dynamic-face-dataset-collector, automatic-milvus-db-update, roi]
         include:
           - service: producer-consumer
+            image: cctv-face-recognition-producer-consumer
             dockerfile: main.Dockerfile
             files: src/main.py
           - service: database-controller
+            image: cctv-face-recognition-database-controller
             dockerfile: database-server.Dockerfile
             files: src/database_server/postgresql_server_controller.py src/database_server/healthcheck_db_controller.sh
           - service: feedback-controller
+            image: cctv-face-recognition-feedback-controller
             dockerfile: feedback-server.Dockerfile
             files: src/feedback_server/feedback_msg_server_controller.py src/feedback_server/healthcheck_feedback_controller.sh
           - service: api
+            image: cctv-face-recognition-api
             dockerfile: api.Dockerfile
             files: src/api/app.py src/api/healthcheck_api.sh
           - service: display-image
+            image: cctv-face-recognition-front-face-image-display
             dockerfile: display-image.Dockerfile
             files: src/fetch_face_image_server/app.py src/fetch_face_image_server/healthcheck_display_image_server.sh
           - service: dynamic-face-dataset-collector
+            image: cctv-face-recognition-dynamic-face-dataset-collector
             dockerfile: dynamic-face-dataset-collector.Dockerfile
             files: src/dynamic_face_data_collector/api.py src/dynamic_face_data_collector/healthcheck.sh
           - service: automatic-milvus-db-update
+            image: cctv-face-recognition-automate-milvus-update
             dockerfile: automatic-milvus-db-update.Dockerfile
             files: src/automatic-vector-db-updation/milvus_updater.py
           - service: roi
+            image: cctv-face-recognition-roi
             dockerfile: roi.Dockerfile
             files: Custom-ROI-Provisioning/app.py Custom-ROI-Provisioning/templates/index.html
     steps:
@@ -212,29 +218,23 @@ jobs:
         if: matrix.service == 'dynamic-face-dataset-collector'
         run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test src/dynamic_face_data_collector/test_face_saver.py
 
-  # Client isolation on throwaway copies of the shared services (D-036). About 5 minutes and 3.5 GB of images, so only
-  # pull requests that touch provisioning, the services' settings or the code that logs in to them run it
-  isolation:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - id: changed
+      # A release publishes the images it just tested (D-017), instead of building them a second time
+      - name: Push for the release
+        if: inputs.tag
         env:
-          BASE: ${{ github.base_ref }}
+          REF: ghcr.io/hamza-aziz-ai/${{ matrix.image }}:${{ inputs.tag }}-${{ matrix.arch }}
+          TOKEN: ${{ github.token }}
         run: |
-          if [ -n "$BASE" ] && git diff --name-only "origin/$BASE...HEAD" | grep -qE '^(deploy/(provision|recovery|test_isolation)\.py|STANDALONE-SERVICES/|src/(parameters|milvus_server)\.py|src/util/face_vectors\.py)'; then
-            echo run=true >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.changed.outputs.run == 'true'
-        run: python3 -I deploy/test_isolation.py
+          set -euo pipefail
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag ci/${{ matrix.service }}:test "$REF"
+          # ghcr.io refuses the first push into a new package at random ("denied"); a retry skips layers already there
+          for attempt in 1 2 3; do docker push "$REF" && break; [ "$attempt" -lt 3 ] || exit 1; sleep 20; done
 
   # Single required status check for branch rules; fails if any job failed or was cancelled
   ci:
     if: always()
-    needs: [lint, secrets, compose, changes, images, isolation]
+    needs: [checks, images]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
