@@ -79,6 +79,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       images: ${{ steps.diff.outputs.images }}
+      arches: ${{ steps.diff.outputs.arches }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,20 +90,25 @@ jobs:
           BASE: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          if [ "$EVENT" != pull_request ]; then echo "images=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          both='arches=["amd64","arm64"]'
+          if [ "$EVENT" != pull_request ]; then printf 'images=true\n%s\n' "$both" >> "$GITHUB_OUTPUT"; exit 0; fi
           changed=$(git diff --name-only "origin/$BASE...HEAD")
           echo "$changed"
           # Only docs/ and Markdown files: nothing an image is built from
           if grep -qvE '^docs/|\.md$' <<<"$changed"; then echo "images=true"; else echo "images=false"; fi >> "$GITHUB_OUTPUT"
+          # arm64 (Jetson, D-044) is built on PRs only when what it is built from changes; releases always build it
+          if grep -qE 'Dockerfile|requirements\.txt$|^\.github/workflows/(ci|release)\.yml$' <<<"$changed"; then echo "$both"; else echo 'arches=["amd64"]'; fi >> "$GITHUB_OUTPUT"
 
   images:
     needs: changes
     if: needs.changes.outputs.images == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
+        arch: ${{ fromJSON(needs.changes.outputs.arches) }}
+        service: [producer-consumer, database-controller, feedback-controller, api, display-image, dynamic-face-dataset-collector, automatic-milvus-db-update, roi]
         include:
           - service: producer-consumer
             dockerfile: main.Dockerfile
@@ -130,6 +136,9 @@ jobs:
             files: Custom-ROI-Provisioning/app.py Custom-ROI-Provisioning/templates/index.html
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The release builds all 8 images on one runner of each architecture; this shows the room an arm64 runner has
+      - if: matrix.arch == 'arm64'
+        run: df -h /; docker compose version
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -138,8 +147,8 @@ jobs:
           tags: ci/${{ matrix.service }}:test
           load: true
           push: false
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          cache-from: type=gha,scope=${{ matrix.service }}${{ matrix.arch == 'arm64' && '-arm64' || '' }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}${{ matrix.arch == 'arm64' && '-arm64' || '' }}
       # Smoke test: dependencies resolve and import, entrypoint and healthcheck shipped,
       # site config and secrets kept out of the image (they are mounted at runtime)
       - name: Smoke test

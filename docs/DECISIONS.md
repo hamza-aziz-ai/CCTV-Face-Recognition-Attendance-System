@@ -687,3 +687,17 @@ Why: staging is how recognition follows a person's changing appearance, and edge
 Trade-off: face images cross the network from the edge node. Over a LAN the volume is small, as only a better crop replaces a kept one. An edge node outside the client's LAN needs the collector behind the proxy with TLS and a per-node token before it is used.
 Needed before an edge node keeps crops: a `DYNAMIC_FACE_DATA_COLLECTOR_API` override in `master.env`, as `INSIGHTFACE_HOST` has; camera clusters read from the camera configuration, as `face_saver.py` hardcodes maingate cameras 1 to 10 and raises `KeyError` for any other camera; and the deletion tests (8e) covering crops.
 Revisit if: a client forbids face images leaving the edge site. Then use option 1 with the collector, PostgreSQL and Milvus staging on the edge node.
+
+## D-044: GitHub builds arm64 images for the Jetson
+Date: 2026-11-03   Model: Claude Opus 5.5
+Context: the owner wants GitHub to build the Jetson's images, with both layouts left open: everything on the Jetson, or the Jetson as an edge node of a central host. The app images built unchanged on the Jetson (roadmap item 12). Every third-party image we use already publishes arm64, as does the display image from Kafka-WebApp. InsightFace-REST needs its own Dockerfile there, `Dockerfile_trt_jetson`. GitHub's `ubuntu-24.04-arm` runners are available to private repositories and use the same Actions minutes.
+Options:
+
+1. one tag per app image holding both architectures, each built natively on its own runner
+2. separate `-arm64` tags and a second compose file for the Jetson
+3. cross-build arm64 under QEMU on the amd64 runner
+
+Chosen: 1. `release.yml` builds `<tag>-amd64` and `<tag>-arm64` on one runner of each architecture, then `docker buildx imagetools create` joins them under `<tag>`. The bundle pins that index digest, so each host pulls its own architecture with the same compose file. CI smoke-tests arm64 on a PR only when a Dockerfile, a `requirements.txt`, `ci.yml` or `release.yml` changes, and every release builds and smoke-tests both. InsightFace-REST for the Jetson is a separate tag, `<version>-<tree>-jetson`, built by `insightface-image.yml` on an arm64 runner. It is a different TensorRT and base image, not the same image for another architecture.
+Why: one compose file and one bundle serve both layouts and the x86 host. Native runners avoid QEMU, which is many times slower for builds that install Python wheels.
+Trade-off: a release now needs both architectures, so an arm64-only failure blocks an x86 release until fixed. Each release uses about twice the image build minutes. The Jetson InsightFace-REST image is published but not yet in the bundle. The Jetson layouts add it, as they add the edge-node settings of D-043.
+Revisit if: arm64 builds break often enough to hold up x86 releases. Then let the arm64 leg fail without blocking, and publish amd64 alone.
