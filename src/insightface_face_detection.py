@@ -68,12 +68,19 @@ class IFRClient:
                    msgpack=use_msgpack,
                    )
 
-        if data and isinstance(data[0], bytes):
-            # Raw image bytes cannot go in JSON; InsightFace-REST reads a msgpack body and then skips base64 decoding
-            resp = self.session.post(extract_uri, data=msgpack.packb(req), timeout=120,
-                                     headers={"Content-Type": "application/msgpack"})
-        else:
-            resp = self.session.post(extract_uri, json=req, timeout=120)
+        try:
+            if data and isinstance(data[0], bytes):
+                # Raw image bytes cannot go in JSON; InsightFace-REST reads a msgpack body and then skips base64 decoding
+                resp = self.session.post(extract_uri, data=msgpack.packb(req), timeout=120,
+                                         headers={"Content-Type": "application/msgpack"})
+            else:
+                resp = self.session.post(extract_uri, json=req, timeout=120)
+        except requests.RequestException:
+            # The client lives as long as its consumer thread; after a connection error the old session is dropped
+            # and the next request starts a fresh one, so a restarted InsightFace-REST is picked up again
+            self.session.close()
+            self.session = requests.Session()
+            raise
         if resp.headers['content-type'] == 'application/x-msgpack':
             content = msgpack.loads(resp.content)
         else:

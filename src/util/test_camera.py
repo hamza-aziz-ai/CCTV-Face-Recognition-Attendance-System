@@ -1,4 +1,4 @@
-"""Camera checks: a region reaching the frame's edge crops cleanly, darkness alerts Kafka at a steady pace, not once a frame, and the GPU and CPU decoders open a clip.
+"""Camera checks: a region reaching the frame's edge crops cleanly, darkness alerts Kafka at a steady pace, not once a frame, the GPU and CPU decoders open a clip, and the InsightFace client recovers from a connection error.
 Run in the producer-consumer image: python3 src/util/test_camera.py"""
 import json
 import os
@@ -81,6 +81,23 @@ def test_decoders():
     print(f"decoders ok (auto decoded on the {'GPU' if on_gpu else 'CPU'}, passwords masked)")
 
 
+def test_ifr_client_reconnects():
+    """A consumer thread keeps one InsightFace client; after a connection error it must drop its session for a new one."""
+    import requests
+    from insightface_face_detection import IFRClient
+    client = IFRClient(host="http://127.0.0.1", port="9")  # nothing listens on port 9
+    before = client.session
+    try:
+        client.extract(["x"])
+    except requests.ConnectionError:
+        pass
+    else:
+        raise AssertionError("expected a connection error")
+    assert client.session is not before, "session kept after a connection error"
+    print("InsightFace client ok (new session after a connection error)")
+
+
 if __name__ == "__main__":
     test()
     test_decoders()
+    test_ifr_client_reconnects()

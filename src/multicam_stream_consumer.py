@@ -36,24 +36,27 @@ def face_recognition(shared_buffer, thread_id: str, embeddings_collection, stagi
         embeddings_collection: A collection of embeddings of known faces
         staging_collection: A collection of embeddings of faces captured from CCTV footage
     """
+    # One client per thread, kept for its lifetime: it replaces its own session after a connection error (IFRClient.extract)
+    ifr_client = IFRClient(host=INSIGHTFACE_HOST, port=INSIGHTFACE_PORT)
+
     while True:
         # consumption_start_time = time.perf_counter()
-
-        # Create an instance of the IFRClient based on the thread_id
-        ifr_client = IFRClient(host=INSIGHTFACE_HOST, port=INSIGHTFACE_PORT)
 
         # Apply thread lock to the shared buffer
         with lock:
             # frame_accumulation_start_time = time.perf_counter()
-            # if the shared buffer to the corresponding camera is empty, then continue
-            if shared_buffer.qsize() < BATCH_SIZE:
-                continue
-
-            batched_frame_buffer = []
-            while len(batched_frame_buffer) != BATCH_SIZE:
-                camera_elements = shared_buffer.get()
-                # print(camera_elements)
-                batched_frame_buffer.append(camera_elements)
+            batch_ready = shared_buffer.qsize() >= BATCH_SIZE
+            if batch_ready:
+                batched_frame_buffer = []
+                while len(batched_frame_buffer) != BATCH_SIZE:
+                    camera_elements = shared_buffer.get()
+                    # print(camera_elements)
+                    batched_frame_buffer.append(camera_elements)
+        if not batch_ready:
+            # Waiting for a full batch used to spin a core, building a new client on every pass (about 93% CPU idle);
+            # the lock is released while waiting
+            time.sleep(0.01)
+            continue
             # frame_accumulation_end_time = time.perf_counter()
             # frame_accumulation_total_time = frame_accumulation_end_time - frame_accumulation_start_time
             # print(
@@ -95,10 +98,6 @@ def face_recognition(shared_buffer, thread_id: str, embeddings_collection, stagi
 
         # Delete batch_of_frames
         del batch_of_frames
-
-        # Reset the connection
-        if ifr_client is not None:
-            del ifr_client
 
         frames_buffer_size = shared_buffer.qsize()
         # print(f"THREAD: {thread_id} CURRENT BUFFER SIZE: {frames_buffer_size}")

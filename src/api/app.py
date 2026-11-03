@@ -39,6 +39,7 @@ from parameters import (
 )
 from custom_logging import api_logger
 import accounts
+import live
 
 # -------------------- Global Configuration & Globals --------------------
 
@@ -305,6 +306,9 @@ async def lifespan(app: FastAPI):
         sys.exit(1)
 
     accounts.setup(get_db_cursor)
+    live.setup(get_db_cursor)
+    # MediaMTX starts after this service is healthy and reloads the file whenever it changes (D-047)
+    live.write_config()
 
     # Load camera configuration (can be cached globally if needed)
     load_camera_configuration()
@@ -323,6 +327,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(accounts.router)
+app.include_router(live.router)
 
 # -------------------- API Endpoints --------------------
 

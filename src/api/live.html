@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Live view · Attendance Display</title>
+    <style>
+        /* The display's own theme and fonts, as on the sign-in page */
+        @font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm_plex_sans_regular.ttf"); }
+        @font-face { font-family: "IBM Plex Sans"; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm_plex_sans_semibold.ttf"); }
+
+        :root {
+            --ink: #14202b;
+            --ink-muted: #46535f;
+            --ground: #f3f5f7;
+            --surface: #ffffff;
+            --line: #d5dbe1;
+            --accent: #0b5f63;
+            --accent-dark: #084649;
+            --error: #a32019;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--ground);
+            color: var(--ink);
+            font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        }
+
+        header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            padding: 20px 28px;
+            border-bottom: 1px solid var(--line);
+            background: var(--surface);
+        }
+
+        h1 { margin: 0; font-size: 1.3rem; font-weight: 600; }
+
+        .note { color: var(--ink-muted); font-size: 0.9rem; }
+
+        main {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+            gap: 20px;
+            padding: 24px 28px;
+        }
+
+        .camera {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .camera h2 { margin: 0; padding: 12px 16px; font-size: 1rem; font-weight: 600; }
+
+        .video {
+            position: relative;
+            aspect-ratio: 16 / 9;
+            background: #0d151c;
+        }
+
+        .video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+        .video button {
+            position: absolute;
+            inset: 0;
+            margin: auto;
+            width: 140px;
+            height: 44px;
+            border: 0;
+            border-radius: 6px;
+            background: var(--accent);
+            color: #fff;
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .video button:hover, .video button:focus-visible { background: var(--accent-dark); }
+
+        ol { list-style: none; margin: 0; padding: 8px 16px 14px; min-height: 64px; }
+
+        li {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--ground);
+            font-size: 0.92rem;
+        }
+
+        li:last-child { border-bottom: 0; }
+
+        .when { color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+        .empty, .error { color: var(--ink-muted); padding: 6px 0; }
+
+        .error { color: var(--error); }
+    </style>
+</head>
+<body>
+<header>
+    <h1>Live view</h1>
+    <span class="note">Video starts only when you press Play. Latest recognitions refresh every 5 seconds.</span>
+</header>
+<main id="cameras" aria-live="polite"></main>
+<script>
+    const main = document.getElementById("cameras");
+
+    function text(tag, value, className) {
+        const node = document.createElement(tag);
+        node.textContent = value;
+        if (className) node.className = className;
+        return node;
+    }
+
+    function card(camera) {
+        const section = document.createElement("section");
+        section.className = "camera";
+        section.append(text("h2", camera.name));
+
+        const video = document.createElement("div");
+        video.className = "video";
+        const play = text("button", "Play");
+        play.type = "button";
+        play.setAttribute("aria-label", `Play ${camera.name}`);
+        // The camera is pulled only while someone watches, so nothing loads until asked
+        play.addEventListener("click", () => {
+            const frame = document.createElement("iframe");
+            frame.src = `/live/${encodeURIComponent(camera.path)}/`;
+            frame.title = `Live video from ${camera.name}`;
+            frame.allow = "autoplay; fullscreen";
+            video.replaceChildren(frame);
+        });
+        video.append(play);
+        section.append(video);
+
+        const list = document.createElement("ol");
+        list.dataset.camera = camera.name;
+        list.setAttribute("aria-label", `Latest recognitions at ${camera.name}`);
+        list.append(text("li", "No recognitions yet", "empty"));
+        section.append(list);
+        return section;
+    }
+
+    async function refreshEvents() {
+        try {
+            const response = await fetch("/api/live/events", { credentials: "same-origin" });
+            if (response.status === 401) { window.location.href = "/auth/sign-in"; return; }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const events = await response.json();
+            for (const list of main.querySelectorAll("ol")) {
+                const rows = events[list.dataset.camera] || [];
+                list.replaceChildren(...(rows.length ? rows.map((row) => {
+                    const item = document.createElement("li");
+                    const score = row.score === null ? "" : ` · ${row.score.toFixed(2)}`;
+                    item.append(text("span", row.person_id), text("span", `${row.date} ${row.time}${score}`, "when"));
+                    return item;
+                }) : [text("li", "No recognitions yet", "empty")]));
+            }
+        } catch (error) {
+            for (const list of main.querySelectorAll("ol")) list.replaceChildren(text("li", "Could not load recognitions", "error"));
+        }
+    }
+
+    async function start() {
+        const response = await fetch("/api/live/cameras", { credentials: "same-origin" });
+        if (response.status === 401) { window.location.href = "/auth/sign-in"; return; }
+        if (!response.ok) { main.replaceChildren(text("p", `Live view unavailable (HTTP ${response.status})`, "error")); return; }
+        const cameras = await response.json();
+        if (!cameras.length) { main.replaceChildren(text("p", "No RTSP cameras are configured.", "empty")); return; }
+        main.replaceChildren(...cameras.map(card));
+        refreshEvents();
+        setInterval(refreshEvents, 5000);
+    }
+
+    start();
+</script>
+</body>
+</html>

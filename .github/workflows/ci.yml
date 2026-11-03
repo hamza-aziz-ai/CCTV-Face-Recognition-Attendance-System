@@ -48,8 +48,9 @@ jobs:
           if [ "$EVENT" != pull_request ]; then printf 'images=true\n%s\n' "$both" >> "$GITHUB_OUTPUT"; exit 0; fi
           changed=$(git diff --name-only "origin/$BASE...HEAD")
           echo "$changed"
-          # Only docs/, Markdown or InsightFace-REST (built by insightface-image.yml): nothing an app image is built from
-          if grep -qvE '^docs/|\.md$|^STANDALONE-SERVICES/InsightFace-REST/' <<<"$changed"; then echo "images=true"; else echo "images=false"; fi >> "$GITHUB_OUTPUT"
+          # Only docs/, Markdown, InsightFace-REST (built by insightface-image.yml) or the DeepStream dev recipe (built by
+          # hand on each machine, never in CI): nothing an app image is built from
+          if grep -qvE '^docs/|\.md$|^STANDALONE-SERVICES/InsightFace-REST/|^deepstream/' <<<"$changed"; then echo "images=true"; else echo "images=false"; fi >> "$GITHUB_OUTPUT"
           # arm64 (Jetson, D-044) is built on PRs only when what it is built from changes: the app Dockerfiles and
           # requirements at the top level or the ROI page's, or these workflows. Releases always build it
           if grep -qE '^[^/]*Dockerfile|^(Custom-ROI-Provisioning/)?requirements\.txt$|^\.github/workflows/(ci|release)\.yml$' <<<"$changed"; then echo "$both"; else echo 'arches=["amd64"]'; fi >> "$GITHUB_OUTPUT"
@@ -87,10 +88,11 @@ jobs:
       # The standalone scripts from a bundle with a separate site folder, and from the checkout, with Docker stubbed
       - run: bash deploy/test_standalone_scripts.sh
       # Client isolation on throwaway copies of the shared services (D-036). About 5 minutes and 3.5 GB of images, so only
-      # pull requests that touch provisioning, the services' settings or the code that logs in to them run it
+      # pull requests that touch provisioning, the services' settings or the code that logs in to them run it.
+      # InsightFace-REST has no logins to isolate, so its changes alone do not
       - name: Client isolation
         run: |
-          if [ -n "$BASE" ] && git diff --name-only "origin/$BASE...HEAD" | grep -qE '^(deploy/(provision|recovery|test_isolation)\.py|STANDALONE-SERVICES/|src/(parameters|milvus_server)\.py|src/util/face_vectors\.py)'; then
+          if [ -n "$BASE" ] && git diff --name-only "origin/$BASE...HEAD" | grep -v '^STANDALONE-SERVICES/InsightFace-REST/' | grep -qE '^(deploy/(provision|recovery|test_isolation)\.py|STANDALONE-SERVICES/|src/(parameters|milvus_server)\.py|src/util/face_vectors\.py)'; then
             python3 -I deploy/test_isolation.py
           fi
 

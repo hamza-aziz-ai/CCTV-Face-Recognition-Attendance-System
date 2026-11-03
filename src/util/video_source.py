@@ -29,7 +29,9 @@ def masked(text: str) -> str:
 
 def _input_options(url: str) -> list:
     if url.startswith("rtsp"):
-        return ["-timeout", TIMEOUT_US]
+        # TCP, as OpenCV uses: FFmpeg's default UDP failed from Docker Desktop with "Error during demuxing: Operation
+        # not permitted", so every real camera fell back to the CPU
+        return ["-rtsp_transport", "tcp", "-timeout", TIMEOUT_US]
     return ["-rw_timeout", TIMEOUT_US]
 
 

@@ -83,6 +83,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
+      # The site-wide camera login, for cameras that leave theirs null: the live view's MediaMTX pulls them (D-047)
+      CAM_USERNAME: ${CAM_USERNAME}
+      CAM_PASSWORD: ${CAM_PASSWORD}
       PG_APP_USER: ${PG_APP_USER:-}
       PG_APP_PASSWORD: ${PG_APP_PASSWORD:-}
       # The admin login, used only while master.env has LEGACY_SHARED_SERVICES=1 (owner, until step 3c, D-037)
@@ -92,6 +95,8 @@ services:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
       - ./logs:/Multi-Person-Face-Recognition/logs
+      # The API writes MediaMTX's configuration here at start, from the camera configuration
+      - live-video-config:/live-video
     ports:
       # On this machine only, for the watcher; everyone else comes through the HTTPS proxy (D-040)
       - "127.0.0.1:${API_PORT:-9090}:8000"
@@ -214,6 +219,25 @@ services:
     depends_on:
       display-image-server:
         condition: service_healthy
+
+  # Live view (D-047): each camera passed through as HLS, reached only through the proxy's /live/ route behind the
+  # sign-in, so nothing is published on the host. It pulls a camera over TCP only while someone watches it
+  live-video:
+    image: bluenviron/mediamtx:1.21.3@sha256:59e43552f3be43695b70c19424dc2a42fcec18075f88d91561a24ac5d70a586c
+    restart: unless-stopped
+    command: ["/live-video/mediamtx.yml"]
+    volumes:
+      - live-video-config:/live-video:ro
+    networks:
+      - default
+      - edge
+    depends_on:
+      mfr-api-service:
+        condition: service_healthy
+
+volumes:
+  # MediaMTX's configuration, which holds camera passwords: a Docker volume, not a file in the site folder
+  live-video-config:
 
 # Shared with the host's HTTPS proxy (D-040); the watcher and the start script create it
 networks:

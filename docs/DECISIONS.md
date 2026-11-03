@@ -730,3 +730,17 @@ Chosen: 1. `Dockerfile_trt` is on `26.03-py3` by digest, `Dockerfile_trt_jetson`
 Why: the owner chose TensorRT 10 so the move to DeepStream 9.1 keeps the same TensorRT. One image means one Dockerfile, one tag the laptop and the Jetson both pull, and the bundle pins one digest. On both machines the new image found the same 119 faces as the old one, embeddings within cosine 0.9983, and it answered slightly faster (docs/features/jetson-arm64.md).
 Trade-off: the Jetson image grows from 6.18 to 21.5 GB. x86 moves back from TensorRT 11.1 to 10.16, so `onnx_to_trt.py` takes its TensorRT 10 path (FP16 builder flag) on both. Engines are rebuilt once per TensorRT version; their file names carry it, so the old ones stay usable for a rollback. The Jetson's DeepStream 9.1 container is NVIDIA's arm64 release 26.04 with TensorRT 10.16.1.11, one build ahead of 26.03; the owner kept 26.03 on both machines, because a 26.04 image only on the Jetson would split InsightFace into two images again, and InsightFace builds its own engines, so none are shared with DeepStream.
 Revisit if: DeepStream moves to TensorRT 11, or the Jetson's disk becomes the limit.
+
+## D-047: Live view through one MediaMTX per client, as HLS behind the existing sign-in
+Date: 2026-11-03   Model: Claude Opus 5.5   Decided by: owner (recommended defaults)
+Context: roadmap 8b asks for each camera's video passed through, beside its latest recognitions, with no overlays. Browsers cannot play RTSP, and camera logins must stay out of the browser.
+Options:
+
+1. delivery: HLS through the existing Caddy route and sign-in, or WebRTC with its own UDP port and auth
+2. who watches: all three roles, or `client_admin` and `viewer` only
+3. where: one MediaMTX per client stack, or one shared per host like Caddy
+
+Chosen: HLS, `client_admin` and `viewer`, one per client stack (docs/features/live-view.md). The API writes MediaMTX's configuration from the camera configuration at start into a Docker volume; MediaMTX serves HLS only and pulls a camera only while someone watches; the proxy's `/live/*` route checks `/live/check` with `forward_auth`.
+Why: HLS needs no new port or auth and passes the existing sign-in. Live video of people is not needed for enrolment work. Per-client MediaMTX keeps each client's camera passwords and streams in its own stack, as D-036 does for data.
+Trade-off: measured 3.8 s glass to glass with the owner's phone (0.9 s median of it the phone's RTSP stream over Wi-Fi, up to 2 s), 2.8 s until the player's first stall. The owner sees a similar delay on the recognition display without HLS and attributes it to the RTSP stream; the batch collection was benchmarked by the owner as far smaller. One more container per client. Each client's proxy route must be regenerated after the release that adds it. Containers of other clients on `cctv-edge` can reach MediaMTX directly, as with the display (D-040).
+Revisit if: a client needs under about 1.5 s; then tune HLS with our own player or move to WebRTC.
