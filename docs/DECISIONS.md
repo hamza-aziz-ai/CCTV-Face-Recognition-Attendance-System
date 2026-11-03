@@ -701,3 +701,18 @@ Chosen: 1. The release's own CI run builds and smoke-tests each image on a runne
 Why: one compose file and one bundle serve both layouts and the x86 host. Native runners avoid QEMU, which is many times slower for builds that install Python wheels.
 Trade-off: a release now needs both architectures, so an arm64-only failure blocks an x86 release until fixed. Each release uses about twice the image build minutes. The Jetson InsightFace-REST image is published but not yet in the bundle. The Jetson layouts add it, as they add the edge-node settings of D-043.
 Revisit if: arm64 builds break often enough to hold up x86 releases. Then let the arm64 leg fail without blocking, and publish amd64 alone.
+
+## D-045: Camera streams decode on NVDEC through FFmpeg, with OpenCV as the fallback
+Date: 2026-11-03   Model: Claude Opus 5.5   Decided by: owner (option 2 on this machine first, CPU fallback kept, option 3 as a toggle)
+Context: on the Jetson the producer was CPU-bound (437% CPU for 4 cameras) while the GPU sat at 15 to 56%. On the laptop, reading one 1080p frame the producer's way cost 39 ms of CPU: decoding, scaling, and a darkness check that blurred the full frame. Frames then went to InsightFace-REST as base64 JPEG.
+Options:
+
+1. DeepStream for the whole pipeline (roadmap item 11)
+2. decode on NVDEC in the producer, through FFmpeg's cuvid decoders in a subprocess per camera, which also scale on the GPU
+3. send frames to InsightFace-REST uncompressed instead of as JPEG
+4. OpenCV built with CUDA video decoding (`cudacodec`) in the InsightFace-REST image
+
+Chosen: 2, with 3 as a toggle, in `src/util/video_source.py` and `insightface_face_detection.py`. `VIDEO_DECODE=auto` is the default and falls back to OpenCV per connection, and `FRAME_TRANSPORT=jpeg` stays the default (docs/features/gpu-decode.md).
+Why: 16 cameras of 1080p30 took 135% CPU at 30 fps on NVDEC, against 1,339% at 25 fps on the CPU. FFmpeg with NVDEC was already in the producer image, and InsightFace-REST already takes msgpack bodies with raw bytes, so neither needed a new dependency or image. Option 4 was rejected because InsightFace-REST never sees video, only still frames. Option 1 stays the larger, later step.
+Trade-off: each GPU camera costs about 131 MB of VRAM for its own CUDA context, so the laptop's limit is about 24 cameras. The producer now reserves the GPU, so a host needs an NVIDIA GPU for it, as every host already has for InsightFace-REST. The Jetson's FFmpeg has no NVDEC, so it stays on the CPU until a GStreamer `nvv4l2decoder` path exists. `bmp` measured slower per batch here (119 against 71 ms), so it stays off unless the producer's CPU is the limit.
+Revisit if: VRAM per camera limits a client. Then decode several cameras in one process (shared CUDA context) or move to DeepStream.

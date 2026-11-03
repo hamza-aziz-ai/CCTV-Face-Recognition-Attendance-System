@@ -17,7 +17,15 @@ current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
 sys.path.append(parent)
 
-from parameters import INSIGHTFACE_HOST, INSIGHTFACE_PORT, ENABLE_FACE_LIVENESS_DETECTION, SAVE_FACE
+from parameters import INSIGHTFACE_HOST, INSIGHTFACE_PORT, ENABLE_FACE_LIVENESS_DETECTION, SAVE_FACE, FRAME_TRANSPORT
+
+
+def encode_frames(frames: list) -> list:
+    """Frames as FRAME_TRANSPORT sends them: base64 JPEG strings, or uncompressed BMP bytes, which extract() sends as
+    msgpack. InsightFace-REST takes raw bytes in a msgpack body and decodes BMP with OpenCV, so it needs no change."""
+    if FRAME_TRANSPORT == "bmp":
+        return [cv2.imencode(".bmp", frame)[1].tobytes() for frame in frames]
+    return [base64.b64encode(cv2.imencode(".jpg", frame)[1].tobytes()).decode("ascii") for frame in frames]
 
 
 class IFRClient:
@@ -60,7 +68,12 @@ class IFRClient:
                    msgpack=use_msgpack,
                    )
 
-        resp = self.session.post(extract_uri, json=req, timeout=120)
+        if data and isinstance(data[0], bytes):
+            # Raw image bytes cannot go in JSON; InsightFace-REST reads a msgpack body and then skips base64 decoding
+            resp = self.session.post(extract_uri, data=msgpack.packb(req), timeout=120,
+                                     headers={"Content-Type": "application/msgpack"})
+        else:
+            resp = self.session.post(extract_uri, json=req, timeout=120)
         if resp.headers['content-type'] == 'application/x-msgpack':
             content = msgpack.loads(resp.content)
         else:
@@ -81,15 +94,7 @@ class IFRClient:
                           threshold=0.6, extract_embeddings=True, return_face_data=True, return_landmarks=False,
                           embed_only=False, limit_faces=0, use_msgpack=True):
 
-        # Initialize an empty batch to store the encoded frame data
-        batch_data = []
-
-        for frame in batch_frames:
-            # encode each frame in JPEG format
-            _, buffer = cv2.imencode(".jpg", frame)
-            # get base64 formatted data
-            data = base64.b64encode(buffer.tobytes()).decode("ascii")
-            batch_data.append(data)
+        batch_data = encode_frames(batch_frames)
 
         faces_data = self.extract(
             batch_data, mode=mode, server=self.server, threshold=threshold, extract_embedding=extract_embeddings,
@@ -103,15 +108,7 @@ class IFRClient:
                              threshold=0.6, extract_embeddings=True, return_face_data=True, return_landmarks=True,
                              embed_only=False, limit_faces=0, use_msgpack=True):
 
-        # Initialize an empty batch to store the encoded frame data
-        batch = []
-
-        for frame in batch_of_frames:
-            # encode each frame in JPEG format
-            _, buffer = cv2.imencode(".jpg", frame)
-            # get base64 formatted data
-            data = base64.b64encode(buffer.tobytes()).decode("ascii")
-            batch.append(data)
+        batch = encode_frames(batch_of_frames)
 
         faces_data = self.extract(batch, mode=mode, server=self.server, threshold=threshold,
                                   extract_embedding=extract_embeddings, return_face_data=return_face_data,

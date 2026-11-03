@@ -1,7 +1,8 @@
-"""Camera checks: a region reaching the frame's edge crops cleanly, and darkness alerts Kafka at a steady pace, not once a frame.
+"""Camera checks: a region reaching the frame's edge crops cleanly, darkness alerts Kafka at a steady pace, not once a frame, and the GPU and CPU decoders open a clip.
 Run in the producer-consumer image: python3 src/util/test_camera.py"""
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from unittest import mock
@@ -59,5 +60,27 @@ def test():
     print(f"camera ok (region at the frame edge crops, {len(alerts)} alerts for 500 dark frames, recovery announced once)")
 
 
+def test_decoders():
+    """VIDEO_DECODE: auto opens a clip on the GPU when there is one (scaled to 640x360) and on the CPU otherwise (full
+    size), gpu alone fails without one, and FFmpeg's errors never carry the camera's password."""
+    from util import video_source
+    assert video_source.masked("rtsp://admin:p%40ss@10.0.0.5:554/x failed") == "rtsp://***@10.0.0.5:554/x failed"
+    clip = os.path.abspath("clip.mp4")
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=1280x720:rate=10", "-t", "2",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", clip], check=True)
+    video_source.VIDEO_DECODE = "auto"
+    stream = video_source.open_stream(clip)
+    on_gpu = isinstance(stream, video_source._Primed)
+    frames = [stream.read() for _ in range(3)]
+    stream.release()
+    assert all(ok for ok, _ in frames), "no frames"
+    assert frames[0][1].shape == ((360, 640, 3) if on_gpu else (720, 1280, 3)), frames[0][1].shape
+    if not on_gpu:
+        video_source.VIDEO_DECODE = "gpu"
+        assert video_source.open_stream(clip).read() == (False, None)
+    print(f"decoders ok (auto decoded on the {'GPU' if on_gpu else 'CPU'}, passwords masked)")
+
+
 if __name__ == "__main__":
     test()
+    test_decoders()
