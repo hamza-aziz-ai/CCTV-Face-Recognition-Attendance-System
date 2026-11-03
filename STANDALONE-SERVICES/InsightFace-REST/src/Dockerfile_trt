@@ -1,5 +1,6 @@
-# TensorRT 26.07: CUDA 13.3.1, TensorRT 11.1, Python 3.12, Ubuntu 24.04; needs driver 610.43 or later
-FROM nvcr.io/nvidia/tensorrt:26.07-py3@sha256:b82db1abc23750ab0069abc99bbe4ea29138dbdc23ea39861199e2346638b48a
+# TensorRT 26.03: CUDA 13.2, TensorRT 10.16, Python 3.12, Ubuntu 24.04, for amd64 and arm64. The same TensorRT as the Jetson's
+# JetPack 7.2.1 and DeepStream 9.1, and its arm64 build runs on the Orin Nano, so one Dockerfile serves both (D-046)
+FROM nvcr.io/nvidia/tensorrt:26.03-py3@sha256:ade1b30517b3d66b911a3cd7faf0146484ab8956098abe66b96b944fa36f4861
 
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8

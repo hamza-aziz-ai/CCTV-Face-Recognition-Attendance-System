@@ -9,13 +9,14 @@ python-multipart
 ujson
 msgpack
 tqdm
-icc-rt
+# Intel only, and onnx-simplifier is never imported: neither has an arm64 wheel
+icc-rt; platform_machine == "x86_64"
 numba
 opencv-python
 scikit-image
 onnx
 onnxruntime
-onnx-simplifier
+onnx-simplifier; platform_machine == "x86_64"
 onnxconverter-common
 # 2.x needs libjpeg-turbo 3, newer than Ubuntu 24.04 ships (2.1.5); only TurboJPEG() and decode() are used
 PyTurboJPEG==1.8.3

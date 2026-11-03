@@ -1,5 +1,7 @@
 # Feature: InsightFace-REST 0.9.5.0 on TensorRT 26.07
 
+Superseded: since D-046 the image is on `tensorrt:26.03-py3` (TensorRT 10.16) for amd64 and arm64, to match DeepStream 9.1. The TensorRT 11 notes below are history.
+
 **Goal:** the latest upstream, on the TensorRT container that matches CUDA toolkit 13.3 (`26.07-py3`: CUDA 13.3.1, TRT 11.1, Python 3.12, driver 610.43 or later).
 
 **Status:** done in a PR (D-031). The running stack switches after the PR merges and `./start_standalone_services.sh` is run.

@@ -48,10 +48,11 @@ jobs:
           if [ "$EVENT" != pull_request ]; then printf 'images=true\n%s\n' "$both" >> "$GITHUB_OUTPUT"; exit 0; fi
           changed=$(git diff --name-only "origin/$BASE...HEAD")
           echo "$changed"
-          # Only docs/ and Markdown files: nothing an image is built from
-          if grep -qvE '^docs/|\.md$' <<<"$changed"; then echo "images=true"; else echo "images=false"; fi >> "$GITHUB_OUTPUT"
-          # arm64 (Jetson, D-044) is built on PRs only when what it is built from changes; releases always build it
-          if grep -qE 'Dockerfile|requirements\.txt$|^\.github/workflows/(ci|release)\.yml$' <<<"$changed"; then echo "$both"; else echo 'arches=["amd64"]'; fi >> "$GITHUB_OUTPUT"
+          # Only docs/, Markdown or InsightFace-REST (built by insightface-image.yml): nothing an app image is built from
+          if grep -qvE '^docs/|\.md$|^STANDALONE-SERVICES/InsightFace-REST/' <<<"$changed"; then echo "images=true"; else echo "images=false"; fi >> "$GITHUB_OUTPUT"
+          # arm64 (Jetson, D-044) is built on PRs only when what it is built from changes: the app Dockerfiles and
+          # requirements at the top level or the ROI page's, or these workflows. Releases always build it
+          if grep -qE '^[^/]*Dockerfile|^(Custom-ROI-Provisioning/)?requirements\.txt$|^\.github/workflows/(ci|release)\.yml$' <<<"$changed"; then echo "$both"; else echo 'arches=["amd64"]'; fi >> "$GITHUB_OUTPUT"
       # Syntax errors and undefined names only; the codebase predates any style config
       - run: pipx run ruff==0.17.3 check --select E9,F63,F7,F82 --target-version py314 --extend-exclude STANDALONE-SERVICES,graphify-out --output-format github .
       # Model manifest must match the code and config it describes; unverified (null) fields only block releases
