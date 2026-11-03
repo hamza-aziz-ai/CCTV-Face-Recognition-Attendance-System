@@ -29,6 +29,7 @@ Besides registration in the app, the roster can be filled in the API container:
 ```bash
 python3 src/api/enrolment.py add-person PERSON_ID "NAME" [EMPLOYEE_CODE] [DEPARTMENT]
 python3 src/api/enrolment.py import-persons persons.csv    # person_id,name,employee_code,department
+python3 src/api/enrolment.py departments PERSON_ID [DEPARTMENT ...]    # departments besides the registered one, or "all" (docs/features/department-matching.md)
 ```
 
 ## Checks

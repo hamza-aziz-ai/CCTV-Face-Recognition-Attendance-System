@@ -192,8 +192,15 @@ MILVUS_DATABASE = client_name("default")
 METRIC_TYPE = "COSINE"
 INDEX_TYPE = "GPU_IVF_FLAT"
 
-# Threshold
-FACE_MATCHING_TOLERANCE = 0.5 if METRIC_TYPE == "COSINE" else 0.9    # For L2 Metric Type
+# Threshold. Face vectors are unit length (InsightFace returns them normalised), so Milvus's L2, a squared distance, is
+# 2 - 2 x cosine: the cosine collection serves both, and an L2 threshold t is the cosine threshold 1 - t/2 (owner,
+# 2026-11-03: L2 at 0.95 misses more but has given no false match, cosine at 0.45 rarely matches the wrong person).
+# Set in master.env: MATCH_METRIC=COSINE or L2, with COSINE_THRESHOLD or L2_THRESHOLD; scores stay cosine either way.
+MATCH_METRIC = os.getenv("MATCH_METRIC", "COSINE").upper()
+if MATCH_METRIC == "L2":
+    FACE_MATCHING_TOLERANCE = 1 - float(os.getenv("L2_THRESHOLD", "0.95")) / 2
+else:
+    FACE_MATCHING_TOLERANCE = float(os.getenv("COSINE_THRESHOLD", "0.5"))
 
 # Milvus collection name
 # MILVUS_COLLECTION_NAME = "TEST_COLLECTION"
