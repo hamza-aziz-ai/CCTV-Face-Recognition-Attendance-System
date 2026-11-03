@@ -4,6 +4,8 @@ one. Uploads go to this client's MinIO bucket and a job row; the enrolment worke
 API container to manage the roster:
   python3 src/api/enrolment.py add-person PERSON_ID "NAME" [EMPLOYEE_CODE] [DEPARTMENT]
   python3 src/api/enrolment.py import-persons FILE.csv     columns: person_id,name,employee_code,department
+  python3 src/api/enrolment.py departments PERSON_ID [DEPARTMENT ...]    other departments that recognise them, "all" for
+      every one, none to clear; then publish the vectors (face_vectors.py publish) for cameras to follow (8f, D-049)
 """
 import csv
 import re
@@ -42,6 +44,8 @@ CREATE TABLE IF NOT EXISTS persons (
     enrolled_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Departments besides the registered one whose cameras recognise this person, or "all" (D-049)
+ALTER TABLE persons ADD COLUMN IF NOT EXISTS extra_departments TEXT[] NOT NULL DEFAULT '{}';
 CREATE TABLE IF NOT EXISTS consents (
     id UUID PRIMARY KEY,
     person_id TEXT NOT NULL REFERENCES persons,
@@ -344,6 +348,15 @@ def command(args: list) -> str:
     import psycopg2
     from parameters import POSTGRESQL_DATABASE, POSTGRESQL_HOST, POSTGRESQL_PORT, postgres_login
     user, password = postgres_login()
+    if args[0] == "departments":
+        extra = sorted({name.strip().lower() for name in args[2:] if name.strip()})
+        with psycopg2.connect(dbname=POSTGRESQL_DATABASE, user=user, password=password, host=POSTGRESQL_HOST, port=POSTGRESQL_PORT) as conn, conn.cursor() as cursor:
+            cursor.execute(SCHEMA)
+            cursor.execute("UPDATE persons SET extra_departments = %s WHERE person_id = %s RETURNING department", (extra, args[1]))
+            row = cursor.fetchone()
+        if not row:
+            raise SystemExit(f"{args[1]} is not on the roster")
+        return f"{args[1]}: {', '.join([row[0] or '(no department)'] + extra)}. Publish the vectors for cameras to follow."
     rows = [args[1:5]] if args[0] == "add-person" else [
         [row.get("person_id", ""), row.get("name", ""), row.get("employee_code"), row.get("department")]
         for row in csv.DictReader(open(args[1], encoding="utf-8-sig"))]
@@ -360,6 +373,6 @@ def command(args: list) -> str:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3 or sys.argv[1] not in ("add-person", "import-persons"):
+    if len(sys.argv) < 3 or sys.argv[1] not in ("add-person", "import-persons", "departments"):
         raise SystemExit(__doc__)
     print(command(sys.argv[1:]))

@@ -68,8 +68,8 @@ def check(m, root="."):
         "vector_store.index_params.nlist": (vs["index_params"]["nlist"], int(number(r'"nlist": (\d+)', milvus))),
         "vector_store.search_params.nprobe": (vs["search_params"]["nprobe"], int(number(r'"nprobe": (\d+)', milvus))),
         "vector_store.top_k": (vs["top_k"], int(number(r"limit=(\d+)", milvus))),
-        # FACE_MATCHING_TOLERANCE is a conditional on METRIC_TYPE, so ast cannot evaluate it; take the COSINE branch
-        "vector_store.match_distance_tolerance": (vs["match_distance_tolerance"], number(r"FACE_MATCHING_TOLERANCE = ([\d.]+) if METRIC_TYPE == \"COSINE\"", params_text)),
+        # FACE_MATCHING_TOLERANCE depends on MATCH_METRIC in master.env (D-049), so ast cannot evaluate it; take the COSINE default
+        "vector_store.match_distance_tolerance": (vs["match_distance_tolerance"], number(r'os\.getenv\("COSINE_THRESHOLD", "([\d.]+)"\)', params_text)),
         "pipeline.frame_size": (pipe["frame_size"], [p["FRAME_WIDTH"], p["FRAME_HEIGHT"]]),
         "pipeline.batch_size": (pipe["batch_size"], p["BATCH_SIZE"]),
         "pipeline.pupil_distance_threshold_px": (pipe["pupil_distance_threshold_px"], p["PUPIL_DISTANCE_THRESHOLD"]),

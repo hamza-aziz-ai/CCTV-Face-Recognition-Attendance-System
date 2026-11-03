@@ -26,7 +26,7 @@ parent = os.path.dirname(current)
 sys.path.append(parent)
 
 from milvus_server import create_collection, create_connection, insert_data, milvus_token
-from parameters import FACIAL_RECOGNITION_DATASET_PATH, MILVUS_COLLECTION_NAME, MILVUS_DATABASE, MILVUS_HOST, MILVUS_PORT
+from parameters import FACIAL_RECOGNITION_DATASET_PATH, MILVUS_COLLECTION_NAME, MILVUS_DATABASE, MILVUS_HOST, MILVUS_PORT,     POSTGRESQL_DATABASE, POSTGRESQL_HOST, POSTGRESQL_PORT, postgres_login
 
 VECTORS_FILE = "vectors.parquet"
 KEEP = 3  # versions kept in Milvus; the dataset in DVC rebuilds any older one
@@ -44,6 +44,27 @@ def load(dataset):
         return [], []
     rows = pd.concat(frames, ignore_index=True)
     return rows["name_id"].tolist(), [np.asarray(vector, dtype=np.float32).tolist() for vector in rows["embeddings"]]
+
+
+def departments_of(rows):
+    """{person_id: departments} from roster rows (person_id, department, extra_departments): lowercase, sorted, unique."""
+    return {person: sorted({name.strip().lower() for name in [department or "", *(extra or [])] if name and name.strip()})
+            for person, department, extra in rows}
+
+
+def roster_departments():
+    """Each person's departments from this client's roster (D-049). No roster yet means no departments; an unreachable
+    database stops the publish, since a version without departments would hide everyone from department cameras."""
+    import psycopg2
+    user, password = postgres_login()
+    with psycopg2.connect(dbname=POSTGRESQL_DATABASE, user=user, password=password, host=POSTGRESQL_HOST,
+                          port=POSTGRESQL_PORT, connect_timeout=5) as conn, conn.cursor() as db:
+        db.execute("SELECT to_regclass('persons') IS NOT NULL")
+        if not db.fetchone()[0]:
+            return {}
+        db.execute("ALTER TABLE persons ADD COLUMN IF NOT EXISTS extra_departments TEXT[] NOT NULL DEFAULT '{}'")
+        db.execute("SELECT person_id, department, extra_departments FROM persons")
+        return departments_of(db.fetchall())
 
 
 def versions(collection_names, alias):
@@ -72,10 +93,12 @@ def build(client, dataset, alias):
     names, vectors = load(dataset)
     if not names:
         sys.exit(f"No {VECTORS_FILE} under {dataset}: an empty version would stop all recognition")
+    roster = roster_departments()
+    departments = [roster.get(name, []) for name in names]
     number = max(versions(client.list_collections(), alias), default=0) + 1
-    collection = create_collection(f"{alias}_v{number}")
+    collection = create_collection(f"{alias}_v{number}", with_departments=True)
     for start in range(0, len(names), BATCH):
-        insert_data(collection, [names[start:start + BATCH], vectors[start:start + BATCH]])
+        insert_data(collection, [names[start:start + BATCH], vectors[start:start + BATCH], departments[start:start + BATCH]])
     return number
 
 
@@ -147,6 +170,22 @@ def demo():
         assert np.array_equal(np.array(vectors), np.concatenate(list(enrolled.values())).astype(np.float32))
         assert load(Path(dataset) / "carol") == ([], [])
     assert versions(["F_v2", "F_v10", "F", "F_v1x", "G_v3", "F_v0"], "F") == [0, 2, 10]
+    assert departments_of([("a", " Stores ", ["dispatch", "stores", " "]), ("b", None, []), ("c", "", ["All"])]) ==         {"a": ["dispatch", "stores"], "b": [], "c": ["all"]}
+    from milvus_server import search_by_department
+
+    class Collection:  # one search per department, results back in face order, a failure leaves faces unmatched
+        searches = []
+
+        def search(self, data, expr, **_):
+            if "broken" in expr:
+                raise RuntimeError("no departments field")
+            self.searches.append(expr)
+            return [[f"{expr or 'everyone'}:{face}"] for face in data]
+
+    hits = search_by_department(Collection(), ["f0", "f1", "f2", "f3"], ["stores", "", "stores", "broken"])
+    assert hits == [['array_contains_any(departments, ["stores", "all"]):f0'], ["everyone:f1"],
+                    ['array_contains_any(departments, ["stores", "all"]):f2'], []], hits
+    assert sorted(Collection.searches) == ["", 'array_contains_any(departments, ["stores", "all"])'], Collection.searches
     print("face_vectors demo: all checks passed")
 
 
