@@ -129,6 +129,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #107 | 2026-11-03 16:27 | 1h 3m | 6m | +1/-1 1f | fix(display): pin Kafka-WebApp v0.7.3, so a refreshed page keeps the down status instead of showing ready |
 | #108 | 2026-11-03 16:46 | 19m | 5m | +32/-8 3f | ci: build images only when what they are built from changes, and reuse the last release's images otherwise |
 | #109 | 2026-11-03 17:27 | 41m | 3m | +1/-1 1f | fix(display): pin Kafka-WebApp v0.7.4, which hides camera warnings while the whole system is shown as down |
+| #110 | 2026-11-05 15:55 | about 4h (estimate, over 2026-11-03 and 11-05) | 18m | +619/-39 15f | feat(enrolment): problem codes, per-site responsible party, and deletion on withdrawal or leaving (8e) |
 
 ## Incidents that cost time
 
@@ -165,6 +166,9 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | 2026-11-02 17:34 to 18:21 | v2.9.3 took 3 release runs: #95 to #97 changed workflow files while releases ran, so GitHub refused the tag (HTTP 403) twice and each run handed over to a release of main. The first submodule run also failed (HTTP 403) on a token scope, fixed by #97 | About 47m (measured, mostly waiting) | Run timestamps | Merge workflow changes only when no release is running |
 | 2026-11-03 13:55 to 14:01 | PR #105 conflicted with main: `git commit -a` swept the local submodule pointers into it; merged main and reset both pins, and CI ran again |
 | 2026-11-03 21:00 to 22:20 | A display pin (#107) rebuilt every image twice, about 60 billed minutes, with Actions already past the 3,000 included; fixed by #108 (images built only when their inputs change, otherwise re-tagged) |
+| 2026-11-05 15:55 to 16:00 | #110's CI never started: GitHub refused the jobs over the Actions spending limit; the owner sorted billing and one re-run passed | about 5m (estimate) | Run annotations | Past the included minutes, expect jobs to be refused rather than queued |
+| 2026-11-05 16:12 to 16:22 | v2.15.0 did not start after #110 merged: the release starts only from automerge, and #110 was merged by hand; started by hand | about 10m | Run timestamps | A hand merge must be followed by `gh workflow run release.yml` |
+| 2026-11-05 16:12 | Codex's review of #110, posted during CI, found a hidden deadlock between a deletion and a publish, a skipped folder failure, and a restore that could remove a re-enrolment; fixed on `fix/8e-review` | under 1h (estimate) | PR comments | Read review comments that arrive before the merge |
 
 ## Estimating from this
 
