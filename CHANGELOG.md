@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.15.0 (2026-11-05)
+
+## What's Changed
+* feat(enrolment): problem codes, per-site responsible party, and deletion on withdrawal or leaving (8e) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/110
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.14.2...v2.15.0
+
 ## v2.14.2 (2026-11-03)
 
 ## What's Changed
