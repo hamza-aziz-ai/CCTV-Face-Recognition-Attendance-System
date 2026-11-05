@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.15.1 (2026-11-05)
+
+## What's Changed
+* fix(enrolment): avoid a hidden deadlock between a deletion and a publish, keep a deletion open when a folder cannot be removed, and let a restore keep an enrolment made after a deletion by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/111
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.15.0...v2.15.1
+
 ## v2.15.0 (2026-11-05)
 
 ## What's Changed
