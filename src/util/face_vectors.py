@@ -62,8 +62,12 @@ def roster_departments():
         db.execute("SELECT to_regclass('persons') IS NOT NULL")
         if not db.fetchone()[0]:
             return {}
-        db.execute("ALTER TABLE persons ADD COLUMN IF NOT EXISTS extra_departments TEXT[] NOT NULL DEFAULT '{}'")
-        db.execute("SELECT person_id, department, extra_departments FROM persons")
+        # Read only: an ALTER TABLE here waited for any open roster transaction, and one that was itself waiting for the
+        # job this publish holds deadlocked unseen by PostgreSQL. The API adds extra_departments when it starts.
+        db.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'persons' AND column_name = 'extra_departments' "
+                   "AND table_schema = current_schema()")
+        extra = "extra_departments" if db.fetchone() else "'{}'::text[]"
+        db.execute(f"SELECT person_id, department, {extra} FROM persons")
         return departments_of(db.fetchall())
 
 

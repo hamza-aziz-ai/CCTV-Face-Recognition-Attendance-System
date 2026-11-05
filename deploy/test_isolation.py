@@ -345,7 +345,12 @@ def check_recovery(f):
     gone = site / recovery.VECTORS / "person2"  # in the snapshot, deleted after it (8e)
     gone.mkdir()
     (gone / "vectors.parquet").write_bytes(b"synthetic vectors of someone deleted later")
+    again = site / recovery.VECTORS / "person3"  # deleted once, then registered and enrolled again before the snapshot
+    again.mkdir()
+    (again / "vectors.parquet").write_bytes(b"synthetic vectors of a new enrolment")
     table = "delta_cctv_camera_surveillance"
+    assert psql(f, delta, table, "CREATE TABLE persons (person_id TEXT PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT now());\n"
+                "INSERT INTO persons VALUES ('person3', now());\n").returncode == 0
     watched = fingerprint(f, beta, "beta")
     want = psql(f, delta, table, "SELECT who FROM r ORDER BY who;\n").stdout
     options = ["--sites", str(f.sites), "--admin-env", str(f.admin_env), "--postgres", f.pg, "--kafka", f.kafka,
@@ -365,7 +370,8 @@ def check_recovery(f):
     # person2 is deleted after the snapshot: the live database records it, and the restore must not bring them back
     assert psql(f, delta, table, "CREATE TABLE deletions (id UUID PRIMARY KEY, person_id TEXT NOT NULL, reason TEXT NOT NULL, "
                 "requested_by TEXT NOT NULL, requested_at TIMESTAMPTZ NOT NULL DEFAULT now(), done_at TIMESTAMPTZ, frames_cleared_at TIMESTAMPTZ);\n"
-                "INSERT INTO deletions VALUES ('00000000-0000-4000-8000-000000000002', 'person2', 'left', 'staff', now(), now(), now());\n").returncode == 0
+                "INSERT INTO deletions VALUES ('00000000-0000-4000-8000-000000000002', 'person2', 'left', 'staff', now(), now(), now()),"
+                "('00000000-0000-4000-8000-000000000003', 'person3', 'withdrawn', 'staff', now() - interval '1 day', now(), NULL);\n").returncode == 0
 
     # Refusals come before anything is touched: another client's snapshot, a changed file, a running stack
     assert recover("restore", "beta", str(folder)) == 1
@@ -391,6 +397,7 @@ def check_recovery(f):
     assert not gone.exists(), "a person deleted after the snapshot came back"
     reopened = psql(f, delta, table, "SELECT person_id || ':' || (done_at IS NULL) || ':' || (frames_cleared_at IS NULL) FROM deletions;\n").stdout
     assert "person2:true:true" in reopened, reopened  # open again, for the enrolment worker to finish when the stack starts
+    assert "person3" not in reopened and (again / "vectors.parquet").is_file(), "an enrolment made after the deletion was removed"
     owner = psql(f, delta, table, "SELECT tableowner FROM pg_tables WHERE tablename = 'deletions';\n").stdout
     assert "delta_app" in owner, owner
     owner = psql(f, delta, table, "SELECT tableowner FROM pg_tables WHERE tablename = 'r';\n").stdout

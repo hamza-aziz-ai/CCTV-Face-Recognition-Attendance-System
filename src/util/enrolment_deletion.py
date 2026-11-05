@@ -26,12 +26,14 @@ PICKLE = os.path.join(DYNAMIC_DATASET_EMBEDDINGS_PATH, "dynamic-dataset.pkl")
 
 
 def remove_folder(root, person_id):
-    """Only a folder directly inside root: an ID like ".." must never reach rmtree."""
+    """Only a folder directly inside root: an ID like ".." must never reach rmtree. A folder already gone is fine; any
+    other failure is raised, so the deletion stays open instead of being marked done with files left behind."""
     base = Path(root).resolve()
     target = (base / person_id).resolve()
     if target.parent != base:
         raise ValueError(f"refusing to delete {target}: not a person's folder in {base}")
-    shutil.rmtree(target, ignore_errors=True)
+    if target.exists():
+        shutil.rmtree(target)
 
 
 def drop_from_pickle(path, person_id):

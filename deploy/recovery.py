@@ -136,24 +136,31 @@ def recorded_deletions(pg, db):
 
 def reopen_deletions(pg, db, role, site, deletions):
     """Re-runs the recorded deletions on the restored data: the person's folders go now, before Milvus is rebuilt from
-    them, and the open requests let the enrolment worker delete the rest when the stack starts."""
+    them, and the open requests let the enrolment worker delete the rest when the stack starts. Someone the restored
+    roster registered after their deletion is enrolled anew, so their deletion is not re-run."""
+    if not deletions:
+        return
+    if "$d8e$" in json.dumps(deletions):
+        raise Stop("a recorded deletion holds the text $d8e$, which this restore uses to quote them")
+    # The table as src/api/enrolment.py creates it, for a snapshot from before 8e; owned by the app, which writes to it
+    db_sql(pg, db, f"""CREATE TABLE IF NOT EXISTS deletions (id UUID PRIMARY KEY, person_id TEXT NOT NULL, reason TEXT NOT NULL,
+    requested_by TEXT NOT NULL, requested_at TIMESTAMPTZ NOT NULL DEFAULT now(), done_at TIMESTAMPTZ, frames_cleared_at TIMESTAMPTZ);
+CREATE UNIQUE INDEX IF NOT EXISTS deletions_one_open ON deletions (person_id) WHERE done_at IS NULL;
+ALTER TABLE deletions OWNER TO "{role}";""")
+    if db_sql(pg, db, "SELECT to_regclass('persons') IS NOT NULL") == "t":
+        registered_since = set(json.loads(db_sql(pg, db, f"""SELECT coalesce(json_agg(r.person_id), '[]') FROM json_populate_recordset(NULL::deletions,
+    $d8e${json.dumps(deletions)}$d8e$) r JOIN persons p ON p.person_id = r.person_id AND p.created_at > r.requested_at""")))
+        deletions = [request for request in deletions if request["person_id"] not in registered_since]
     if not deletions:
         return
     for request in deletions:
         for name in DATA[:3]:
             base = (site / name).resolve()
             target = (base / request["person_id"]).resolve()
-            if target.parent == base:  # only a person's own folder, never anything an odd ID could point at
-                shutil.rmtree(target, ignore_errors=True)
+            if target.parent == base and target.exists():  # only a person's own folder, never anything an odd ID could point at
+                shutil.rmtree(target)
     rows = json.dumps(deletions)
-    if "$d8e$" in rows:
-        raise Stop("a recorded deletion holds the text $d8e$, which this restore uses to quote them")
-    # The table as src/api/enrolment.py creates it, for a snapshot from before 8e; owned by the app, which writes to it
-    db_sql(pg, db, f"""CREATE TABLE IF NOT EXISTS deletions (id UUID PRIMARY KEY, person_id TEXT NOT NULL, reason TEXT NOT NULL,
-    requested_by TEXT NOT NULL, requested_at TIMESTAMPTZ NOT NULL DEFAULT now(), done_at TIMESTAMPTZ, frames_cleared_at TIMESTAMPTZ);
-CREATE UNIQUE INDEX IF NOT EXISTS deletions_one_open ON deletions (person_id) WHERE done_at IS NULL;
-ALTER TABLE deletions OWNER TO "{role}";
-DELETE FROM deletions d USING json_populate_recordset(NULL::deletions, $d8e${rows}$d8e$) r WHERE d.person_id = r.person_id AND d.done_at IS NULL AND d.id <> r.id;
+    db_sql(pg, db, f"""DELETE FROM deletions d USING json_populate_recordset(NULL::deletions, $d8e${rows}$d8e$) r WHERE d.person_id = r.person_id AND d.done_at IS NULL AND d.id <> r.id;
 INSERT INTO deletions (id, person_id, reason, requested_by, requested_at)
 SELECT id, person_id, reason, requested_by, requested_at FROM json_populate_recordset(NULL::deletions, $d8e${rows}$d8e$)
 ON CONFLICT (id) DO UPDATE SET done_at = NULL, frames_cleared_at = NULL;""")

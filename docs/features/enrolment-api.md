@@ -72,7 +72,7 @@ Notice 1.2 promises that a person's face data goes within 90 days of withdrawing
 - Milvus (`face_vectors.forget`): a new version without them, empty if they were the last, then every other version is dropped, since any older one may hold them; a rollback after a deletion is rebuilt from the dataset. Their rows in the staging collection go too.
 - Last, their roster row, consents and jobs. Every step can run again, so a deletion that fails part-way stays open and is retried whole.
 
-The request row stays, with the person's ID only. Each hour the worker clears `recognition_frame` on the person's `recognition_results` rows dated up to the request, once it is 3 years old; the records themselves stay, and records made after the ID was registered again keep their pictures. `deploy/recovery.py restore` reads the live database's deletions before it drops it and re-runs them on the restored data, so a snapshot taken before a deletion cannot bring anyone back.
+The request row stays, with the person's ID only. Each hour the worker clears `recognition_frame` on the person's `recognition_results` rows dated up to the request, once it is 3 years old; the records themselves stay, and records made after the ID was registered again keep their pictures. `deploy/recovery.py restore` reads the live database's deletions before it drops it and re-runs them on the restored data, so a snapshot taken before a deletion cannot bring anyone back; someone the restored roster registered after their deletion keeps that new enrolment.
 
 ## Proven on the laptop (2026-11-03)
 
