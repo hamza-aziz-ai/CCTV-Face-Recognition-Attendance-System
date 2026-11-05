@@ -1,7 +1,8 @@
 """Snapshot, restore and remove one client on this host's shared services (D-042), leaving every other client alone.
 
   python recovery.py snapshot CLIENT             writes sites/CLIENT/snapshots/<time>: both databases, the bucket, the site's data
-  python recovery.py restore CLIENT FOLDER       puts a snapshot back; the client's stack must be down
+  python recovery.py restore CLIENT FOLDER       puts a snapshot back; the client's stack must be down. Deletions the live
+                                                 database records (8e) are re-run, so nobody deleted comes back
   python recovery.py remove CLIENT --confirm CLIENT   deletes the client everywhere, its site folder too; the owner is refused,
                                                       and the ID cannot be used again on this Kafka
 Options as in provision.py: --sites DIR, --admin-env FILE, --postgres/--kafka/--store/--proxy CONTAINER, --milvus URL.
@@ -119,21 +120,63 @@ def publish(client, sites):
          "mfr-cctv-producer-consumer", "python3", "src/util/face_vectors.py", "publish"])
 
 
+def db_sql(pg, db, sql):
+    return run(["docker", "exec", "-i", pg, "sh", "-c", 'exec psql -X -q -At -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$0"', db], stdin=sql).strip()
+
+
+def recorded_deletions(pg, db):
+    """The deletions (8e) the live database records, the latest per person, as JSON. A restore re-runs them, so a
+    snapshot taken before someone was deleted cannot bring their face data back."""
+    if db_sql(pg, "postgres", f"SELECT count(*) FROM pg_database WHERE datname = '{db}'") == "0" or \
+            db_sql(pg, db, "SELECT to_regclass('deletions') IS NULL") == "t":
+        return []
+    return json.loads(db_sql(pg, db, "SELECT coalesce(json_agg(d), '[]') FROM (SELECT DISTINCT ON (person_id) id, person_id, reason, "
+                                     "requested_by, requested_at FROM deletions ORDER BY person_id, requested_at DESC) d"))
+
+
+def reopen_deletions(pg, db, role, site, deletions):
+    """Re-runs the recorded deletions on the restored data: the person's folders go now, before Milvus is rebuilt from
+    them, and the open requests let the enrolment worker delete the rest when the stack starts."""
+    if not deletions:
+        return
+    for request in deletions:
+        for name in DATA[:3]:
+            base = (site / name).resolve()
+            target = (base / request["person_id"]).resolve()
+            if target.parent == base:  # only a person's own folder, never anything an odd ID could point at
+                shutil.rmtree(target, ignore_errors=True)
+    rows = json.dumps(deletions)
+    if "$d8e$" in rows:
+        raise Stop("a recorded deletion holds the text $d8e$, which this restore uses to quote them")
+    # The table as src/api/enrolment.py creates it, for a snapshot from before 8e; owned by the app, which writes to it
+    db_sql(pg, db, f"""CREATE TABLE IF NOT EXISTS deletions (id UUID PRIMARY KEY, person_id TEXT NOT NULL, reason TEXT NOT NULL,
+    requested_by TEXT NOT NULL, requested_at TIMESTAMPTZ NOT NULL DEFAULT now(), done_at TIMESTAMPTZ, frames_cleared_at TIMESTAMPTZ);
+CREATE UNIQUE INDEX IF NOT EXISTS deletions_one_open ON deletions (person_id) WHERE done_at IS NULL;
+ALTER TABLE deletions OWNER TO "{role}";
+DELETE FROM deletions d USING json_populate_recordset(NULL::deletions, $d8e${rows}$d8e$) r WHERE d.person_id = r.person_id AND d.done_at IS NULL AND d.id <> r.id;
+INSERT INTO deletions (id, person_id, reason, requested_by, requested_at)
+SELECT id, person_id, reason, requested_by, requested_at FROM json_populate_recordset(NULL::deletions, $d8e${rows}$d8e$)
+ON CONFLICT (id) DO UPDATE SET done_at = NULL, frames_cleared_at = NULL;""")
+    print(f"{site.name}: {len(deletions)} recorded deletion(s) re-opened for the enrolment worker")
+
+
 def restore(client, folder, sites, admin_env, pg, kafka, store, milvus):
     check_snapshot(client, folder)
     if containers(client):
         raise Stop(f"{client}'s stack still has containers: stop it with docker compose -p {project(client)} down first")
     site = sites / client
+    dbs = provision.databases(client)
+    deletions = recorded_deletions(pg, dbs[0])  # read before the live database is dropped
     for name in DATA:
         shutil.rmtree(site / name, ignore_errors=True)
     with tarfile.open(folder / "site.tar.gz") as tar:
         tar.extractall(site, filter="data")
-    dbs = provision.databases(client)
     admin_sql(pg, "".join(f'DROP DATABASE IF EXISTS "{db}" WITH (FORCE);\n' for db in dbs))
     provision.provision(client, sites, admin_env, pg, kafka, store, milvus)  # the empty databases, and anything else lost, with the saved passwords
     role = read_env(site / ".env")["PG_APP_USER"]
     for db in dbs:
         from_file(["docker", "exec", "-i", pg, "sh", "-c", 'exec pg_restore -U "$POSTGRES_USER" --no-owner --role="$0" --exit-on-error -d "$1"', role, db], folder / f"{db}.dump")
+    reopen_deletions(pg, dbs[0], role, site, deletions)
     work = f"/tmp/restore-{client}"
     run(["docker", "exec", store, "rm", "-rf", work])
     with tempfile.TemporaryDirectory() as tmp:

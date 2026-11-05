@@ -2,7 +2,8 @@
 
 Accepted: the photos move to persons/<person_id>/ in the client's bucket, the vectors are saved beside the dataset as
 vectors.parquet (D-030) and Milvus is rebuilt by face_vectors.publish, one publish at a time across workers. Rejected or
-expired: the photos are deleted at once and only the reasons stay. Runs in the producer-consumer image, which has the
+expired: the photos are deleted at once and only the reasons stay. Deletions the API records (8e) run here too, as soon
+as they are seen, and attendance records' camera pictures are cleared hourly once due (enrolment_deletion.py). Runs in the producer-consumer image, which has the
 InsightFace client, OpenCV and Milvus already: python3 src/util/enrolment_worker.py
 """
 import json
@@ -19,8 +20,9 @@ sys.path[:0] = [os.path.dirname(current), current]
 from custom_logging import api_logger as logger  # noqa: E402
 from enrol_person import best_match, check_photos  # noqa: E402
 from enrolment_checks import as_problems  # noqa: E402
+import enrolment_deletion  # noqa: E402
 from enrolment_store import Store  # noqa: E402
-from face_vectors import publish, save  # noqa: E402
+from face_vectors import forget, publish, save  # noqa: E402
 from insightface_face_detection import IFRClient  # noqa: E402
 from milvus_server import create_collection, create_connection  # noqa: E402
 from parameters import ENROLMENT_PENDING_HOURS, FACE_MATCHING_TOLERANCE, FACIAL_RECOGNITION_DATASET_PATH, INSIGHTFACE_HOST, \
@@ -29,6 +31,7 @@ from parameters import ENROLMENT_PENDING_HOURS, FACE_MATCHING_TOLERANCE, FACIAL_
 
 PUBLISH_LOCK = 8048  # a PostgreSQL advisory lock: publish rebuilds the whole collection, so two at once would race
 IDLE_SECONDS = 2
+FRAME_CHECK_SECONDS = 3600
 
 
 def already_enrolled(collection, person_id, vectors):
@@ -114,12 +117,24 @@ def main():
         live.load()
         return live
 
-    conn = None
+    def forget_vectors(person_id):  # it rebuilds the collection like publish, so it waits for any publish in progress
+        with conn.cursor() as db:
+            db.execute("SELECT pg_advisory_lock(%s)", (PUBLISH_LOCK,))
+            try:
+                forget(person_id)
+            finally:
+                db.execute("SELECT pg_advisory_unlock(%s)", (PUBLISH_LOCK,))
+
+    conn, frames_checked = None, -FRAME_CHECK_SECONDS
     while True:
         try:
             conn = conn if conn and not conn.closed else connect()
             expire(conn, store)
-            if not process(conn, store, client, collection):
+            deleted = enrolment_deletion.run_one(conn, store, forget_vectors)
+            if time.monotonic() - frames_checked >= FRAME_CHECK_SECONDS:
+                enrolment_deletion.clear_frames(conn)
+                frames_checked = time.monotonic()
+            if not process(conn, store, client, collection) and not deleted:
                 time.sleep(IDLE_SECONDS)
         except Exception as error:  # a failed job stays pending and is retried; it expires after the time limit
             logger.error(f"Enrolment worker: {error}", exc_info=True)

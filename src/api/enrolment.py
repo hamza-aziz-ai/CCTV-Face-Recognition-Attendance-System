@@ -28,11 +28,12 @@ sys.path[:0] = [os.path.dirname(current), os.path.join(os.path.dirname(current),
 import accounts  # noqa: E402
 from custom_logging import api_logger  # noqa: E402
 from enrolment_checks import GLASSES, POSES  # noqa: E402
-from parameters import CLIENT_ID, CLIENT_NAME, ENROLMENT_MAX_BODY_BYTES, ENROLMENT_MAX_PHOTO_BYTES, \
+from parameters import CLIENT_ID, CLIENT_NAME, ENROLMENT_DELETION_DAYS, ENROLMENT_MAX_BODY_BYTES, ENROLMENT_MAX_PHOTO_BYTES, \
     ENROLMENT_NOTICE_FILE  # noqa: E402
 
 ENROL_ROLES = ("client_admin", "enrolment_operator")
 REASONS = ("appearance_changed", "poor_photos", "other")
+DELETION_REASONS = ("withdrawn", "left")
 CONSENT_METHOD = "staff_attested_in_app"
 
 SCHEMA = """
@@ -75,6 +76,18 @@ CREATE TABLE IF NOT EXISTS enrolment_jobs (
 CREATE UNIQUE INDEX IF NOT EXISTS enrolment_jobs_one_open ON enrolment_jobs (person_id) WHERE status = 'pending';
 -- "AB12" and "ab12" would share a folder on Windows and macOS, so they are one person
 CREATE UNIQUE INDEX IF NOT EXISTS persons_id_any_case ON persons (lower(person_id));
+-- 8e: each request to delete a person's face data, run by the enrolment worker (enrolment_deletion.py). The row outlives
+-- the person's roster row: it dates the clearing of their attendance records' camera pictures, and a restore re-runs it
+CREATE TABLE IF NOT EXISTS deletions (
+    id UUID PRIMARY KEY,
+    person_id TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    requested_by TEXT NOT NULL,
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    done_at TIMESTAMPTZ,
+    frames_cleared_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS deletions_one_open ON deletions (person_id) WHERE done_at IS NULL;
 """
 
 router = APIRouter(prefix="/v1")
@@ -144,7 +157,7 @@ def server_info():
     """Needs no login: the app checks it is talking to the client it was set up for before anyone signs in."""
     current_notice = notice() or {}
     return {"client_id": CLIENT_ID, "client_name": CLIENT_NAME, "notice_version": current_notice.get("version"),
-            "notice_url": "/api/v1/notice"}
+            "notice_url": "/api/v1/notice", "deletion_days": ENROLMENT_DELETION_DAYS}
 
 
 @router.get("/notice")
@@ -237,28 +250,81 @@ def record_consent(consent: ConsentIn, caller: dict = Depends(enroller)):
         db.execute("SELECT 1 FROM persons WHERE person_id = %s", (consent.person_id,))
         if not db.fetchone():
             return error(404, "person_not_found")
+        db.execute("SELECT 1 FROM deletions WHERE person_id = %s AND done_at IS NULL", (consent.person_id,))
+        if db.fetchone():  # their data is being deleted; once it is, they can be registered and enrolled again
+            return error(409, "deletion_pending")
         db.execute("INSERT INTO consents (id, person_id, notice_version, captured_at, method, recorded_by, notice) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                    (consent_id, consent.person_id, consent.notice_version, consent.captured_at, consent.method, caller["name"], json.dumps(current_notice)))
     api_logger.info(f"Consent {consent_id} for {consent.person_id} recorded by {caller['name']}")
     return {"consent_id": consent_id}
 
 
+def cancel_jobs(db, where: str, value: str) -> list:
+    """Open jobs end as withdrawn; their photos are deleted by the caller once this commits."""
+    db.execute(f"""UPDATE enrolment_jobs SET status = 'rejected', finished_at = now(),
+                          problems = '[{{"pose": null, "problem": "consent withdrawn", "code": "withdrawn"}}]'
+                   WHERE {where} AND status = 'pending' RETURNING id, poses""", (value,))
+    return db.fetchall()
+
+
+def delete_job_photos(jobs):
+    for job in jobs:
+        store.delete([f"jobs/{job['id']}/{pose}.jpg" for pose in job["poses"]])
+
+
+def request_deletion(db, person_id: str, reason: str, by: str):
+    """8e: every consent ends, an open job is cancelled, the roster shows them not enrolled, and the worker deletes their
+    face data (enrolment_deletion.py). Asking again while it is open returns the same request. (deletion_id, cancelled)"""
+    db.execute("UPDATE consents SET withdrawn_at = now() WHERE person_id = %s AND withdrawn_at IS NULL", (person_id,))
+    cancelled = cancel_jobs(db, "person_id = %s", person_id)
+    db.execute("UPDATE persons SET enrolled_at = NULL WHERE person_id = %s", (person_id,))
+    db.execute("INSERT INTO deletions (id, person_id, reason, requested_by) VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING RETURNING id",
+               (str(uuid.uuid4()), person_id, reason, by))
+    row = db.fetchone()
+    if not row:
+        db.execute("SELECT id FROM deletions WHERE person_id = %s AND done_at IS NULL", (person_id,))
+        row = db.fetchone()
+    return str(row["id"]), cancelled
+
+
 @router.delete("/consents/{consent_id}", status_code=202)
 def withdraw_consent(consent_id: str, caller: dict = Depends(enroller)):
-    """Withdrawal ends the consent and cancels its open job, whose photos are deleted at once. Deleting an accepted
-    enrolment's photos and vectors is item 8e, so the deletion is recorded but not yet carried out there."""
+    """Withdrawal ends the consent and cancels its open job, whose photos are deleted at once. Withdrawing the consent the
+    accepted enrolment rests on deletes the person's face data too (8e); withdrawing during a re-enrolment, the new
+    attempt's consent, ends only that attempt."""
+    deletion_id = None
     with cursor_source(commit=True) as db:
         db.execute("UPDATE consents SET withdrawn_at = now() WHERE id::text = %s AND withdrawn_at IS NULL RETURNING person_id", (consent_id,))
-        if not db.fetchone():
+        row = db.fetchone()
+        if not row:
             return error(404, "consent_not_found")
-        db.execute("""UPDATE enrolment_jobs SET status = 'rejected', finished_at = now(),
-                             problems = '[{"pose": null, "problem": "consent withdrawn", "code": "withdrawn"}]'
-                      WHERE consent_id::text = %s AND status = 'pending' RETURNING id, poses""", (consent_id,))
-        cancelled = db.fetchall()
-    for job in cancelled:
-        store.delete([f"jobs/{job['id']}/{pose}.jpg" for pose in job["poses"]])
-    api_logger.info(f"Consent {consent_id} withdrawn by {caller['name']}; {len(cancelled)} open job(s) cancelled")
-    return {"deletion_id": consent_id}
+        cancelled = cancel_jobs(db, "consent_id::text = %s", consent_id)
+        db.execute("""SELECT consent_id::text AS consent FROM enrolment_jobs WHERE person_id = %s AND status = 'accepted'
+                      ORDER BY finished_at DESC LIMIT 1""", (row["person_id"],))
+        accepted = db.fetchone()
+        if accepted and accepted["consent"] == consent_id.lower():
+            deletion_id, more = request_deletion(db, row["person_id"], "withdrawn", caller["name"])
+            cancelled += more
+    delete_job_photos(cancelled)
+    api_logger.info(f"Consent {consent_id} withdrawn by {caller['name']}; {len(cancelled)} open job(s) cancelled"
+                    + (f"; deletion {deletion_id} requested" if deletion_id else ""))
+    return {"deletion_id": deletion_id or consent_id}
+
+
+@router.delete("/persons/{person_id}/enrolment", status_code=202)
+def delete_enrolment(person_id: str, reason: str = "withdrawn", caller: dict = Depends(enroller)):
+    """8e: a person who withdraws or leaves. Their face data is deleted within ENROLMENT_DELETION_DAYS (server-info's
+    deletion_days); the worker does it as soon as it sees the request. Their attendance records stay."""
+    if reason not in DELETION_REASONS:
+        return error(422, "invalid_reason")
+    with cursor_source(commit=True) as db:
+        db.execute("SELECT 1 FROM persons WHERE person_id = %s FOR UPDATE", (person_id,))
+        if not db.fetchone():
+            return error(404, "person_not_found")
+        deletion_id, cancelled = request_deletion(db, person_id, reason, caller["name"])
+    delete_job_photos(cancelled)
+    api_logger.info(f"Deletion {deletion_id} of {person_id}'s face data ({reason}) requested by {caller['name']}")
+    return {"deletion_id": deletion_id}
 
 
 def parse_multipart(content_type: str, body: bytes):

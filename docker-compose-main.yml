@@ -172,6 +172,9 @@ services:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       # Accepted people's vectors.parquet, which face_vectors.publish rebuilds Milvus from (D-030)
       - ./FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/FACIAL-RECOGNITION-DATASET
+      # A deletion (8e) also removes the person's nightly crops and display portrait
+      - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
+      - ./DISPLAY-FACE-DATASET:/Multi-Person-Face-Recognition/DISPLAY-FACE-DATASET
       - ./logs:/Multi-Person-Face-Recognition/logs
     environment:
       POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}

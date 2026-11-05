@@ -233,6 +233,10 @@ ENROLMENT_MAX_PHOTO_BYTES = 2_000_000   # "2 MB" read the strict way, as the enr
 ENROLMENT_MIN_SHORT_SIDE = 480     # px
 ENROLMENT_MAX_BODY_BYTES = 25_000_000   # one upload: 10 photos and the form fields
 ENROLMENT_PENDING_HOURS = 24       # a job not finished by then expires and its photos are deleted
+# Notice 1.2 (owner, 2026-11-03): a person's face data goes within this many days of withdrawing or leaving (8e) ...
+ENROLMENT_DELETION_DAYS = 90
+# ... and the camera pictures on their attendance records this many years after it; the records themselves stay
+ENROLMENT_FRAME_YEARS = 3
 # This client's enrolment bucket in the shared dataset store, with its own access key from provisioning (D-037)
 DATASET_STORE_ENDPOINT = os.getenv("DATASET_STORE_ENDPOINT") or f"{IP_ADDRESS}:9010"
 ENROLMENT_BUCKET = f"{CLIENT_ID}-enrolment"
