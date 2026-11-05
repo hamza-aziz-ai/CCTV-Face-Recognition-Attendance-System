@@ -172,6 +172,9 @@ services:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       # Accepted people's vectors.parquet, which face_vectors.publish rebuilds Milvus from (D-030)
       - ./FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/FACIAL-RECOGNITION-DATASET
+      # A deletion (8e) also removes the person's nightly crops and display portrait
+      - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
+      - ./DISPLAY-FACE-DATASET:/Multi-Person-Face-Recognition/DISPLAY-FACE-DATASET
       - ./logs:/Multi-Person-Face-Recognition/logs
     environment:
       POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
@@ -232,7 +235,7 @@ services:
 
   # Recognition display for this host (Raspberry Pis run the same image with its default ports); versioned in the Kafka-WebApp repository
   kafka-webapp:
-    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.7.4@sha256:2bb468457511065ad17aea0d41dba62981adde78992e1816b2f51c38b185facb
+    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.7.5@sha256:7f531fd9c25c17c9753e40cc8a9142f4840b0c11abd507e66cb860c85cf15995
     restart: unless-stopped
     env_file:
       - path: ./master.env

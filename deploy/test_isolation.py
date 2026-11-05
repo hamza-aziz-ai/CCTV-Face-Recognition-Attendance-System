@@ -342,6 +342,9 @@ def check_recovery(f):
     (person / "vectors.parquet").write_bytes(b"synthetic vectors")
     (site / "DISPLAY-FACE-DATASET").mkdir()
     (site / "DISPLAY-FACE-DATASET/person1.jpg").write_bytes(b"synthetic photo")
+    gone = site / recovery.VECTORS / "person2"  # in the snapshot, deleted after it (8e)
+    gone.mkdir()
+    (gone / "vectors.parquet").write_bytes(b"synthetic vectors of someone deleted later")
     table = "delta_cctv_camera_surveillance"
     watched = fingerprint(f, beta, "beta")
     want = psql(f, delta, table, "SELECT who FROM r ORDER BY who;\n").stdout
@@ -359,6 +362,10 @@ def check_recovery(f):
     assert mc(f, delta, "mc rm c/delta-enrolment/probe.txt")[0] == 0
     assert mc(f, delta, "echo extra | mc pipe c/delta-enrolment/extra.txt >/dev/null")[0] == 0
     recovery.shutil.rmtree(site / recovery.VECTORS)
+    # person2 is deleted after the snapshot: the live database records it, and the restore must not bring them back
+    assert psql(f, delta, table, "CREATE TABLE deletions (id UUID PRIMARY KEY, person_id TEXT NOT NULL, reason TEXT NOT NULL, "
+                "requested_by TEXT NOT NULL, requested_at TIMESTAMPTZ NOT NULL DEFAULT now(), done_at TIMESTAMPTZ, frames_cleared_at TIMESTAMPTZ);\n"
+                "INSERT INTO deletions VALUES ('00000000-0000-4000-8000-000000000002', 'person2', 'left', 'staff', now(), now(), now());\n").returncode == 0
 
     # Refusals come before anything is touched: another client's snapshot, a changed file, a running stack
     assert recover("restore", "beta", str(folder)) == 1
@@ -381,6 +388,11 @@ def check_recovery(f):
     assert code == 0 and "delta" in out and "extra.txt" not in out, out[-300:]
     assert (person / "vectors.parquet").read_bytes() == b"synthetic vectors"
     assert (site / "DISPLAY-FACE-DATASET/person1.jpg").read_bytes() == b"synthetic photo"
+    assert not gone.exists(), "a person deleted after the snapshot came back"
+    reopened = psql(f, delta, table, "SELECT person_id || ':' || (done_at IS NULL) || ':' || (frames_cleared_at IS NULL) FROM deletions;\n").stdout
+    assert "person2:true:true" in reopened, reopened  # open again, for the enrolment worker to finish when the stack starts
+    owner = psql(f, delta, table, "SELECT tableowner FROM pg_tables WHERE tablename = 'deletions';\n").stdout
+    assert "delta_app" in owner, owner
     owner = psql(f, delta, table, "SELECT tableowner FROM pg_tables WHERE tablename = 'r';\n").stdout
     assert "delta_app" in owner, owner
     check_own(f, delta, "delta")

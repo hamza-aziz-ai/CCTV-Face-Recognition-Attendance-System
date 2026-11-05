@@ -105,13 +105,36 @@ def check_not_enrolled(matches, person_id, tolerance):
             for stem, (name, score) in matches.items() if name != person_id and score >= tolerance]
 
 
+# A stable code for each kind of problem, so the app acts on it (no retake offered for already_enrolled) without parsing
+# the English text, which is for display. Matched on the wording the checks in this module and the worker write; the
+# self-check below fails if a message gets none. First match wins
+CODES = (
+    ("already_enrolled", ("already enrolled",)),
+    ("photo_set", ("missing photo", "unexpected photo")),
+    ("file", ("not a JPEG", "KB limit")),
+    ("too_small", ("short side", "pupils are")),
+    ("face_count", ("expected 1 face",)),
+    ("low_confidence", ("face confidence",)),
+    ("blurred", ("is blurred",)),
+    ("mismatch", ("does not match this person",)),
+    ("pose", ("head is turned", "enough compared with the front")),
+    ("expired", ("time limit",)),
+    ("withdrawn", ("consent withdrawn",)),
+)
+
+
+def code_of(text):
+    return next((code for code, markers in CODES if any(marker in text for marker in markers)), "other")
+
+
 def as_problems(lines):
-    """Problem lines to the enrolment app's {pose, problem}: 'left_30: text' names its photo, while set-level lines such
-    as 'missing photo: front' carry no pose."""
+    """Problem lines to the enrolment app's {pose, problem, code}: 'left_30: text' names its photo, while set-level lines
+    such as 'missing photo: front' carry no pose."""
     problems = []
     for line in lines:
         pose, sep, text = line.partition(": ")
-        problems.append({"pose": pose, "problem": text} if sep and " " not in pose else {"pose": None, "problem": line})
+        problem = {"pose": pose, "problem": text} if sep and " " not in pose else {"pose": None, "problem": line}
+        problems.append({**problem, "code": code_of(line)})
     return problems
 
 
@@ -156,7 +179,24 @@ def demo():
     assert check_not_enrolled({"front": ("someone", 0.3)}, "hamza_aziz", 0.5) == []
     assert "someone" in check_not_enrolled({"front": ("someone", 0.8)}, "hamza_aziz", 0.5)[0]
     assert as_problems(["left_30: the face is blurred (sharpness 14, below 40)", "missing photo: front"]) == [
-        {"pose": "left_30", "problem": "the face is blurred (sharpness 14, below 40)"}, {"pose": None, "problem": "missing photo: front"}]
+        {"pose": "left_30", "problem": "the face is blurred (sharpness 14, below 40)", "code": "blurred"},
+        {"pose": None, "problem": "missing photo: front", "code": "photo_set"}]
+    # Every message the checks and the worker write has a code
+    faces = [{"prob": 0.5, "landmarks": [[0, 0], [10, 0], [5, 5], [0, 10], [10, 10]]}]
+    written = {
+        "photo_set": check_files(["front", "extra"]), "face_count": check_face("front", [], 0.7, 28),
+        "low_confidence": check_face("front", faces, 0.7, 1)[:1], "too_small": check_face("front", faces, 0.1, 28),
+        "file": check_photo_file("front", b"x" * 3000, 1000, 400, 480)[:2],
+        "blurred": check_sharpness("front", 10, 40), "mismatch": check_same_person({**me, "stranger": [-1.0, 0.1]}, 0.5),
+        "already_enrolled": check_not_enrolled({"front": ("someone", 0.8)}, "hamza_aziz", 0.5)
+        + ["front: matches someone already enrolled (0.80)", "hamza_aziz is already enrolled"],
+        "expired": ["not checked within the time limit; retake the photos"], "withdrawn": ["consent withdrawn"]}
+    for code, lines in written.items():
+        assert lines and {problem["code"] for problem in as_problems(lines)} >= {code}, (code, lines, as_problems(lines))
+    turned = check_poses({"front": [[0, 0], [10, 0], [9, 5], [2, 9], [8, 9]], "left_30": [[0, 0], [10, 0], [5, 5], [2, 9], [8, 9]],
+                          "right_30": [[0, 0], [10, 0], [5, 5], [2, 9], [8, 9]], "chin_up": [[0, 0], [10, 0], [5, 5], [2, 9], [8, 9]],
+                          "chin_down": [[0, 0], [10, 0], [5, 5], [2, 9], [8, 9]]}, 0.08, 0.04, 0.10)
+    assert turned and {problem["code"] for problem in as_problems(turned)} == {"pose"}, as_problems(turned)
     print("enrolment checks ok")
 
 

@@ -26,7 +26,7 @@ parent = os.path.dirname(current)
 sys.path.append(parent)
 
 from milvus_server import create_collection, create_connection, insert_data, milvus_token
-from parameters import FACIAL_RECOGNITION_DATASET_PATH, MILVUS_COLLECTION_NAME, MILVUS_DATABASE, MILVUS_HOST, MILVUS_PORT,     POSTGRESQL_DATABASE, POSTGRESQL_HOST, POSTGRESQL_PORT, postgres_login
+from parameters import FACIAL_RECOGNITION_DATASET_PATH, MILVUS_COLLECTION_NAME, MILVUS_DATABASE, MILVUS_STAGING_COLLECTION_NAME, MILVUS_HOST, MILVUS_PORT,     POSTGRESQL_DATABASE, POSTGRESQL_HOST, POSTGRESQL_PORT, postgres_login
 
 VECTORS_FILE = "vectors.parquet"
 KEEP = 3  # versions kept in Milvus; the dataset in DVC rebuilds any older one
@@ -89,9 +89,9 @@ def refuse_unless_migrated(client, alias):
         sys.exit(f"{alias} is still a plain collection: run `python3 src/util/face_vectors.py migrate` first")
 
 
-def build(client, dataset, alias):
+def build(client, dataset, alias, allow_empty=False):
     names, vectors = load(dataset)
-    if not names:
+    if not names and not allow_empty:
         sys.exit(f"No {VECTORS_FILE} under {dataset}: an empty version would stop all recognition")
     roster = roster_departments()
     departments = [roster.get(name, []) for name in names]
@@ -122,6 +122,27 @@ def publish(dataset=FACIAL_RECOGNITION_DATASET_PATH, alias=MILVUS_COLLECTION_NAM
         if f"{alias}_v{number}" != in_use(client, alias):
             client.drop_collection(f"{alias}_v{number}")
             print(f"Dropped {alias}_v{number}")
+
+
+def forget(person_id, dataset=FACIAL_RECOGNITION_DATASET_PATH, alias=MILVUS_COLLECTION_NAME, staging=MILVUS_STAGING_COLLECTION_NAME):
+    """Deletion (8e), after the person's folder is gone from the dataset: a version without them when the one in use
+    still holds them (empty if they were the last), then every other version is dropped, since any may hold them and
+    only the version in use is loaded to check. A rollback after this is rebuilt from the dataset. Staging loses their
+    nightly vectors. Safe to run again."""
+    client = connect()
+    refuse_unless_migrated(client, alias)
+    serving = in_use(client, alias)
+    person = f'name_id == "{person_id}"'  # IDs hold only letters, digits, ".", "_" and "-"
+    if serving and client.query(serving, filter=person, output_fields=["name_id"], limit=1):
+        use(client, alias, build(client, dataset, alias, allow_empty=True))
+        serving = in_use(client, alias)
+    for number in versions(client.list_collections(), alias):
+        if f"{alias}_v{number}" != serving:
+            client.drop_collection(f"{alias}_v{number}")
+            print(f"Dropped {alias}_v{number}")
+    if client.has_collection(staging):
+        client.load_collection(staging)  # a delete by filter needs the collection loaded
+        client.delete(staging, filter=person)
 
 
 def migrate(dataset=FACIAL_RECOGNITION_DATASET_PATH, alias=MILVUS_COLLECTION_NAME):

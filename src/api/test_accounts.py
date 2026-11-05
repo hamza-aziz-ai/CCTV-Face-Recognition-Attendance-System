@@ -187,7 +187,7 @@ def check_enrolment():
     enrolment.command(["add-person", "p-001", "Asha Rao", "E-1", "Stores"])
     enrolment.command(["add-person", "p-002", "Ravi Kumar"])
     info = requests.get(f"{BASE}/v1/server-info").json()  # no login: the app checks the client before anyone signs in
-    assert info == {"client_id": "owner", "client_name": "owner", "notice_version": None, "notice_url": "/api/v1/notice"}, info
+    assert info == {"client_id": "owner", "client_name": "owner", "notice_version": None, "notice_url": "/api/v1/notice", "deletion_days": 90}, info
     assert requests.get(f"{BASE}/v1/notice").json() == {"error": "no_notice"}
 
     r = requests.post(f"{BASE}/auth/token", json={"username": "operator", "password": GOOD})
@@ -219,6 +219,12 @@ def check_enrolment():
     consent = {"person_id": "p-001", "notice_version": "1", "captured_at": "2026-11-03T12:00:00+05:30", "method": "staff_attested_in_app"}
     assert requests.post(f"{BASE}/v1/consents", json=consent, headers=bearer).json() == {"error": "no_notice"}
     os.makedirs("enrolment", exist_ok=True)
+    # Responsible party and contact come only from the site's notice: one missing, or a template placeholder left in, is not served
+    for unfilled in ({"version": "2", "controller": "Test", "contact": {"name": "x"}, "sections": []},
+                     {"version": "2", "controller": "<client organisation>", "contact": {"name": "x", "email": "x@example.com"}, "sections": []}):
+        with open("enrolment/notice.json", "w") as f:
+            json.dump(unfilled, f)
+        assert requests.get(f"{BASE}/v1/notice").json() == {"error": "no_notice"}, unfilled
     with open("enrolment/notice.json", "w") as f:
         json.dump({"version": "2", "effective_date": "2026-11-03", "controller": "Test", "contact": {"name": "x", "email": "x@example.com"}, "sections": []}, f)
     assert requests.get(f"{BASE}/v1/server-info").json()["notice_version"] == "2"
@@ -226,6 +232,9 @@ def check_enrolment():
     r = requests.post(f"{BASE}/v1/consents", json={**consent, "notice_version": "2"}, headers=bearer)
     assert r.status_code == 201, r.text
     consent_id = r.json()["consent_id"]
+    with psycopg2.connect(dbname=POSTGRESQL_DATABASE, **LOGIN) as conn, conn.cursor() as db:
+        db.execute("SELECT notice->>'controller', notice->'contact'->>'email' FROM consents WHERE id = %s", (consent_id,))
+        assert db.fetchone() == ("Test", "x@example.com")  # the consent keeps who was responsible when it was given
 
     jpeg = bytes.fromhex("ffd8ffe0") + b"0" * 100
     def upload(key, poses=enrolment.POSES, person="p-001", consent_to=None, **extra):
@@ -252,10 +261,114 @@ def check_enrolment():
 
     # Withdrawal cancels the open job and deletes its photos at once
     assert requests.delete(f"{BASE}/v1/consents/{consent_id}", headers=bearer).status_code == 202
-    assert requests.get(f"{BASE}/v1/enrolments/{job_id}", headers=bearer).json() == {"status": "rejected", "problems": [{"pose": None, "problem": "consent withdrawn"}]}
+    assert requests.get(f"{BASE}/v1/enrolments/{job_id}", headers=bearer).json() == {"status": "rejected", "problems": [{"pose": None, "problem": "consent withdrawn", "code": "withdrawn"}]}
     assert PHOTOS.objects == {}
     assert upload("k3")[1]().json() == {"error": "no_active_consent"}
     print("enrolment ok (bearer login, roles, registration with ID rules, roster paging, notice and consent, idempotency, one open job, withdrawal deletes photos)")
+    check_deletion(bearer, viewer, consent, upload, jpeg)
+
+
+def check_deletion(bearer, viewer, consent, upload, jpeg):
+    """8e: a withdrawal or a leaver deletes the person's face data; attendance records stay, their pictures cleared later."""
+    import pickle
+    from contextlib import closing
+    import psycopg2.extras
+    import enrolment_deletion
+    from parameters import POSTGRESQL_DATABASE_NAME
+    give = lambda: requests.post(f"{BASE}/v1/consents", json={**consent, "notice_version": "2"}, headers=bearer)  # noqa: E731
+    sql = lambda query, args=(), db=POSTGRESQL_DATABASE: _sql(db, query, args)  # noqa: E731
+    assert requests.get(f"{BASE}/v1/server-info").json()["deletion_days"] == 90
+
+    # p-001 enrolled, as the worker leaves an accepted job: photos under persons/, enrolled_at set
+    accepted_consent = give().json()["consent_id"]
+    job = upload("k4", consent_to=accepted_consent)[1]().json()["job_id"]
+    sql("UPDATE enrolment_jobs SET status = 'accepted', finished_at = now() WHERE id = %s", (job,))
+    sql("UPDATE persons SET enrolled_at = now() WHERE person_id = 'p-001'")
+    PHOTOS.objects = {f"persons/p-001/{pose}.jpg": jpeg for pose in enrolment.POSES}
+
+    # A withdrawal during a re-enrolment ends only that attempt
+    retake_consent = give().json()["consent_id"]
+    retake = upload("k5", consent_to=retake_consent, reason="other")[1]().json()["job_id"]
+    assert requests.delete(f"{BASE}/v1/consents/{retake_consent}", headers=bearer).json() == {"deletion_id": retake_consent}
+    assert sorted(PHOTOS.objects) == sorted(f"persons/p-001/{pose}.jpg" for pose in enrolment.POSES), "only the retake's photos go"
+    assert requests.get(f"{BASE}/v1/persons?query=p-001", headers=bearer).json()["persons"][0]["enrolment_status"] == "enrolled"
+    assert requests.get(f"{BASE}/v1/enrolments/{retake}", headers=bearer).json()["problems"][0]["code"] == "withdrawn"
+
+    # Withdrawing the consent the enrolment rests on requests the deletion; the route returns the same open request
+    deletion_id = requests.delete(f"{BASE}/v1/consents/{accepted_consent}", headers=bearer).json()["deletion_id"]
+    assert deletion_id != accepted_consent
+    delete = lambda person, who=bearer, reason="left": requests.delete(f"{BASE}/v1/persons/{person}/enrolment?reason={reason}", headers=who)  # noqa: E731
+    assert delete("p-001", reason="bogus").json() == {"error": "invalid_reason"}
+    assert delete("p-001", viewer).json() == {"error": "role_cannot_enrol"}
+    assert delete("nobody").json() == {"error": "person_not_found"}
+    r = delete("p-001")
+    assert r.status_code == 202 and r.json() == {"deletion_id": deletion_id}, r.text
+    assert requests.get(f"{BASE}/v1/persons?query=p-001", headers=bearer).json()["persons"][0]["enrolment_status"] == "none"
+    assert give().json() == {"error": "deletion_pending"}
+    assert sql("SELECT count(*) AS n FROM consents WHERE person_id = 'p-001' AND withdrawn_at IS NULL")[0]["n"] == 0
+
+    # What the worker deletes: folders (dataset, crops, portrait), the nightly vectors, the collector's rows, Milvus, the rows
+    root = tempfile.mkdtemp()
+    folders = [os.path.join(root, name) for name in ("faces", "crops", "portraits")]
+    for folder in folders:
+        for person in ("p-001", "p-002"):
+            os.makedirs(os.path.join(folder, person))
+    nightly = os.path.join(root, "dynamic-dataset.pkl")
+    with open(nightly, "wb") as file:
+        pickle.dump({"names": ["p-001", "p-002", "p-001"], "encodings": [1, 2, 3]}, file)
+    admin_connection.cursor().execute(f'CREATE DATABASE "{POSTGRESQL_DATABASE_NAME}"')
+    sql("CREATE TABLE person_summary (person_id VARCHAR PRIMARY KEY); CREATE TABLE face_images (person_id VARCHAR REFERENCES person_summary, image BYTEA);"
+        "INSERT INTO person_summary VALUES ('p-001'), ('p-002'); INSERT INTO face_images VALUES ('p-001', 'x'), ('p-002', 'y')", db=POSTGRESQL_DATABASE_NAME)
+    forgotten = []
+
+    def milvus_down(_):
+        raise RuntimeError("Milvus down")
+
+    with closing(psycopg2.connect(dbname=POSTGRESQL_DATABASE, cursor_factory=psycopg2.extras.RealDictCursor, **LOGIN)) as conn:
+        try:
+            enrolment_deletion.run_one(conn, PHOTOS, milvus_down, folders=folders, pickle_path=nightly)
+        except RuntimeError:
+            pass
+        assert sql("SELECT done_at FROM deletions WHERE id = %s", (deletion_id,))[0]["done_at"] is None, "a failed deletion must stay open"
+        assert sql("SELECT 1 FROM persons WHERE person_id = 'p-001'"), "the rows go last, so a retry still knows the person"
+        assert enrolment_deletion.run_one(conn, PHOTOS, forgotten.append, folders=folders, pickle_path=nightly)
+        assert not enrolment_deletion.run_one(conn, PHOTOS, forgotten.append, folders=folders, pickle_path=nightly)
+    assert forgotten == ["p-001"]
+    assert PHOTOS.objects == {}
+    assert all(not os.path.exists(os.path.join(folder, "p-001")) and os.path.isdir(os.path.join(folder, "p-002")) for folder in folders)
+    with open(nightly, "rb") as file:
+        assert pickle.load(file) == {"names": ["p-002"], "encodings": [2]}
+    assert sql("SELECT person_id FROM face_images", db=POSTGRESQL_DATABASE_NAME) == [{"person_id": "p-002"}]
+    assert sql("SELECT person_id FROM person_summary", db=POSTGRESQL_DATABASE_NAME) == [{"person_id": "p-002"}]
+    for table in ("persons", "consents", "enrolment_jobs"):
+        assert not sql(f"SELECT 1 FROM {table} WHERE person_id = 'p-001'"), table
+    assert sql("SELECT done_at FROM deletions WHERE id = %s", (deletion_id,))[0]["done_at"] is not None
+    try:
+        enrolment_deletion.remove_folder(folders[0], "..")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("an ID pointing outside the dataset must be refused")
+    assert requests.post(f"{BASE}/v1/persons", json={"person_id": "p-001", "name": "Asha Rao"}, headers=bearer).status_code == 201, "the ID is free again"
+
+    # Attendance records stay; their camera pictures are cleared 3 years after the request, records made since keep theirs
+    sql("ALTER TABLE recognition_results ADD COLUMN IF NOT EXISTS recognition_frame BYTEA; DELETE FROM recognition_results;"
+        "UPDATE deletions SET requested_at = now() - interval '3 years 1 day' WHERE id = %s;"
+        "INSERT INTO recognition_results (person_id, recognition_date, recognition_frame) VALUES ('p-001', current_date - interval '3 years 2 days', 'old'), "
+        "('p-001', current_date, 'new'), ('p-002', current_date - interval '3 years 2 days', 'other')", (deletion_id,))
+    with closing(psycopg2.connect(dbname=POSTGRESQL_DATABASE, cursor_factory=psycopg2.extras.RealDictCursor, **LOGIN)) as conn:
+        assert enrolment_deletion.clear_frames(conn) == 1
+        assert enrolment_deletion.clear_frames(conn) == 0
+    frames = sql("SELECT person_id, recognition_frame IS NULL AS cleared FROM recognition_results ORDER BY recognition_date, person_id")
+    assert frames == [{"person_id": "p-001", "cleared": True}, {"person_id": "p-002", "cleared": False}, {"person_id": "p-001", "cleared": False}], frames
+    print("deletion ok (withdrawal or leaver, retake withdrawal kept apart, everything of the face deleted, retried whole, records kept, pictures cleared at 3 years)")
+
+
+def _sql(db, query, args=()):
+    import psycopg2.extras
+    with psycopg2.connect(dbname=db, cursor_factory=psycopg2.extras.RealDictCursor, **LOGIN) as conn, conn.cursor() as cursor:
+        cursor.execute(query, args)
+        return cursor.fetchall() if cursor.description else None
 
 
 def test_live_config():

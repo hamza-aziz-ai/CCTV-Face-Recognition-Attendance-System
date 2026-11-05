@@ -40,6 +40,9 @@ FILES = [
     "master.env.example",
     ".env.example",
     "src/Camera-Configuration/camera_configuration.example.json",
+    # The enrolment notice per deployment mode: the client named in a dedicated one, the operator in a central one (D-048)
+    "enrolment/notice.dedicated.example.json",
+    "enrolment/notice.central.example.json",
     # Deployment tooling, no app logic: installed by hand on a host, never replaced by a release (D-033)
     "deploy/watch.py",
 ]
