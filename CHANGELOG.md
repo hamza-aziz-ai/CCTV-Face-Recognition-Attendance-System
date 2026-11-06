@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.21.0 (2026-11-06)
+
+## What's Changed
+* feat(roi): draw straight lines and keep the outline open while drawing; show live view dates as DD MMM YYYY by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/129
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.20.1...v2.21.0
+
 ## v2.20.1 (2026-11-06)
 
 ## What's Changed
