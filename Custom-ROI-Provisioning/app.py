@@ -8,28 +8,93 @@ src/Camera-Configuration/camera_configuration.json. The producer reads that file
 The points are pixels of the snapshot, so its size is saved with them as `masking-frame-size`, and only when a fresh frame
 from the camera still has that size: the producer then refuses the region if the camera's resolution later changes.
 
+It is served inside the website at /roi/ for client admins (D-035 addendum). It asks this client's API about every request
+(ROI_AUTH_URL) instead of trusting the proxy: the service sits on the proxy network every client's stack shares, so other
+containers can reach it directly. The API checks the session cookie, the role and, for a write, the CSRF token.
+
 Author: Kshitij Parashar
 Date: 4 October 2023
 Rewritten 2026-10-31: the old page edited src/parameters.py and imported names that no longer exist.
 """
 import json
+import logging
 import os
 import sys
 import tempfile
+import threading
+import urllib.error
+import urllib.request
 
 import cv2
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, g, jsonify, redirect, render_template, request
 
 # The shared modules live in src/ and import each other by bare name (`from parameters import ...`)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "src"))
 
-from parameters import CAMERA_CONFIGURATION_FILE  # noqa: E402
+from parameters import CAMERA_CONFIGURATION_FILE, ROI_AUTH_URL  # noqa: E402
 from util.generic_utilities import camera_stream_url, crop_and_mask_roi  # noqa: E402
 
 MAX_POINTS = 100
 MAX_COORDINATE = 20000  # well above any camera resolution in use
+# Camera opens are bounded in time (video_source's limits) and in number: a dead camera cannot pile up requests
+OPEN_TIMEOUT_MS, READ_TIMEOUT_MS = 10000, 5000
+captures = threading.BoundedSemaphore(2)
+# ponytail: one lock in one process (the Flask server); a multi-worker server needs a file lock around the same code
+saving = threading.Lock()
 
 app = Flask(__name__)
+audit = logging.getLogger("roi.audit")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args):
+        return None  # a redirect is not a 204: refused
+
+
+auth = urllib.request.build_opener(NoRedirect)
+
+
+def check_admin():
+    """The API's answer for this request: 204 (with the account), 401 signed out, 403 refused, else unavailable."""
+    ask = urllib.request.Request(ROI_AUTH_URL, headers={
+        "Cookie": request.headers.get("Cookie", ""), "X-CSRF-Token": request.headers.get("X-CSRF-Token", ""),
+        "X-Forwarded-Method": request.method})  # this request's own method, never the caller's header
+    try:
+        with auth.open(ask, timeout=3) as answer:
+            return answer.status, answer.headers.get("X-Account")
+    except urllib.error.HTTPError as e:
+        return e.code, None
+    except OSError:
+        return 503, None
+
+
+@app.before_request
+def admins_only():
+    if request.path == "/health":
+        return None
+    status, account = check_admin()
+    if status == 204 and account:
+        g.account = account
+        return None
+    if status == 401:
+        if request.method == "GET" and request.path == "/":
+            return redirect("/auth/sign-in")
+        return jsonify(error="Sign in again"), 401
+    if status == 403:
+        return jsonify(error="Only a client admin can change camera regions"), 403
+    return jsonify(error="The sign-in check is unavailable; try again shortly"), 503
+
+
+@app.after_request
+def no_store(response):
+    response.headers["Cache-Control"] = "no-store"  # camera pictures and the configuration
+    return response
+
+
+@app.get("/health")
+def health():
+    return jsonify(status="ok")
 
 
 def load_config():
@@ -75,7 +140,12 @@ def valid_points(points, size=(MAX_COORDINATE, MAX_COORDINATE)):
 def save_points(camera_id, points, size=None):
     """Set one camera's masking-coordinates and the masking-frame-size they were drawn on (points None clears both).
     Written to a temporary file in the same folder and swapped in, so a crash never leaves a half-written configuration
-    for the producer."""
+    for the producer. One save at a time, or two saves for different cameras could each write back the other's old file."""
+    with saving:
+        write_points(camera_id, points, size)
+
+
+def write_points(camera_id, points, size):
     config = load_config()
     camera = find_camera(config, camera_id)
     camera["masking-coordinates"] = points
@@ -97,11 +167,17 @@ def save_points(camera_id, points, size=None):
 
 def snapshot(camera):
     """One frame at the camera's full resolution: the coordinates the producer's crop uses."""
-    stream = cv2.VideoCapture(camera_stream_url(camera))
+    if not captures.acquire(blocking=False):
+        raise ConnectionError("the page is already reading from cameras; try again in a moment")
     try:
-        grabbed, frame = stream.read()
+        stream = cv2.VideoCapture(camera_stream_url(camera), cv2.CAP_FFMPEG,
+                                  [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, OPEN_TIMEOUT_MS, cv2.CAP_PROP_READ_TIMEOUT_MSEC, READ_TIMEOUT_MS])
+        try:
+            grabbed, frame = stream.read()
+        finally:
+            stream.release()
     finally:
-        stream.release()
+        captures.release()
     if not grabbed:
         raise ConnectionError("could not read a frame from the camera")
     return frame
@@ -179,7 +255,10 @@ def update_roi():
         return jsonify(error=str(e)), 400
     except ConnectionError as e:
         return jsonify(error=str(e)), 502
-    return jsonify(saved=body.get("camera"), note="Restart producer-consumer to apply it.")
+    audit.info("region %s for %s by %s%s", "cleared" if body.get("points") is None else "saved", camera_id, g.account,
+               "" if body.get("points") is None else f", {len(body['points'])} points on {body['size'][0]}x{body['size'][1]}")
+    return jsonify(saved=camera_id, note="Saved, not applied yet: on an edge node, copy the camera configuration there "
+                                         "first, then restart producer-consumer and the two controllers.")
 
 
 if __name__ == "__main__":

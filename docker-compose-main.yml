@@ -123,8 +123,10 @@ services:
       # On this machine only, for the watcher; everyone else comes through the HTTPS proxy (D-040)
       - "127.0.0.1:${API_PORT:-9090}:8000"
     networks:
-      - default
-      - edge
+      default:
+        # Only on this project's network: the ROI page asks this name, which another client's API never answers
+        aliases: [api-private]
+      edge:
     # database-controller creates CCTV_Camera_Surveillance, which the API reads
     depends_on:
       mfr-database-controller:
@@ -237,20 +239,28 @@ services:
       retries: 3
       start_period: 30s
 
-  # On-demand page to draw each camera's region of interest (D-035): docker compose --profile roi up -d roi-provisioning,
-  # then open http://localhost:8069. It saves into the camera configuration, so that folder is mounted read-write here
-  # only; it has no login and shows camera feeds, so it listens on this host only. Restart producer-consumer to apply.
+  # The page to draw each camera's region of interest (D-035), at https://<site>/roi/ for client admins: it asks this
+  # client's API about every request (api-private), so it publishes no port. It saves into the camera configuration, so
+  # that folder is mounted read-write here only. Restart producer-consumer and the controllers to apply a region
   roi-provisioning:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-roi:${IMAGE_TAG:-v-beta}
-    profiles: [roi]
+    restart: unless-stopped
     environment:
       CAM_USERNAME: ${CAM_USERNAME}
       CAM_PASSWORD: ${CAM_PASSWORD}
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration
-    ports:
-      - "127.0.0.1:${ROI_PORT:-8069}:8069"
+    # Its audit lines (who saved or cleared which region) go to the container log. The proxy reaches it over the shared edge network; nothing depends on it
+    networks:
+      - default
+      - edge
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8069/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   # Recognition display for this host (Raspberry Pis run the same image with its default ports); versioned in the Kafka-WebApp repository
   kafka-webapp:

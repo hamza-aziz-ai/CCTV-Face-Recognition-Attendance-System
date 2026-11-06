@@ -29,18 +29,26 @@
             font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
         }
 
-        header {
-            display: flex;
-            align-items: baseline;
-            justify-content: space-between;
-            padding: 20px 28px;
-            border-bottom: 1px solid var(--line);
-            background: var(--surface);
-        }
+        /* The site's top bar, the same markup as the camera region page */
+        .appbar { display: flex; align-items: center; gap: 20px; height: 56px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--line); }
+        .product { display: flex; align-items: center; gap: 10px; font-weight: 600; white-space: nowrap; color: var(--ink); text-decoration: none; }
+        .product .mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; background: var(--accent); color: #fff; }
+        .product .mark svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+        .sitenav { display: flex; align-self: stretch; gap: 4px; }
+        .sitenav a { display: flex; align-items: center; padding: 0 12px; border-bottom: 2px solid transparent; color: var(--ink-muted); font-weight: 600; text-decoration: none; }
+        .sitenav a:hover { color: var(--ink); }
+        .sitenav a[aria-current="page"] { border-bottom-color: var(--accent); color: var(--accent); }
+        .spacer { flex: 1; }
+        .account { display: flex; align-items: center; gap: 10px; color: var(--ink-muted); white-space: nowrap; }
+        .account strong { color: var(--ink); font-weight: 600; }
+        .account button { padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+        .account button:hover { border-color: var(--accent); color: var(--accent); }
+        [hidden] { display: none !important; }
 
+        .pagehead { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 20px 28px 0; }
         h1 { margin: 0; font-size: 1.3rem; font-weight: 600; }
-
         .note { color: var(--ink-muted); font-size: 0.9rem; }
+        @media (max-width: 760px) { .sitenav { display: none; } }
 
         main {
             display: grid;
@@ -104,13 +112,32 @@
     </style>
 </head>
 <body>
-<header>
+<header class="appbar">
+    <a class="product" href="/"><span class="mark"><svg viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M16 10.5 21 8v8l-5-2.5"/></svg></span>Attendance Display</a>
+    <nav class="sitenav" aria-label="Site">
+        <a href="/">Display</a>
+        <a href="/api/live" aria-current="page">Live view</a>
+        <!-- Shown to client admins only; the region page checks the role itself -->
+        <a href="/roi/" id="nav-roi" hidden>Camera regions</a>
+    </nav>
+    <span class="spacer"></span>
+    <div class="account" id="account" hidden><span>Signed in as <strong id="account-name"></strong></span><button type="button" id="sign-out">Sign out</button></div>
+</header>
+<div class="pagehead">
     <h1>Live view</h1>
     <span class="note">Video starts only when you press Play. Latest recognitions refresh every 5 seconds.</span>
-</header>
+</div>
 <main id="cameras" aria-live="polite"></main>
 <script>
     const main = document.getElementById("cameras");
+
+    // "22:45:46.123" from the API as "10:45:46 PM": the owner reads times in 12-hour format
+    function clock(time) {
+        const [h, m, s] = String(time).split(":").map(Number);
+        if (Number.isNaN(h) || Number.isNaN(m)) return time;
+        const seconds = s === undefined || Number.isNaN(s) ? "" : `:${String(Math.floor(s)).padStart(2, "0")}`;
+        return `${h % 12 || 12}:${String(m).padStart(2, "0")}${seconds} ${h < 12 ? "AM" : "PM"}`;
+    }
 
     function text(tag, value, className) {
         const node = document.createElement(tag);
@@ -159,7 +186,7 @@
                 list.replaceChildren(...(rows.length ? rows.map((row) => {
                     const item = document.createElement("li");
                     const score = row.score === null ? "" : ` · ${row.score.toFixed(2)}`;
-                    item.append(text("span", row.person_id), text("span", `${row.date} ${row.time}${score}`, "when"));
+                    item.append(text("span", row.person_id), text("span", `${row.date} ${clock(row.time)}${score}`, "when"));
                     return item;
                 }) : [text("li", "No recognitions yet", "empty")]));
             }
@@ -178,6 +205,20 @@
         refreshEvents();
         setInterval(refreshEvents, 5000);
     }
+
+    // The signed-in account in the top bar, and the region page link for client admins
+    let csrf = "";
+    fetch("/auth/me", { credentials: "same-origin" }).then((r) => r.ok ? r.json() : null).then((me) => {
+        if (!me) return;
+        csrf = me.csrf_token || "";
+        document.getElementById("account-name").textContent = me.name;
+        document.getElementById("account").hidden = false;
+        document.getElementById("nav-roi").hidden = me.role !== "client_admin";
+    }).catch(() => {});
+    document.getElementById("sign-out").addEventListener("click", async () => {
+        await fetch("/auth/logout", { method: "POST", credentials: "same-origin", headers: { "X-CSRF-Token": csrf } }).catch(() => {});
+        window.location.href = "/auth/sign-in";
+    });
 
     start();
 </script>

@@ -169,6 +169,8 @@ def test():
     cli("revoke-token", "erp-pull")
     assert get(route, bearer) == 401
 
+    check_roi_gate()
+
     # Throttling: the right password stops working after too many failures, for that name only
     for _ in range(LOGIN_ATTEMPTS):
         assert sign_in("guest", "wrong password")[0] == 401
@@ -181,6 +183,30 @@ def test():
     check_edge()
     server.should_exit = True
     print("accounts ok (role matrix, live view roles and latest recognitions, CSRF, logout, expiry, disabled users, password change, machine tokens, throttling, no key in the URL)")
+
+
+def check_roi_gate():
+    """The camera region page asks /auth/check-admin about every request (D-035 addendum): a client admin's cookie
+    session only, the method the page itself got, and the session's CSRF token for a write."""
+    url = f"{BASE}/auth/check-admin"
+    _, admin = sign_in("boss")
+    _, viewer = sign_in("guest")
+
+    def gate(headers=None, method="GET"):
+        return requests.get(url, headers={**(headers or {}), **({"X-Forwarded-Method": method} if method else {})})
+
+    assert gate().status_code == 401
+    assert gate({"Cookie": viewer["Cookie"]}).status_code == 403
+    ok = gate({"Cookie": admin["Cookie"]})
+    assert ok.status_code == 204 and ok.headers["X-Account"] == "boss", ok.headers
+    assert gate({"Cookie": admin["Cookie"]}, "POST").status_code == 403, "a write without the CSRF token"
+    assert gate({"Cookie": admin["Cookie"], "X-CSRF-Token": "wrong"}, "POST").status_code == 403
+    assert gate(admin, "POST").status_code == 204
+    assert gate({"Cookie": admin["Cookie"]}, None).status_code == 403, "no method: refused"
+    assert gate({"Cookie": admin["Cookie"]}, "TRACE").status_code == 403
+    machine = {"Authorization": f"Bearer {cli('add-token', 'roi-robot', 'client_admin')}"}
+    assert gate(machine).status_code == 403 and gate({**machine, **admin}).status_code == 403, "no machine edits regions"
+    print("roi gate ok (admin cookie session only, CSRF on writes, unknown or missing method refused, Bearer refused)")
 
 
 def check_edge():

@@ -71,7 +71,7 @@ flowchart LR
         UPD["`nightly updater, no port`"]:::step
         DISP["`display image server DISPLAY_IMAGE_PORT, default 20013`"]:::step
         KW["`kafka-webapp DISPLAY_PORT:9090, default 9095`"]:::outcome
-        ROI["`ROI page 127.0.0.1 ROI_PORT, default 8069, profile roi`"]:::step
+        ROI["`camera region page, /roi/ through the proxy, admins only`"]:::step
     end
     PG[("`Shared PostgreSQL 18.6, cctv-postgresql, POSTGRES_HOST_PORT:5432, default 5432`")]:::store
     subgraph IFS["`InsightFace-REST, started by deploy_trt_multi-gpu.sh`"]
@@ -113,7 +113,7 @@ flowchart LR
     API -->|"`HTTP POST every minute`"| ERP
     OWN -.->|"`dvc push and pull`"| DS
     OWN -.->|"`publish face vectors`"| MV
-    OWN -.->|"`browser on this host`"| ROI
+    ROI -->|"`every request checked, api-private`"| API
     ROI -.->|"`snapshots over RTSP or HTTP`"| CAM
 
     classDef entry fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
@@ -126,10 +126,10 @@ flowchart LR
 
 - **Service names inside a client stack, host IP for shared services.** Each client stack is its own compose project (`cctv` for the owner, `cctv-<client>` otherwise) with its own network and no fixed container names, so compose names containers `<project>-<service>-1`. The producer reaches the DB controller, feedback controller and face collector by service name, and those ports are not published (D-036). Everything shared, PostgreSQL, InsightFace-REST, Milvus and Kafka, is reached through `IP_ADDRESS` from `master.env` and its published port (`src/parameters.py`).
 - **Per-client logins.** Each service gets only the logins it uses from the site `.env`: PostgreSQL (`PG_APP_*`) for the DB controller, API, collector and updater; Milvus (`MILVUS_APP_*`) for the producer-consumer and updater; Kafka (`KAFKA_APP_*`) for the producer-consumer and feedback controller; and the read-only display login (`KAFKA_DISPLAY_*`, passed as `KAFKA_USERNAME` and `KAFKA_PASSWORD`) for Kafka-WebApp. The legacy owner (`LEGACY_SHARED_SERVICES=1`) uses the admin PostgreSQL login and no Milvus or Kafka login (D-037).
-- **Per-client ports.** `API_PORT`, `DISPLAY_IMAGE_PORT`, `DISPLAY_PORT` and `ROI_PORT` come from the site `.env`, with the defaults shown; only a second client on the same host sets them.
+- **Per-client ports.** `API_PORT`, `DISPLAY_IMAGE_PORT` and `DISPLAY_PORT` come from the site `.env`, with the defaults shown; only a second client on the same host sets them.
 - **One InsightFace-REST container by default.** `deploy_trt_multi-gpu.sh` starts one container per `INSIGHTFACE_GPUS` entry on ports 19000, 19001 and so on, but nginx forwards only to `insightface-rest-trt-0` (D-032).
 - **Kafka-WebApp v0.8.0 in a client stack** shows the system up only while producer-consumer's readiness (`HEALTH_URL`, D-051) answers ready, and watches its own Kafka connection, then reads every partition of its topic as group `<topic>.display`. It fetches portraits from `IMAGE_SERVER_ADDRESS`, the client's own display image server by name. It logs in with `KAFKA_USERNAME` and `KAFKA_PASSWORD` when they are set.
-- **ROI page.** `roi-provisioning` starts only with `--profile roi`. It reads camera snapshots and writes `masking-coordinates` into the camera configuration, the only service that mounts that folder read-write (D-035).
+- **Camera region page.** `roi-provisioning` always runs and publishes nothing: the proxy serves it at `/roi/`, and it asks this client's API (`/auth/check-admin`, by the `api-private` alias that exists only on the project's network) about every request, because it sits on the proxy network every client shares. It reads camera snapshots and writes `masking-coordinates` into the camera configuration, the only service that mounts that folder read-write (D-035 addendum).
 - **Deployment host.** The watcher runs each client's compose project with `--project-directory sites\<client>`, so every relative mount (`./master.env`, `./src/Camera-Configuration`, `./logs`, the dataset folders) resolves inside that client's folder.
 - **Startup order** is in [FLOW.md, section 1](FLOW.md#1-startup).
 
@@ -144,7 +144,7 @@ Containers and ports:
 | Main        | `dynamic-face-dataset-collector`                               | `...-dynamic-face-dataset-collector:${IMAGE_TAG}`                              | none (8000 inside the stack)         | none |
 | Main        | `automate-milvus-update`                                       | `...-automate-milvus-update:${IMAGE_TAG}`                                      | none                                 | none |
 | Main        | `display-image-server`                                         | `...-front-face-image-display:${IMAGE_TAG}`                                    | `${DISPLAY_IMAGE_PORT:-20013}:20013` | none |
-| Main        | `roi-provisioning` (profile `roi`)                             | `...-roi:${IMAGE_TAG}`                                                         | `127.0.0.1:${ROI_PORT:-8069}:8069`   | none |
+| Main        | `roi-provisioning`                                             | `...-roi:${IMAGE_TAG}`                                                         | none, `/roi/` through the proxy     | none |
 | Main        | `kafka-webapp`                                                 | `ghcr.io/hamza-aziz-ai/kafka-webapp:v0.4.2`, pinned by digest                  | `${DISPLAY_PORT:-9095}:9090`         | none |
 | PostgreSQL  | `postgresql` (container `cctv-postgresql`)                     | `postgres:18.6-trixie`                                                         | `${POSTGRES_HOST_PORT:-5432}:5432`   | none |
 | InsightFace | `insightface-rest-trt-0`                                       | `ghcr.io/hamza-aziz-ai/cctv-face-recognition-insightface-rest:v0.9.5.0-<tree>` | 19000:18080                          | 0    |

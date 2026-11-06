@@ -96,6 +96,8 @@ jobs:
       - run: python3 -I deploy/test_proxy.py
       # Two clients' stacks on one host: no fixed names, own ports, own site folder, internal services by name (D-036)
       - run: python3 -I deploy/test_layout.py
+      # The region page's geometry: full-resolution points, centroid scaling, freehand strokes fitted to 100 points
+      - run: node Custom-ROI-Provisioning/test_region.js
       # The deployment bundle: only allow-listed files, every image pinned, and its compose file still valid (D-033)
       - run: |
           python3 -I deploy/make_bundle.py demo /tmp/bundle

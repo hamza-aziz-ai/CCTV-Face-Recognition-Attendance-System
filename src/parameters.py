@@ -253,6 +253,10 @@ CLIENT_NAME = os.getenv("CLIENT_NAME") or CLIENT_ID
 NUMBER_OF_PICTURES = 3
 
 # API address for dynamic facial dataset collection service
+# The ROI page asks this client's API about every request (D-035 addendum). api-private is an alias the API has only on
+# the project's own network: its service name also exists on the shared proxy network, where it could reach another
+# client's API
+ROI_AUTH_URL = "http://api-private:8000/auth/check-admin"
 DYNAMIC_FACE_DATA_COLLECTOR_LOCAL = "http://dynamic-face-dataset-collector:8000"  # service name: this client's own collector (D-036)
 # An edge node has no collector: it sends to https://<central host>/api/v1/edge with DYNAMIC_FACE_DATA_COLLECTOR_TOKEN, an
 # edge_collector machine token, checked against REQUESTS_CA_BUNDLE when the site's certificate is its own (D-043)

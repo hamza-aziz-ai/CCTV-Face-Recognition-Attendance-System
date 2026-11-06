@@ -54,6 +54,10 @@ def test():
                 assert host in services and not services[host].get("ports"), (host, "must be a service, not published")
             # Edge crops reach the collector only through the API's token check, so rolling the API back closes the way in
             assert set(services["dynamic-face-dataset-collector"].get("networks", {})) == {"default"}, "collector on the proxy's network"
+            # The region page publishes nothing and asks its own API by a name that exists only on the project's network
+            assert not services["roi-provisioning"].get("ports") and "profiles" not in services["roi-provisioning"]
+            networks = services["mfr-api-service"]["networks"]
+            assert (networks["default"] or {}).get("aliases") == ["api-private"] and not (networks["edge"] or {}).get("aliases"), networks
         # D-052: the edge runs exactly the capture half, with its own dependencies; the central site runs the rest
         site = Path(tmp, "edge").resolve()
         site.mkdir()

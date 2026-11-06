@@ -1,10 +1,14 @@
-"""Checks for the ROI page with a fake camera and a sample camera configuration.
+"""Checks for the ROI page with a fake camera and a sample camera configuration, and its gate: a stand-in for the API's
+/auth/check-admin decides every request.
 Run in the roi image: python3 Custom-ROI-Provisioning/test_app.py"""
+import http.server
 import json
+import logging
 import os
 import shutil
 import sys
 import tempfile
+import threading
 from unittest import mock
 
 import numpy as np
@@ -33,7 +37,7 @@ def test():
     before = json.load(open(config))
     frame = np.full((720, 1280, 3), 200, dtype=np.uint8)  # a full-resolution frame from the fake camera
 
-    with mock.patch.object(app, "CAMERA_CONFIGURATION_FILE", config), mock.patch.object(app, "snapshot", lambda camera: frame):
+    with mock.patch.object(app, "CAMERA_CONFIGURATION_FILE", config), mock.patch.object(app, "snapshot", lambda camera: frame),             mock.patch.object(app, "check_admin", lambda: (204, "boss")):
         client = app.app.test_client()
         page = client.get("/")
         assert page.status_code == 200 and b"Custom Region of Interest" in page.data
@@ -83,7 +87,7 @@ def test():
     def no_camera(camera):
         raise AssertionError("clearing a region must not open the camera")
 
-    with mock.patch.object(app, "CAMERA_CONFIGURATION_FILE", config), mock.patch.object(app, "snapshot", no_camera):
+    with mock.patch.object(app, "CAMERA_CONFIGURATION_FILE", config), mock.patch.object(app, "snapshot", no_camera),             mock.patch.object(app, "check_admin", lambda: (204, "boss")):
         client = app.app.test_client()
         assert client.post("/api/roi", json={"camera": CAMERA, "points": None}).status_code == 200
         cleared = json.load(open(config))
@@ -93,5 +97,89 @@ def test():
     print("roi ok (cameras listed, snapshot and preview served, region saved with its snapshot size, stale size refused, bad input refused, cleared without the camera)")
 
 
+def test_gate():
+    """Every request but /health waits for the API's answer; the method sent is the request's own, never a header the
+    caller set; no answer, a redirect or anything but 204 refuses it, before any camera or file is touched."""
+    seen, answer = [], {"status": 204}
+
+    class Api(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append(self.headers)  # case-insensitive, as HTTP headers are
+            self.send_response(answer["status"])
+            if answer["status"] == 204:
+                self.send_header("X-Account", "boss")
+            if answer["status"] == 302:
+                self.send_header("Location", "/elsewhere")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    api = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Api)
+    threading.Thread(target=api.serve_forever, daemon=True).start()
+
+    def no_camera(camera):
+        raise AssertionError("a refused request must not open a camera")
+
+    with mock.patch.object(app, "ROI_AUTH_URL", f"http://127.0.0.1:{api.server_port}/auth/check-admin"),             mock.patch.object(app, "snapshot", no_camera):
+        client = app.app.test_client()
+        assert client.get("/health").status_code == 200 and not seen, "the healthcheck needs no sign-in and asks nobody"
+        client.set_cookie("__Host-session", "s")
+        page = client.get("/", headers={"X-Forwarded-Method": "GET"})
+        assert page.status_code == 200 and page.headers["Cache-Control"] == "no-store"
+        assert seen[-1].get("Cookie") == "__Host-session=s" and seen[-1].get("X-Forwarded-Method") == "GET", dict(seen[-1])
+        client.post("/api/roi", json={}, headers={"X-Forwarded-Method": "GET", "X-CSRF-Token": "t"})
+        assert seen[-1].get("X-Forwarded-Method") == "POST" and seen[-1].get("X-CSRF-Token") == "t", "a forged method header is not relayed"
+        for status, expected in ((401, 401), (403, 403), (500, 503), (302, 503)):
+            answer["status"] = status
+            assert client.post("/api/roi", json={"camera": CAMERA, "points": None}).status_code == expected, status
+            assert client.get("/snapshot?camera=" + CAMERA).status_code == expected, status
+        answer["status"] = 401
+        signed_out = client.get("/")
+        assert signed_out.status_code == 302 and signed_out.headers["Location"] == "/auth/sign-in"
+    api.shutdown()
+    api.server_close()
+    with mock.patch.object(app, "ROI_AUTH_URL", f"http://127.0.0.1:{api.server_port}/auth/check-admin"):
+        assert app.app.test_client().get("/api/cameras").status_code == 503, "no API: refused"
+    print("roi gate ok (every request but /health asks the API, own method sent, 401 403 and unavailable refused before any camera)")
+
+
+def test_concurrent_saves():
+    """Saves for two cameras at once both survive, and each is logged with the admin who made it."""
+    folder = tempfile.mkdtemp()
+    config = os.path.join(folder, "camera_configuration.json")
+    with open(config, "w") as f:
+        json.dump(SAMPLE, f)
+    frame = np.full((720, 1280, 3), 200, dtype=np.uint8)
+    square = [[100, 100], [500, 100], [500, 400], [100, 400]]
+    lines = []
+    handler = logging.Handler()
+    handler.emit = lambda record: lines.append(record.getMessage())
+    app.audit.addHandler(handler)
+    real_load = app.load_config
+
+    def slow_load():
+        data = real_load()
+        threading.Event().wait(0.2)  # long enough for the other save to read the same old file without the lock
+        return data
+
+    with mock.patch.object(app, "CAMERA_CONFIGURATION_FILE", config), mock.patch.object(app, "snapshot", lambda camera: frame),             mock.patch.object(app, "check_admin", lambda: (204, "boss")), mock.patch.object(app, "load_config", slow_load):
+        def save(camera):
+            assert app.app.test_client().post("/api/roi", json={"camera": camera, "points": square, "size": [1280, 720]}).status_code == 200
+        workers = [threading.Thread(target=save, args=(c,)) for c in (CAMERA, "maingate/entry/cctv-camera-2")]
+        for w in workers:
+            w.start()
+        for w in workers:
+            w.join()
+    entry = json.load(open(config))["maingate"]["cctv-cameras"]["entry"]
+    assert entry["cctv-camera-1"]["masking-coordinates"] == square and entry["cctv-camera-2"]["masking-coordinates"] == square
+    assert sorted(lines) == sorted(f"region saved for {c} by boss, 4 points on 1280x720" for c in (CAMERA, "maingate/entry/cctv-camera-2")), lines
+    app.audit.removeHandler(handler)
+    shutil.rmtree(folder)
+    print("roi saves ok (two cameras at once both kept, each logged with its admin)")
+
+
 if __name__ == "__main__":
     test()
+    test_gate()
+    test_concurrent_saves()
