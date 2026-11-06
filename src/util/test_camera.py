@@ -21,10 +21,10 @@ import multicam_stream_producer as producer  # noqa: E402
 from util.generic_utilities import crop_and_mask_roi, resize_roi_to_area  # noqa: E402
 
 
-def camera(frames, messages, roi=None):
+def camera(frames, messages, roi=None, roi_size=None):
     """An IPCamera with no stream or Kafka: it reads the given frames and records what it would send."""
     cam = producer.IPCamera.__new__(producer.IPCamera)
-    cam.__dict__.update(cam_name="maingate_entry_cctv-camera-1", cam_ip="10.0.0.1", roi=roi, process_this_frame=True, frame_counter=0, shared_buffer=mock.Mock())
+    cam.__dict__.update(cam_name="maingate_entry_cctv-camera-1", cam_ip="10.0.0.1", roi=roi, roi_size=roi_size, process_this_frame=True, frame_counter=0, shared_buffer=mock.Mock())
     cam.reset_lighting()
 
     def read():
@@ -108,7 +108,20 @@ def test():
         run(cam, 400, now)
         assert messages == ["ERROR maingate_entry_cctv-camera-1: Region of interest does not fit the 640x360 camera picture. Redraw it in the ROI page."] * 2, messages
         assert not cam.shared_buffer.put.called
-    print(f"camera ok (regions checked and judged on their own pixels, {len(alerts)} alerts for 500 dark frames, "
+
+        # A region drawn on a 1280x720 snapshot is refused once the camera sends 640x360, though every point still fits
+        messages = []
+        small = np.full((360, 640, 3), 200, np.uint8)
+        cam = camera(iter([small] * 400), messages, roi=[[0, 0], [600, 0], [600, 300], [0, 300]], roi_size=[1280, 720])
+        run(cam, 400, now)
+        assert messages == ["ERROR maingate_entry_cctv-camera-1: Region of interest was drawn on a 1280x720 picture; the camera now sends 640x360. Redraw it in the ROI page."] * 2, messages
+        assert not cam.shared_buffer.put.called
+        # The same region at its own size goes through, and a change in the middle of the stream is caught at once
+        messages = []
+        cam = camera(iter([small] * 150 + [np.full((720, 1280, 3), 200, np.uint8)] * 10), messages, roi=[[0, 0], [600, 0], [600, 300], [0, 300]], roi_size=[640, 360])
+        run(cam, 160, now)
+        assert cam.shared_buffer.put.call_count == 150 and len(messages) == 1 and "now sends 1280x720" in messages[0], messages
+    print(f"camera ok (regions checked against their frame size and judged on their own pixels, {len(alerts)} alerts for 500 dark frames, "
           "recovery announced once, dark frames held back before the window fills, re-sent while dark)")
 
 

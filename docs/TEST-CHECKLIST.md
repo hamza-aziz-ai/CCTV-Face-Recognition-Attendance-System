@@ -17,7 +17,7 @@ Each of the 8 images builds, `pip check` is clean, `cv2` and `numpy` import, ent
 
 In `database-controller`, against a throwaway PostgreSQL, `python3 src/database_server/test_records.py` prints `records ok (saved, repeat skipped, saved after the window, host names saved, 8 parallel batches saved once)`.
 
-In `producer-consumer`, `python3 src/util/test_camera.py` prints `camera ok (regions checked and judged on their own pixels, 2 alerts for 500 dark frames, recovery announced once, dark frames held back before the window fills, re-sent while dark)`.
+In `producer-consumer`, `python3 src/util/test_camera.py` prints `camera ok (regions checked against their frame size and judged on their own pixels, 2 alerts for 500 dark frames, recovery announced once, dark frames held back before the window fills, re-sent while dark)`.
 
 `python3 -I deploy/test_proxy.py`, on a real Caddy with stand-ins, prints `proxy ok (signed-out visitors sent to sign-in, display and WebSockets need a session, API routes reachable, API docs closed, bad host names refused)`.
 
