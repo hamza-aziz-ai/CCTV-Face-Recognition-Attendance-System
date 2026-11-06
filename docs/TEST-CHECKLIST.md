@@ -17,6 +17,7 @@ Each of the 8 images builds, `pip check` is clean, `cv2` and `numpy` import, ent
 
 In `database-controller`, against a throwaway PostgreSQL, `python3 src/database_server/test_records.py` prints `records ok (saved, repeat skipped, saved after the window, host names saved, 8 parallel batches saved once, unchanged retries and midnight deduplicated, bad payloads refused, failed batches leave nothing, whole-batch deadline, cleared pictures stay cleared without deadlock, answered only after saving, health)`.
 In `producer-consumer`, `python3 src/util/attendance_sender.py` prints `attendance sender ok (...)` and `python3 src/util/pipeline_health.py` prints `pipeline health ok (...)`.
+Before pushing Markdown, `python3 -I deploy/check_diagrams.py` prints `diagrams ok (N rendered)`: every Mermaid diagram renders (CI runs it on pull requests that change Markdown; docs pushed straight to main with `[skip ci]` skip CI).
 
 In `producer-consumer`, `python3 src/util/test_camera.py` prints `camera ok (regions checked against their frame size and judged on their own pixels, 2 alerts for 500 dark frames, recovery announced once, dark frames held back before the window fills, re-sent while dark)`.
 

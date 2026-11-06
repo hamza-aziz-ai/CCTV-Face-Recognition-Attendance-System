@@ -83,6 +83,15 @@ jobs:
           POSTGRES_USER=ci POSTGRES_PASSWORD=ci docker compose -f STANDALONE-SERVICES/PostgreSQL/docker-compose.yml config --quiet
       # GitHub and Compose reject duplicate keys, which git merges can add and config --quiet can miss
       - run: python3 -I deploy/yaml_strict.py .github/workflows/*.yml docker-compose*.yml STANDALONE-SERVICES/*/docker-compose*.yml
+      # Every Mermaid diagram in the Markdown still renders, on the runner's own Chrome; only when a PR changes Markdown
+      - env:
+          EVENT: ${{ github.event_name }}
+          PUPPETEER_SKIP_DOWNLOAD: "1"
+        run: |
+          if [ "$EVENT" = pull_request ] && ! git diff --name-only "origin/$BASE...HEAD" -- '*.md' | grep -q .; then
+            echo "No Markdown changed"; exit 0
+          fi
+          python3 -I deploy/check_diagrams.py
       # The HTTPS route on a real Caddy: sign-in redirect, guarded display, closed API docs (D-040)
       - run: python3 -I deploy/test_proxy.py
       # Two clients' stacks on one host: no fixed names, own ports, own site folder, internal services by name (D-036)
