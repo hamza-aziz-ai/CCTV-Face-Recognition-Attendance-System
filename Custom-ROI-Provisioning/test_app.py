@@ -15,7 +15,7 @@ import app  # noqa: E402
 # The shape of src/Camera-Configuration/camera_configuration.example.json, which images do not ship
 SAMPLE = {"maingate": {"api-endpoint": "https://ERP_HOST/attendance-endpoint", "cctv-cameras": {
     "entry": {f"cctv-camera-{i}": {"username": None, "password": None, "ip_address": f"10.0.0.{i}", "port": 554,
-                                   "endpoint": "stream", "masking-coordinates": None} for i in (1, 2)},
+                                   "endpoint": "stream", "masking-coordinates": None, "cluster": "cluster-1"} for i in (1, 2)},
     "exit": {"cctv-camera-3": {"username": None, "password": None, "ip_address": "http://10.0.0.3/video", "port": None,
                                "endpoint": None, "masking-coordinates": [[0, 0], [10, 0], [10, 10]]}}}}}
 CAMERA = "maingate/entry/cctv-camera-1"
