@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.17.0 (2026-11-06)
+
+## What's Changed
+* feat(api): accept edge nodes' face crops through the API with an edge_collector machine token by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/121
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.16.2...v2.17.0
+
 ## v2.16.2 (2026-11-06)
 
 ## What's Changed
