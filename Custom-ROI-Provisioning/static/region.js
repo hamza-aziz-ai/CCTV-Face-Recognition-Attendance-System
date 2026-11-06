@@ -149,15 +149,16 @@
         return Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v) || 1)))) * 180 / Math.PI;
     };
 
-    // A quadrilateral whose corners are all near right angles, squared into a rectangle at its own tilt, bounding the drawing
-    function rectangle(quad, drawn) {
+    // A quadrilateral whose corners are all near right angles, squared into a rectangle at its own tilt, spanning the
+    // fitted corners (not every wobble of the drawing, which would only make it bigger)
+    function rectangle(quad) {
         let sx = 0, sy = 0;  // the mean edge direction, folded into 0..90 degrees by doubling the angle twice
         quad.forEach((a, i) => {
             const b = quad[(i + 1) % 4], t = Math.atan2(b[1] - a[1], b[0] - a[0]) * 4;
             sx += Math.cos(t); sy += Math.sin(t);
         });
         const t = Math.atan2(sy, sx) / 4, ux = [Math.cos(t), Math.sin(t)], uy = [-Math.sin(t), Math.cos(t)];
-        const along = drawn.map((p) => p[0] * ux[0] + p[1] * ux[1]), across = drawn.map((p) => p[0] * uy[0] + p[1] * uy[1]);
+        const along = quad.map((p) => p[0] * ux[0] + p[1] * ux[1]), across = quad.map((p) => p[0] * uy[0] + p[1] * uy[1]);
         const [x0, x1, y0, y1] = [Math.min(...along), Math.max(...along), Math.min(...across), Math.max(...across)];
         return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([a, c]) => [a * ux[0] + c * uy[0], a * ux[1] + c * uy[1]]);
     }
@@ -170,30 +171,42 @@
         for (const [x, y] of boundary) { xx += (x - cx) ** 2; yy += (y - cy) ** 2; xy += (x - cx) * (y - cy); }
         xx /= boundary.length; yy /= boundary.length; xy /= boundary.length;
         const mid = (xx + yy) / 2, spread = Math.sqrt(((xx - yy) / 2) ** 2 + xy * xy), t = Math.atan2(2 * xy, xx - yy) / 2;
-        const a = Math.sqrt(2 * (mid + spread)), b = Math.sqrt(2 * Math.max(0, mid - spread));
-        return Array.from({length: sides}, (_, i) => {
+        let a = Math.sqrt(2 * (mid + spread)), b = Math.sqrt(2 * Math.max(0, mid - spread));
+        const circle = b >= 0.9 * a;  // axes within 10% of each other: meant as a circle, so a true one
+        if (circle) a = b = Math.sqrt(a * b);
+        return {circle, points: Array.from({length: sides}, (_, i) => {
             const u = 2 * Math.PI * i / sides, x = a * Math.cos(u), y = b * Math.sin(u);
             return [cx + x * Math.cos(t) - y * Math.sin(t), cy + x * Math.sin(t) + y * Math.cos(t)];
-        });
+        })};
     }
 
     const NAMES = {3: "triangle", 4: "quadrilateral", 5: "pentagon", 6: "hexagon"};
-    // ponytail: fixed tolerances (3% of the shape's size for a fit, 12 degrees from square for a rectangle), tuned on
-    // drawn test shapes; make them settings if real drawings need it
+    // ponytail: fixed tolerances (a fit within 3% of the shape's size, an ellipse within 4.5%, 12 degrees from square
+    // for a rectangle), tuned on hand-drawn test shapes; make them settings if real drawings need it
     Region.straighten = (points, size, tolerance = 0.03) => {
         if (points.length < 3 || Region.area(points) < 1) return null;
+        // raw: the fit of the plain corners, which decides the corner count; error: the fit of the shape returned
         const fits = [3, 4, 5, 6].filter((k) => k <= points.length).map((k) => {
             let shape = Region.corners(points, k), kind = NAMES[k];
+            const raw = Region.fitError(points, shape);
             if (k === 4 && shape.every((b, i) => Math.abs(angleAt(shape[(i + 3) % 4], b, shape[(i + 1) % 4]) - 90) <= 12)) {
-                shape = rectangle(shape, points); kind = "rectangle";
+                shape = rectangle(shape); kind = "rectangle";
             }
-            return {kind, points: shape, error: Region.fitError(points, shape)};
+            return {kind, points: shape, raw, error: kind === "rectangle" ? Region.fitError(points, shape) : raw};
         });
-        const round = {kind: "ellipse", points: ellipse(points), error: 0};
+        const oval = ellipse(points);
+        const round = {kind: oval.circle ? "circle" : "ellipse", points: oval.points, error: 0};
         round.error = Region.fitError(points, round.points);
-        // The fewest corners that fit, unless an ellipse fits clearly better (a hexagon also fits a circle within 3%)
-        const polygon = fits.find((f) => f.error <= tolerance);
-        const best = round.error <= tolerance * 1.5 && (!polygon || round.error < polygon.error / 2) ? round : polygon;
+        // A drawn polygon fits sharply at its true corner count: the error at least halves from one corner fewer (a
+        // rectangle drops from about 5% to under 1% at 4). A round outline only improves gradually with more corners,
+        // and 5 or 6 corners always fit it within 3%, so it is an ellipse unless some corner count fits that sharply
+        // Of the corner counts that fit that sharply, the closest: a hexagon also halves at 5, then fits far better at 6
+        // A real corner also cuts the error by at least a third of the tolerance, not by a sliver: a fifth point fits a
+        // rectangle marginally better too
+        const sharp = (f, i) => i === 0 ? f.raw <= tolerance / 2 : f.raw <= fits[i - 1].raw / 2 && fits[i - 1].raw - f.raw >= tolerance / 3;
+        const polygon = fits.filter((f, i) => f.raw <= tolerance && f.error <= tolerance && sharp(f, i))
+            .reduce((a, f) => (!a || f.raw < a.raw ? f : a), null);
+        const best = polygon || (round.error <= tolerance * 1.5 ? round : null);
         return best ? {kind: best.kind, error: best.error, points: best.points.map((p) => Region.clamp(p, size))} : null;
     };
 })(typeof module !== "undefined" ? module.exports : (window.Region = {}));
