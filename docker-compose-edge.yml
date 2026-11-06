@@ -71,6 +71,8 @@ services:
   mfr-feedback-controller:
     image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-feedback-controller:${IMAGE_TAG:-v-beta}
     restart: unless-stopped
+    # Python as PID 1 ignores SIGTERM, so stop waited 10 s and killed it; tini passes the signal on
+    init: true
     environment:
       KAFKA_APP_USER: ${KAFKA_APP_USER:-}
       KAFKA_APP_PASSWORD: ${KAFKA_APP_PASSWORD:-}
