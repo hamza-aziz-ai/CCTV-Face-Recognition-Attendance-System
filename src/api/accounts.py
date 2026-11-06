@@ -208,6 +208,31 @@ def check(caller: dict = Depends(signed_in)):
     """For the reverse proxy: 204 lets a request through to a protected page, 401 stops it."""
 
 
+SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
+METHODS = SAFE_METHODS + ("POST", "PUT", "PATCH", "DELETE")
+
+
+@router.get("/check-admin", status_code=204)
+def check_admin(request: Request) -> Response:
+    """For the ROI page (D-035 addendum), which asks for every request it gets: a person signed in with a session cookie
+    and the client_admin role, and for a write, that session's CSRF token. The ROI app sends its own request's method as
+    X-Forwarded-Method; a missing or unknown one is refused. Bearer callers are refused, admin machine tokens included:
+    no machine edits regions. 204 names the account in X-Account for the ROI app's audit log."""
+    if request.headers.get("authorization"):
+        raise HTTPException(status_code=403, detail="Sign in with the browser to change camera regions")
+    caller = identify(request)
+    if caller is None:
+        raise HTTPException(status_code=401, detail="Not signed in")
+    if caller["role"] != "client_admin" or not caller["csrf"]:
+        raise HTTPException(status_code=403, detail="Your role does not allow this")
+    method = request.headers.get("x-forwarded-method", "").upper()
+    if method not in METHODS:
+        raise HTTPException(status_code=403, detail="Unknown request method")
+    if method not in SAFE_METHODS and not hmac.compare_digest(request.headers.get("x-csrf-token", "").encode(), caller["csrf"].encode()):
+        raise HTTPException(status_code=403, detail="Missing or wrong CSRF token")
+    return Response(status_code=204, headers={"X-Account": caller["name"]})
+
+
 def command(args: list) -> str:
     """The accounts command line, against this client's database. Returns what to print."""
     import psycopg2

@@ -5,317 +5,586 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Camera regions · Attendance Display</title>
     <style>
-        /* The display's theme, as on the sign-in page and the live view. This page runs on this computer only, outside the
-           proxy, so IBM Plex Sans is used when installed and the system font otherwise */
+        /* The display's theme and fonts, as on the sign-in page and the live view (Custom Region of Interest provisioning) */
+        @font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-display: swap; src: url("/static/fonts/ibm_plex_sans_regular.ttf"); }
+        @font-face { font-family: "IBM Plex Sans"; font-weight: 600; font-display: swap; src: url("/static/fonts/ibm_plex_sans_semibold.ttf"); }
+
         :root {
             --ink: #14202b;
             --ink-muted: #46535f;
+            --ink-faint: #6b7884;
             --ground: #f3f5f7;
             --surface: #ffffff;
             --line: #d5dbe1;
+            --line-soft: #e7ebef;
             --accent: #0b5f63;
             --accent-dark: #084649;
             --accent-soft: #e3f0f0;
+            --warn: #8a5a00;
+            --warn-soft: #fdf3dc;
             --error: #a32019;
             --error-soft: #fbeceb;
             --video: #0d151c;
+            --shadow: 0 1px 2px rgb(20 32 43 / 0.06), 0 4px 16px rgb(20 32 43 / 0.06);
         }
 
         * { box-sizing: border-box; }
         [hidden] { display: none !important; }
+        html, body { height: 100%; }
 
         body {
             margin: 0;
+            display: grid;
+            grid-template-rows: auto 1fr;
             background: var(--ground);
             color: var(--ink);
-            font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+            font: 14px/1.45 "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
         }
 
-        header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 18px 28px;
-            border-bottom: 1px solid var(--line);
-            background: var(--surface);
-        }
+        svg.icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
-        .brand { display: flex; align-items: center; gap: 0.6rem; color: var(--accent); font-weight: 600; }
-        .brand svg { width: 1.6rem; height: 1.6rem; }
-        h1 { margin: 0; font-size: 1.3rem; font-weight: 600; color: var(--ink); }
-        .note { color: var(--ink-muted); font-size: 0.9rem; }
+        /* The site's top bar, the same markup as the live view */
+        .appbar { display: flex; align-items: center; gap: 20px; height: 56px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--line); }
+        .product { display: flex; align-items: center; gap: 10px; font-weight: 600; white-space: nowrap; color: var(--ink); text-decoration: none; }
+        .product .mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; background: var(--accent); color: #fff; }
+        .product .mark svg { width: 18px; height: 18px; }
+        .sitenav { display: flex; align-self: stretch; gap: 4px; }
+        .sitenav a { display: flex; align-items: center; padding: 0 12px; border-bottom: 2px solid transparent; color: var(--ink-muted); font-weight: 600; text-decoration: none; }
+        .sitenav a:hover { color: var(--ink); }
+        .sitenav a[aria-current="page"] { border-bottom-color: var(--accent); color: var(--accent); }
+        .spacer { flex: 1; }
+        .account { display: flex; align-items: center; gap: 10px; color: var(--ink-muted); white-space: nowrap; }
+        .account strong { color: var(--ink); font-weight: 600; }
+        .account button { padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+        .account button:hover { border-color: var(--accent); color: var(--accent); }
 
-        main {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) 320px;
-            align-items: start;
-            gap: 20px;
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 24px 28px;
-        }
+        .shell { display: grid; grid-template-columns: 280px minmax(0, 1fr) 320px; gap: 16px; min-height: 0; padding: 16px; align-items: start; }
+        @media (max-width: 1180px) { .shell { grid-template-columns: 240px minmax(0, 1fr); } .inspector { grid-column: 1 / -1; } }
+        @media (max-width: 760px) { .shell { grid-template-columns: 1fr; } .sitenav { display: none; } }
 
-        @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+        .panel { display: flex; flex-direction: column; min-height: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
+        .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); }
+        .panel-head h2 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-muted); }
+        .count { color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
 
-        .card {
-            background: var(--surface);
-            border: 1px solid var(--line);
-            border-radius: 8px;
-            overflow: hidden;
-        }
+        .search { padding: 12px 12px 8px; }
+        input[type="search"] { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--ground); color: var(--ink); font: inherit; }
 
-        .card h2 { margin: 0; padding: 14px 16px; font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--line); }
-        .card .body { padding: 16px; }
+        .cameras { list-style: none; margin: 0; padding: 4px 8px 12px; max-height: calc(100vh - 190px); overflow: auto; }
+        .cameras button { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; width: 100%; padding: 10px; border: 1px solid transparent; border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+        .cameras button:hover { background: var(--ground); }
+        .cameras button[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
+        .cameras .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cameras .where { grid-column: 1; color: var(--ink-faint); font-size: 12px; }
+        .cameras .pill { grid-row: 1 / span 2; grid-column: 2; }
+        .empty-list { padding: 16px; color: var(--ink-faint); }
 
-        .stage {
-            position: relative;
-            display: grid;
-            place-items: center;
-            min-height: 360px;
-            background: var(--video);
-        }
+        .pill { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+        .pill.set { background: var(--accent-soft); color: var(--accent-dark); }
+        .pill.stale { background: var(--warn-soft); color: var(--warn); }
+        .pill.none { border: 1px solid var(--line-soft); background: var(--ground); color: var(--ink-faint); }
 
+        .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
+        .toolbar .title { display: flex; flex-direction: column; min-width: 0; margin-right: auto; }
+        .toolbar .title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .toolbar .title span { color: var(--ink-faint); font-size: 12px; }
+        .tool-sep { width: 1px; height: 24px; background: var(--line-soft); }
+
+        .segmented { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 9px; background: var(--ground); }
+        .segmented button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 0; border-radius: 7px; background: none; color: var(--ink-muted); font: inherit; font-weight: 600; cursor: pointer; }
+        .segmented button[aria-pressed="true"] { background: var(--surface); color: var(--accent); box-shadow: 0 1px 2px rgb(20 32 43 / 0.12); }
+
+        button.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        button.btn.icon-only { padding: 7px 9px; }
+        button.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+        button.btn.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+        button.btn.primary:hover:not(:disabled) { background: var(--accent-dark); color: #fff; }
+        button.btn.danger { color: var(--error); }
+        button.btn.danger:hover:not(:disabled) { border-color: var(--error); background: var(--error-soft); color: var(--error); }
+        button.btn.danger.solid { border-color: var(--error); background: var(--error); color: #fff; }
+        button.btn:disabled, .segmented button:disabled { opacity: 0.45; cursor: default; }
+        button.btn.block { width: 100%; }
+        button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid rgb(11 95 99 / 0.35); outline-offset: 1px; }
+
+        .stage { position: relative; display: grid; place-items: center; min-height: 440px; padding: 16px; background: var(--video); }
         .frame { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
-        .frame img { display: block; max-width: 100%; height: auto; }
-        .frame canvas { position: absolute; left: 0; top: 0; cursor: crosshair; }
-        .placeholder { color: #9aa7b2; font-size: 0.95rem; text-align: center; padding: 24px; line-height: 1.5; }
+        .frame img { display: block; max-width: 100%; max-height: calc(100vh - 230px); height: auto; border-radius: 4px; user-select: none; -webkit-user-drag: none; }
+        .frame canvas { position: absolute; left: 0; top: 0; touch-action: none; cursor: crosshair; }
 
-        label { display: block; margin-bottom: 0.4rem; font-weight: 600; font-size: 0.9rem; }
+        .placeholder { display: grid; justify-items: center; gap: 12px; max-width: 340px; color: #9aa7b2; text-align: center; }
+        .placeholder svg.icon { width: 40px; height: 40px; stroke-width: 1.2; color: #5d6b77; }
+        .loading .placeholder svg.icon { animation: pulse 1.2s ease-in-out infinite; }
+        @keyframes pulse { 50% { opacity: 0.35; } }
 
-        select {
-            width: 100%;
-            padding: 0.6rem 0.7rem;
-            border: 1px solid var(--line);
-            border-radius: 8px;
-            background: var(--ground);
-            color: var(--ink);
-            font: inherit;
-        }
+        .statusbar { display: flex; flex-wrap: wrap; gap: 6px 20px; padding: 8px 14px; border-top: 1px solid var(--line-soft); color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+        .statusbar b { color: var(--ink-muted); font-weight: 600; }
+        .statusbar .hint { margin-left: auto; }
+        kbd { padding: 0 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--ground); font: 11px/1.6 inherit; }
 
-        .stack { display: grid; gap: 10px; align-content: start; }
-        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .inspector { display: grid; gap: 16px; align-content: start; }
+        .section { display: grid; gap: 12px; padding: 14px 16px; }
+        dl.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; }
+        dl.facts dt { color: var(--ink-faint); }
+        dl.facts dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .confirm { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--error); border-radius: 8px; background: var(--error-soft); color: var(--error); }
+        .confirm .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .preview { overflow: hidden; border-radius: 6px; background: var(--video); line-height: 0; }
+        .preview img { width: 100%; height: auto; }
+        ol.steps { display: grid; gap: 6px; margin: 0; padding-left: 18px; color: var(--ink-muted); }
 
-        button {
-            padding: 0.6rem 0.8rem;
-            border: 1px solid var(--line);
-            border-radius: 8px;
-            background: var(--surface);
-            color: var(--ink);
-            font: inherit;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-        button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
-        button.primary:hover:not(:disabled) { background: var(--accent-dark); color: #fff; }
-        button.danger { color: var(--error); }
-        button.danger:hover:not(:disabled) { border-color: var(--error); color: var(--error); background: var(--error-soft); }
-        button:disabled { opacity: 0.45; cursor: default; }
-
-        select:focus-visible, button:focus-visible {
-            outline: 3px solid rgb(11 95 99 / 0.35);
-            outline-offset: 1px;
-            border-color: var(--accent);
-        }
-
-        #status {
-            min-height: 1.4em;
-            margin: 0;
-            padding: 10px 12px;
-            border-radius: 8px;
-            font-size: 0.92rem;
-            line-height: 1.4;
-        }
-
-        #status:empty { padding: 0; min-height: 0; }
-        #status.ok { background: var(--accent-soft); color: var(--accent-dark); }
-        #status.bad { background: var(--error-soft); color: var(--error); }
-
-        ol.steps { margin: 0; padding-left: 1.2rem; color: var(--ink-muted); font-size: 0.9rem; line-height: 1.55; }
-        .count { color: var(--ink-muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
-
-        #preview { display: block; max-width: 100%; margin: 0 auto; }
+        .toast { position: fixed; right: 20px; bottom: 20px; display: flex; align-items: flex-start; gap: 10px; max-width: 440px; padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 10px; background: var(--surface); box-shadow: 0 8px 28px rgb(20 32 43 / 0.16); }
+        .toast svg.icon { margin-top: 2px; color: var(--accent); }
+        .toast.bad { border-left-color: var(--error); }
+        .toast.bad svg.icon { color: var(--error); }
     </style>
 </head>
 <body>
-<header>
-    <div class="brand">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M3 8a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-            <path d="M16 10.5 21 8v8l-5-2.5"></path>
-        </svg>
-        <h1>Camera regions</h1>
-    </div>
-    <span class="note">Custom Region of Interest provisioning · this computer only, no sign-in</span>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M16 10.5 21 8v8l-5-2.5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.9-4"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.9 4"/><path d="M20 20v-4h-4"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></symbol>
+    <symbol id="i-clear" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7"/><path d="M8 21v-7h8v7"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><path d="M12 16.5v.5"/></symbol>
+    <symbol id="i-polygon" viewBox="0 0 24 24"><path d="M5 7 12 3l7 5-2 11H7z"/><circle cx="5" cy="7" r="1.5"/><circle cx="12" cy="3" r="1.5"/><circle cx="19" cy="8" r="1.5"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+    <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3l14 7-6 2-2 6z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6"/><path d="m20 20-3.5-3.5"/></symbol>
+</svg>
+
+<header class="appbar">
+    <a class="product" href="/"><span class="mark"><svg class="icon"><use href="#i-camera"/></svg></span>Attendance Display</a>
+    <nav class="sitenav" aria-label="Site">
+        <a href="/">Display</a>
+        <a href="/api/live">Live view</a>
+        <a href="/roi/" aria-current="page">Camera regions</a>
+    </nav>
+    <span class="spacer"></span>
+    <div class="account" id="account" hidden><span>Signed in as <strong id="account-name"></strong></span><button type="button" id="sign-out">Sign out</button></div>
 </header>
-<main>
-    <div class="stack">
-        <section class="card">
-            <div class="stage">
-                <p class="placeholder" id="placeholder">Pick a camera and load a snapshot to draw its region.</p>
-                <div class="frame" hidden id="frame">
-                    <img id="snapshot" alt="Camera snapshot">
-                    <canvas id="canvas"></canvas>
+
+<div class="shell">
+    <aside class="panel" aria-label="Cameras">
+        <div class="panel-head"><h2>Cameras</h2><span class="count" id="camera-count"></span></div>
+        <div class="search"><input type="search" id="filter" placeholder="Filter cameras" aria-label="Filter cameras"></div>
+        <ul class="cameras" id="cameras"></ul>
+    </aside>
+
+    <section class="panel" aria-label="Region editor">
+        <div class="toolbar">
+            <div class="title"><strong id="camera-title">No camera selected</strong><span id="camera-sub">Select a camera from the list</span></div>
+            <div class="segmented" role="group" aria-label="Tool">
+                <button type="button" id="mode-draw" aria-pressed="true" title="Click to add a point, or drag to draw freehand (D)"><svg class="icon"><use href="#i-pencil"/></svg>Draw</button>
+                <button type="button" id="mode-edit" aria-pressed="false" title="Drag a corner point, the shape, or a handle to scale (E)"><svg class="icon"><use href="#i-cursor"/></svg>Edit</button>
+            </div>
+            <button class="btn icon-only" id="shrink" disabled title="Shrink the region by 10% (-)" aria-label="Shrink the region"><svg class="icon"><use href="#i-minus"/></svg></button>
+            <button class="btn icon-only" id="grow" disabled title="Grow the region by 10% (+)" aria-label="Grow the region"><svg class="icon"><use href="#i-plus"/></svg></button>
+            <span class="tool-sep"></span>
+            <button class="btn" id="undo" disabled title="Undo (Ctrl+Z)"><svg class="icon"><use href="#i-undo"/></svg>Undo</button>
+            <button class="btn" id="reset" disabled><svg class="icon"><use href="#i-clear"/></svg>Clear</button>
+            <button class="btn" id="show-preview" disabled><svg class="icon"><use href="#i-eye"/></svg>Preview</button>
+            <button class="btn primary" id="load" disabled><svg class="icon"><use href="#i-refresh"/></svg>Snapshot</button>
+        </div>
+        <div class="stage" id="stage">
+            <div class="placeholder" id="placeholder">
+                <svg class="icon"><use href="#i-polygon"/></svg>
+                <span id="placeholder-text">Select a camera to draw the area where faces are recognised.</span>
+            </div>
+            <div class="frame" id="frame" hidden>
+                <img id="snapshot" alt="Camera snapshot" draggable="false">
+                <canvas id="canvas" aria-label="Region drawing area"></canvas>
+            </div>
+        </div>
+        <div class="statusbar">
+            <span>Points <b id="sb-points">0</b> / 100</span>
+            <span>Coverage <b id="sb-coverage">–</b></span>
+            <span>Picture <b id="sb-size">–</b></span>
+            <span>Cursor <b id="sb-cursor">–</b></span>
+            <span class="hint" id="sb-hint"></span>
+        </div>
+    </section>
+
+    <aside class="inspector">
+        <section class="panel">
+            <div class="panel-head"><h2>Region</h2><span class="pill none" id="region-pill">Not set</span></div>
+            <div class="section">
+                <dl class="facts">
+                    <dt>Saved points</dt><dd id="f-saved">–</dd>
+                    <dt>Saved on picture</dt><dd id="f-saved-size">–</dd>
+                    <dt>Camera sends</dt><dd id="f-size">–</dd>
+                </dl>
+                <button class="btn primary block" id="save" disabled><svg class="icon"><use href="#i-save"/></svg>Save region</button>
+                <button class="btn danger block" id="remove" disabled>Remove region</button>
+                <div class="confirm" id="confirm" hidden role="alertdialog" aria-label="Remove region">
+                    <span>Remove this camera's region? Recognition will then use the whole picture.</span>
+                    <div class="actions">
+                        <button class="btn" id="confirm-cancel">Cancel</button>
+                        <button class="btn danger solid" id="confirm-remove">Remove</button>
+                    </div>
                 </div>
             </div>
         </section>
-        <section class="card preview-card" id="preview-card" hidden>
-            <h2>What recognition will see</h2>
-            <div class="stage"><img id="preview" alt="Preview of the cropped region"></div>
-        </section>
-    </div>
 
-    <aside class="stack">
-        <section class="card">
-            <h2>Camera</h2>
-            <div class="body stack">
-                <div>
-                    <label for="camera">Camera</label>
-                    <select id="camera"></select>
-                </div>
-                <button id="load" class="primary">Load snapshot</button>
-            </div>
+        <section class="panel" id="preview-panel" hidden>
+            <div class="panel-head"><h2>What recognition sees</h2></div>
+            <div class="section"><div class="preview"><img id="preview" alt="Preview of the cropped region"></div></div>
         </section>
 
-        <section class="card">
-            <h2>Region <span class="count" id="count"></span></h2>
-            <div class="body stack">
-                <div class="row">
-                    <button id="undo" disabled>Undo point</button>
-                    <button id="reset" disabled>Clear shape</button>
-                </div>
-                <button id="show-preview" disabled>Preview crop</button>
-                <button id="save" class="primary" disabled>Save region</button>
-                <button id="remove" class="danger" disabled>Remove region</button>
-                <p id="status" role="status"></p>
-            </div>
-        </section>
-
-        <section class="card">
-            <h2>How it works</h2>
-            <div class="body">
+        <section class="panel">
+            <div class="panel-head"><h2>Guidance</h2></div>
+            <div class="section">
                 <ol class="steps">
-                    <li>Click around the area where faces should be recognised. Everything outside the shape is ignored.</li>
-                    <li>Points are saved at the camera's full resolution, with the picture size.</li>
-                    <li>Without a region, the whole picture is used.</li>
-                    <li>Restart the camera services after saving: producer-consumer and the two controllers, on the edge node if one captures.</li>
+                    <li><b>Draw</b>: click to add corner points, or hold and drag to trace the area like a pencil. Long strokes are smoothed to at most 100 points.</li>
+                    <li><b>Edit</b>: drag a corner point, drag inside the shape to move it, or drag a square handle to scale it. <kbd>+</kbd> and <kbd>−</kbd> grow or shrink it by 10%.</li>
+                    <li>Everything outside the shape is ignored; without a region the whole picture is used. Points are stored at full resolution with the picture size.</li>
+                    <li>Saving does not apply it yet: on an edge node, copy the camera configuration there first, then restart producer-consumer and the two controllers.</li>
                 </ol>
             </div>
         </section>
     </aside>
-</main>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <svg class="icon"><use href="#i-check" id="toast-icon"/></svg><span id="status"></span>
+</div>
+
+<script src="static/region.js"></script>
 <script>
     const $ = (id) => document.getElementById(id);
     const img = $("snapshot"), canvas = $("canvas"), ctx = canvas.getContext("2d");
-    // shown: the snapshot on screen, its camera and size; loads counts snapshot requests, so a late answer for a camera
-    // no longer selected is ignored and its size can never be saved with another camera's region
-    let saved = {}, savedSize = {}, points = [], shown = null, loads = 0;
+    const MAX_POINTS = 100, HIT = 9, HANDLE = 8;
+    // cameras: the list from api/cameras. shown: the snapshot on screen, its camera and size; loads counts snapshot
+    // requests, so a late answer for a camera no longer selected is ignored and its size can never be saved with another
+    // camera's region. Points are full-resolution image pixels, as the server stores them
+    let cameras = [], current = null, points = [], shown = null, loads = 0, toastTimer = null, csrf = "";
+    let mode = "draw", history = [], gesture = null;
 
-    function status(text, error) { $("status").textContent = text; $("status").className = text ? (error ? "bad" : "ok") : ""; }
-    function camera() { return $("camera").value; }
-    function scale() { return img.naturalWidth / img.clientWidth; }
+    const fmtSize = (s) => s ? `${s[0]} × ${s[1]}` : "–";
+    const byId = (id) => cameras.find((c) => c.id === id);
+    const factor = () => img.naturalWidth / img.clientWidth;
+    const toScreen = ([x, y]) => [x / factor(), y / factor()];
+    const ready = () => shown !== null && shown.camera === current;
 
-    function draw() {
-        canvas.width = img.clientWidth; canvas.height = img.clientHeight;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (points.length) {
-            const screen = points.map(([x, y]) => [x / scale(), y / scale()]);
-            ctx.strokeStyle = "#5eead4"; ctx.fillStyle = "rgba(94, 234, 212, 0.22)"; ctx.lineWidth = 2;
-            ctx.beginPath();
-            screen.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
-            if (points.length > 2) ctx.closePath();
-            ctx.fill(); ctx.stroke();
-            ctx.fillStyle = "#ffffff";
-            for (const [x, y] of screen) { ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); }
-        }
-        const ready = shown !== null && shown.camera === camera();
-        $("count").textContent = points.length ? `· ${points.length} point${points.length === 1 ? "" : "s"}` : "";
-        $("undo").disabled = $("reset").disabled = !points.length;
-        $("show-preview").disabled = $("save").disabled = !(ready && points.length > 2);
-        $("remove").disabled = !saved[camera()];
+    function status(text, error) {
+        $("status").textContent = text;
+        $("toast").className = error ? "toast bad" : "toast";
+        $("toast-icon").setAttribute("href", error ? "#i-alert" : "#i-check");
+        $("toast").hidden = !text;
+        clearTimeout(toastTimer);
+        if (text && !error) toastTimer = setTimeout(() => { $("toast").hidden = true; }, 7000);
     }
 
-    async function request(url, options) {
-        const response = await fetch(url, options);
+    // Every change goes through here, so Undo steps back through draws, moves, scales and clears alike
+    function change(next) {
+        history.push(points.map((p) => [...p]));
+        if (history.length > 100) history.shift();
+        points = next;
+        render();
+    }
+
+    function setMode(next) {
+        mode = next;
+        $("mode-draw").setAttribute("aria-pressed", String(mode === "draw"));
+        $("mode-edit").setAttribute("aria-pressed", String(mode === "edit"));
+        canvas.style.cursor = mode === "draw" ? "crosshair" : "default";
+        render();
+    }
+
+    function regionState(cam) {
+        if (!cam || !cam.points) return ["none", "Not set"];
+        if (!cam.size) return ["stale", "Size not recorded"];
+        if (shown && shown.camera === cam.id && (cam.size[0] !== shown.size[0] || cam.size[1] !== shown.size[1])) return ["stale", "Resolution changed"];
+        return ["set", "Region set"];
+    }
+
+    function renderList() {
+        const q = $("filter").value.trim().toLowerCase();
+        const list = $("cameras");
+        list.replaceChildren();
+        const visible = cameras.filter((c) => c.id.toLowerCase().includes(q));
+        $("camera-count").textContent = `${cameras.length} total`;
+        if (!visible.length) {
+            const li = document.createElement("li");
+            li.className = "empty-list";
+            li.textContent = cameras.length ? "No camera matches" : "No cameras configured";
+            list.append(li);
+            return;
+        }
+        for (const cam of visible) {
+            const [location, point, name] = cam.id.split("/");
+            const [kind, label] = regionState(cam);
+            const li = document.createElement("li"), b = document.createElement("button");
+            b.type = "button";
+            b.setAttribute("aria-current", String(cam.id === current));
+            b.innerHTML = '<span class="name"></span><span class="pill"></span><span class="where"></span>';
+            b.querySelector(".name").textContent = name;
+            b.querySelector(".where").textContent = `${location} · ${point}`;
+            b.querySelector(".pill").className = `pill ${kind}`;
+            b.querySelector(".pill").textContent = label;
+            b.onclick = () => select(cam.id);
+            li.append(b);
+            list.append(li);
+        }
+    }
+
+    // The scale handles: the corners of the shape's bounding box, on screen
+    function handles() {
+        if (points.length < 3) return [];
+        const b = Region.bounds(points.map(toScreen));
+        return [[b.left, b.top], [b.right, b.top], [b.right, b.bottom], [b.left, b.bottom]];
+    }
+
+    function render() {
+        const cam = byId(current);
+        canvas.width = img.clientWidth; canvas.height = img.clientHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const screen = points.map(toScreen);
+        if (gesture && gesture.kind === "stroke") screen.push(...gesture.stroke);
+        if (screen.length && img.clientWidth) {
+            ctx.lineWidth = 2; ctx.strokeStyle = "#5eead4"; ctx.fillStyle = "rgba(94, 234, 212, 0.20)";
+            ctx.beginPath();
+            screen.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+            if (screen.length > 2) ctx.closePath();
+            ctx.fill(); ctx.stroke();
+            if (mode === "edit" && points.length >= 3) {
+                const h = handles();
+                ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = "rgba(255, 255, 255, 0.75)"; ctx.lineWidth = 1;
+                ctx.strokeRect(h[0][0], h[0][1], h[2][0] - h[0][0], h[2][1] - h[0][1]); ctx.restore();
+                ctx.fillStyle = "#ffffff"; ctx.strokeStyle = "#0b5f63"; ctx.lineWidth = 2;
+                for (const [x, y] of h) { ctx.fillRect(x - HANDLE / 2, y - HANDLE / 2, HANDLE, HANDLE); ctx.strokeRect(x - HANDLE / 2, y - HANDLE / 2, HANDLE, HANDLE); }
+            }
+            ctx.strokeStyle = "#5eead4"; ctx.lineWidth = 2;
+            points.map(toScreen).forEach(([x, y], i) => {
+                ctx.beginPath(); ctx.arc(x, y, mode === "edit" ? 5 : (i === 0 ? 5 : 3.5), 0, 2 * Math.PI);
+                ctx.fillStyle = i === 0 ? "#5eead4" : "#ffffff"; ctx.fill(); ctx.stroke();
+            });
+        }
+        const cover = points.length >= 3 && shown ? Region.area(points) / (shown.size[0] * shown.size[1]) * 100 : null;
+        $("sb-points").textContent = points.length;
+        $("sb-coverage").textContent = cover === null ? "–" : `${cover.toFixed(1)} %`;
+        $("sb-size").textContent = ready() ? fmtSize(shown.size) : "–";
+        $("sb-hint").innerHTML = mode === "draw"
+            ? "<kbd>Click</kbd> add point · <kbd>Drag</kbd> draw freehand · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo"
+            : "<kbd>Drag</kbd> point, shape or handle · <kbd>+</kbd>/<kbd>−</kbd> scale · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo";
+        const shape = ready() && points.length >= 3;
+        $("load").disabled = !cam;
+        $("mode-draw").disabled = $("mode-edit").disabled = !ready();
+        $("undo").disabled = !history.length;
+        $("reset").disabled = !points.length;
+        $("grow").disabled = $("shrink").disabled = !shape;
+        $("show-preview").disabled = $("save").disabled = !shape;
+        $("remove").disabled = !(cam && cam.points);
+        const [kind, label] = regionState(cam);
+        $("region-pill").className = `pill ${kind}`; $("region-pill").textContent = label;
+        $("f-saved").textContent = cam && cam.points ? cam.points.length : "–";
+        $("f-saved-size").textContent = cam && cam.points ? (cam.size ? fmtSize(cam.size) : "not recorded") : "–";
+        $("f-size").textContent = ready() ? fmtSize(shown.size) : "load a snapshot";
+    }
+
+    // ---- Drawing and editing on the picture ----
+    const at = (e) => [e.offsetX, e.offsetY];
+    const near = (a, b, r) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= r;
+
+    function hitTest(p) {
+        if (points.length < 3) return null;
+        const vertex = points.map(toScreen).findIndex((v) => near(v, p, HIT));
+        if (vertex >= 0) return {kind: "vertex", index: vertex};
+        if (handles().some((h) => near(h, p, HANDLE + 2))) return {kind: "scale"};
+        if (Region.inside(Region.toImage(p[0], p[1], factor(), shown.size), points)) return {kind: "move"};
+        return null;
+    }
+
+    canvas.addEventListener("pointerdown", (e) => {
+        if (!ready() || e.button !== 0) return;
+        canvas.setPointerCapture(e.pointerId);
+        const p = at(e);
+        if (mode === "draw") {
+            gesture = {kind: "stroke", start: p, stroke: [p], moved: false};
+            return;
+        }
+        const hit = hitTest(p);
+        if (!hit) return;
+        gesture = {...hit, start: p, before: points.map((q) => [...q]), center: Region.centroid(points)};
+    });
+
+    canvas.addEventListener("pointermove", (e) => {
+        const p = at(e);
+        if (ready()) {
+            const [ix, iy] = Region.toImage(p[0], p[1], factor(), shown.size);
+            $("sb-cursor").textContent = `${ix}, ${iy}`;
+        }
+        if (!gesture) {
+            if (mode === "edit" && ready()) {
+                const hit = hitTest(p);
+                canvas.style.cursor = !hit ? "default" : hit.kind === "move" ? "move" : hit.kind === "scale" ? "nwse-resize" : "grab";
+            }
+            return;
+        }
+        if (gesture.kind === "stroke") {
+            if (!gesture.moved && !near(p, gesture.start, 4)) gesture.moved = true;
+            if (gesture.moved && !near(p, gesture.stroke[gesture.stroke.length - 1], 2)) { gesture.stroke.push(p); render(); }
+            return;
+        }
+        const size = shown.size;
+        if (gesture.kind === "vertex") {
+            points = gesture.before.map((q, i) => i === gesture.index ? Region.toImage(p[0], p[1], factor(), size) : q);
+        } else if (gesture.kind === "move") {
+            points = Region.translate(gesture.before, (p[0] - gesture.start[0]) * factor(), (p[1] - gesture.start[1]) * factor(), size);
+        } else {
+            const c = toScreen(gesture.center);
+            const from = Math.hypot(gesture.start[0] - c[0], gesture.start[1] - c[1]) || 1;
+            points = Region.scale(gesture.before, Math.max(0.05, Math.hypot(p[0] - c[0], p[1] - c[1]) / from), size, gesture.center);
+        }
+        render();
+    });
+
+    canvas.addEventListener("pointerup", (e) => {
+        if (!gesture) return;
+        const g = gesture;
+        gesture = null;
+        if (g.kind === "stroke") {
+            const f = factor(), size = shown.size;
+            const added = g.moved
+                ? Region.simplify(g.stroke.map(([x, y]) => Region.toImage(x, y, f, size)), 1.5 * f)
+                : [Region.toImage(g.start[0], g.start[1], f, size)];
+            const next = Region.fit(points.concat(added), MAX_POINTS);
+            if (next.length < points.length + added.length) status(`Smoothed to ${next.length} points, the most a region can hold is ${MAX_POINTS}.`);
+            change(next);
+            return;
+        }
+        const after = points;
+        points = g.before;
+        if (JSON.stringify(after) !== JSON.stringify(g.before)) change(after); else render();
+    });
+
+    canvas.addEventListener("pointerleave", () => { if (!gesture) $("sb-cursor").textContent = "–"; });
+
+    function scaleBy(f) { if (points.length >= 3 && ready()) change(Region.scale(points, f, shown.size)); }
+
+    $("mode-draw").onclick = () => setMode("draw");
+    $("mode-edit").onclick = () => setMode("edit");
+    $("grow").onclick = () => scaleBy(1.1);
+    $("shrink").onclick = () => scaleBy(1 / 1.1);
+    $("undo").onclick = () => { if (history.length) { points = history.pop(); render(); } };
+    $("reset").onclick = () => change([]);
+    $("filter").oninput = renderList;
+    window.onresize = render;
+
+    document.addEventListener("keydown", (e) => {
+        if (e.target === $("filter")) return;
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); $("undo").click(); return; }
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.key === "Escape") { $("confirm").hidden = true; $("toast").hidden = true; }
+        if (!ready()) return;
+        if (e.key === "d" || e.key === "D") setMode("draw");
+        if (e.key === "e" || e.key === "E") setMode("edit");
+        if (e.key === "+" || e.key === "=") scaleBy(1.1);
+        if (e.key === "-" || e.key === "_") scaleBy(1 / 1.1);
+    });
+
+    // ---- Server ----
+    async function request(url, options = {}) {
+        const writes = options.method && options.method !== "GET";
+        const response = await fetch(url, {...options, credentials: "same-origin",
+            headers: {...(options.headers || {}), ...(writes ? {"X-CSRF-Token": csrf} : {})}});
+        if (response.status === 401) { window.location.href = "/auth/sign-in"; throw new Error("Signed out"); }
         if (!response.ok) {
             const body = await response.json().catch(() => ({}));
-            throw new Error(body.error || response.statusText);
+            throw new Error(body.error || body.detail || response.statusText);
         }
         return response;
     }
 
     async function loadCameras() {
-        const list = await (await request("/api/cameras")).json();
-        $("camera").innerHTML = "";
-        for (const cam of list) {
-            saved[cam.id] = cam.points; savedSize[cam.id] = cam.size;
-            const label = cam.points ? (cam.size ? " · region set" : " · region set, size not recorded: save it again") : "";
-            $("camera").add(new Option(cam.id + label, cam.id));
-        }
+        cameras = await (await request("api/cameras")).json();
+        renderList();
+    }
+
+    function select(id) {
+        if (id === current) return;
+        loads++; current = id; shown = null; points = []; history = [];
+        img.removeAttribute("src");
+        $("frame").hidden = true; $("placeholder").hidden = false; $("preview-panel").hidden = true; $("confirm").hidden = true;
+        const [location, point, name] = id.split("/");
+        $("camera-title").textContent = name; $("camera-sub").textContent = `${location} · ${point}`;
+        status(""); renderList(); render();
+        $("load").click();
     }
 
     $("load").onclick = async () => {
-        status("Reading a frame from the camera...");
-        $("preview-card").hidden = true;
-        const load = ++loads, cam = camera();
+        const load = ++loads, cam = current;
+        $("stage").classList.add("loading");
+        $("frame").hidden = true; $("placeholder").hidden = false;
+        $("placeholder-text").textContent = "Reading a frame from the camera…";
+        $("preview-panel").hidden = true;
         try {
-            const blob = await (await request("/snapshot?camera=" + encodeURIComponent(cam))).blob();
+            const blob = await (await request("snapshot?camera=" + encodeURIComponent(cam))).blob();
             if (load !== loads) return;
             img.onload = () => {
                 if (load !== loads) return;
+                $("stage").classList.remove("loading");
                 $("placeholder").hidden = true; $("frame").hidden = false;
                 shown = {camera: cam, size: [img.naturalWidth, img.naturalHeight]};
-                points = (saved[cam] || []).map((p) => [...p]); draw();
-                const old = savedSize[cam];
-                const changed = Boolean(saved[cam] && old && (old[0] !== shown.size[0] || old[1] !== shown.size[1]));
-                status(changed
-                    ? `The region was drawn on a ${old[0]}x${old[1]} picture; the camera now sends ${shown.size[0]}x${shown.size[1]}. Draw it again.`
-                    : `Snapshot ${shown.size[0]}x${shown.size[1]}. Click to add points.`, changed);
+                const saved = byId(cam);
+                points = (saved.points || []).map((p) => [...p]); history = [];
+                setMode(points.length >= 3 ? "edit" : "draw");
+                renderList();
+                if (saved.points && saved.size && (saved.size[0] !== shown.size[0] || saved.size[1] !== shown.size[1]))
+                    status(`The region was drawn on a ${saved.size[0]}x${saved.size[1]} picture; the camera now sends ${shown.size[0]}x${shown.size[1]}. Draw it again.`, true);
             };
             img.src = URL.createObjectURL(blob);
-        } catch (e) { if (load === loads) status(e.message, true); }
+        } catch (e) {
+            if (load !== loads) return;
+            $("stage").classList.remove("loading");
+            $("placeholder-text").textContent = "No frame could be read from this camera.";
+            status(e.message, true);
+        }
     };
-
-    canvas.onclick = (e) => {
-        points.push([Math.round(e.offsetX * scale()), Math.round(e.offsetY * scale())]);
-        draw();
-    };
-    $("undo").onclick = () => { points.pop(); draw(); };
-    $("reset").onclick = () => { points = []; draw(); };
-    window.onresize = draw;
 
     $("show-preview").onclick = async () => {
         try {
-            const blob = await (await request("/preview", {
+            const blob = await (await request("preview", {
                 method: "POST", headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({camera: camera(), points}),
+                body: JSON.stringify({camera: current, points}),
             })).blob();
-            $("preview").src = URL.createObjectURL(blob); $("preview-card").hidden = false;
-            status("Below is what recognition will see.");
+            $("preview").src = URL.createObjectURL(blob); $("preview-panel").hidden = false;
         } catch (e) { status(e.message, true); }
     };
 
     async function store(newPoints, done) {
         try {
-            const body = await (await request("/api/roi", {
+            const body = await (await request("api/roi", {
                 method: "POST", headers: {"Content-Type": "application/json"},
-                body: JSON.stringify(newPoints ? {camera: shown.camera, points: newPoints, size: shown.size} : {camera: camera(), points: null}),
+                body: JSON.stringify(newPoints ? {camera: shown.camera, points: newPoints, size: shown.size} : {camera: current, points: null}),
             })).json();
-            const selected = camera();
-            await loadCameras(); $("camera").value = selected; draw();
+            await loadCameras(); render();
             status(done + " " + body.note);
         } catch (e) { status(e.message, true); }
     }
     $("save").onclick = () => store(points, "Region saved.");
-    $("remove").onclick = () => { points = []; store(null, "Region removed."); };
-    $("camera").onchange = () => {
-        loads++; shown = null; img.removeAttribute("src"); points = [];
-        $("frame").hidden = true; $("placeholder").hidden = false; $("preview-card").hidden = true; draw(); status("");
+    $("remove").onclick = () => { $("confirm").hidden = false; $("confirm-cancel").focus(); };
+    $("confirm-cancel").onclick = () => { $("confirm").hidden = true; };
+    $("confirm-remove").onclick = () => { $("confirm").hidden = true; change([]); store(null, "Region removed."); };
+
+    $("sign-out").onclick = async () => {
+        await fetch("/auth/logout", {method: "POST", credentials: "same-origin", headers: {"X-CSRF-Token": csrf}}).catch(() => {});
+        window.location.href = "/auth/sign-in";
     };
 
-    loadCameras().then(draw).catch((e) => status(e.message, true));
+    // The signed-in account: the CSRF token for writes, and the name in the top bar
+    (async () => {
+        try {
+            const me = await (await request("/auth/me")).json();
+            csrf = me.csrf_token || "";
+            $("account-name").textContent = me.name; $("account").hidden = false;
+            await loadCameras();
+            render();
+            if (cameras.length === 1) select(cameras[0].id);
+        } catch (e) { status(e.message, true); }
+    })();
 </script>
 </body>
 </html>
