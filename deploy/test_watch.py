@@ -101,6 +101,7 @@ def test():
     test_tiers()
     test_layouts()
     test_check_bundle()
+    test_latest_release()
     test_stage()
     test_prune()
     test_tag_images()
@@ -264,6 +265,31 @@ def test_check_bundle():
     assert refused(folder, "v9.9.9")
 
 
+def test_latest_release():
+    """The channel is pulled as the bundle's own platform on any host; a platform mismatch is an error, not "no release"."""
+    pulls = []
+
+    def fake_run(*cmd):
+        if cmd[:2] == ("docker", "pull"):
+            pulls.append(cmd)
+            if fail:
+                raise RuntimeError(fail)
+        return "v9.9.9" if "inspect" in cmd and "{{index .Config" in cmd[3] else "bundle@sha256:1"
+    with mock.patch.object(watch, "run", fake_run):
+        fail = None
+        assert watch.latest_release() == ("v9.9.9", "bundle@sha256:1")
+        assert pulls[0][2:5] == ("-q", "--platform", "linux/amd64"), pulls[0]
+        fail = "manifest unknown"
+        assert watch.latest_release() is None
+        fail = "no matching manifest for linux/arm64/v8 in the manifest list entries: not found"
+        try:
+            watch.latest_release()
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("a platform mismatch was read as no release")
+
+
 def test_stage():
     """The bundle is copied out of its image without running it; a bad one leaves nothing behind."""
     tmp = Path(tempfile.mkdtemp())
@@ -272,6 +298,8 @@ def test_stage():
 
     def fake_run(*cmd):
         calls.append(cmd[:2])
+        if cmd[:2] == ("docker", "create"):
+            assert cmd[2:4] == ("--platform", "linux/amd64"), cmd  # an arm64 edge node copies the same amd64 bundle
         if cmd[:2] == ("docker", "cp"):
             shutil.copytree(source, cmd[3])
         return "container1" if cmd[:2] == ("docker", "create") else ""
