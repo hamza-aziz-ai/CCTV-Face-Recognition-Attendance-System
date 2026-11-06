@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.16.0 (2026-11-06)
+
+## What's Changed
+* feat(roi): save the snapshot size with a region and refuse the region when the camera's resolution changes by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/114
+* feat(health): true readiness for the display, attendance confirmed saved and kept on disk, and a restart when a worker dies by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/115
+* fix(records): take the person locks before creating a partition, so batches never deadlock by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/117
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.15.3...v2.16.0
+
 ## v2.15.3 (2026-11-06)
 
 ## What's Changed
