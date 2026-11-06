@@ -271,15 +271,14 @@ def create_camera(camera_name: str, camera_configuration: dict,  shared_buffer):
     global cameras
 
     if workers is not None:
-        workers.beat("camera", camera_name, retrying=True)  # opening the stream can take long; not a hang
+        workers.beat("camera", camera_name)  # before the first open, which can take up to about 50 s
     cam = IPCamera(camera_name, camera_configuration, shared_buffer)
     cameras.append(cam)
 
     # Place the frames in the buffer until the end of the camera stream is reached
     while True:
         if workers is not None:
-            # Every frame while streaming, so a hang stops it; while reconnecting the camera is only retrying
-            workers.beat("camera", camera_name, retrying=not cam.is_initialized)
+            workers.beat("camera", camera_name)  # every frame and every reconnect attempt: a hang stops it
         if cam.is_initialized:
             try:
                 cam.place_frame_in_buffer()
@@ -308,7 +307,7 @@ def create_camera(camera_name: str, camera_configuration: dict,  shared_buffer):
             )
             time.sleep(IP_CAM_REINIT_WAIT_DURATION)
             if workers is not None:
-                workers.beat("camera", camera_name, retrying=True)
+                workers.beat("camera", camera_name)
             # again try to recreate a new camera object
             multicam_server_logger.info(f"Creating a new camera object for {camera_name} (url: {camera_configuration['ip_address']})...")
             cam = IPCamera(camera_name, camera_configuration, shared_buffer)

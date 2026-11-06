@@ -3,11 +3,11 @@ PIPELINE_HEALTH_PORT): starting, ready or unready, with reason codes only, never
 
 Workers write their own progress: each camera thread on every frame it handles and on every reconnect attempt, each
 recognition thread on every pass while waiting and after every batch, with the batch's outcome. Nothing else writes it, so
-a worker that hangs stops renewing it. Waiting is healthy: a dark camera or an empty queue keeps its worker's progress fresh.
-A camera that cannot be reached is retried by its thread, which marks itself retrying: it counts as started but is not
-held to the deadline, since opening an unreachable stream can take minutes when many are retried, and the camera is
-reported on its own by its ERROR on the display. # ponytail: a thread that hangs while opening a stream goes unnoticed
-here; bound the open (util/video_source.py) and drop this exemption if that turns up. A worker silent past its deadline, recognition failing several batches in a row, the attendance
+a worker that hangs stops renewing it. Waiting is healthy: a dark camera or an empty queue keeps its worker's progress fresh, and
+so does an unreachable camera's thread, which renews it on every reconnect attempt (the camera itself is reported by its
+ERROR on the display). Every step of a reconnect has a time limit and an unreachable camera is not handed to a decoder
+(util/video_source.py), so its thread renews its progress about every 35 s: a thread silent past CAMERA_DEADLINE has
+hung, even while reconnecting. A worker silent past its deadline, recognition failing several batches in a row, the attendance
 sender failing (util/attendance_sender.py) or a dependency check failing makes it unready. Dependency checks run in the
 background with a deadline each and count only while recent, so an old success never hides a new failure.
 
@@ -45,15 +45,12 @@ class Workers:
         self.clock = clock
         self.seen = multiprocessing.Array("d", len(self.names), lock=False)  # 0: never
         self.failures = multiprocessing.Array("i", len(self.names), lock=False)
-        self.retrying = multiprocessing.Array("b", len(self.names), lock=False)
 
     def slot(self, kind, name):
         return self.names.index(f"{kind}:{name}")
 
-    def beat(self, kind, name, retrying=False):
-        index = self.slot(kind, name)
-        self.retrying[index] = retrying
-        self.seen[index] = self.clock()
+    def beat(self, kind, name):
+        self.seen[self.slot(kind, name)] = self.clock()
 
     def batch(self, name, ok):
         index = self.slot("recognition", name)
@@ -67,7 +64,7 @@ class Workers:
             kind = name.split(":")[0]
             if not self.seen[index]:
                 starting = True
-            elif not self.retrying[index] and now - self.seen[index] > (CAMERA_DEADLINE if kind == "camera" else RECOGNITION_DEADLINE):
+            elif now - self.seen[index] > (CAMERA_DEADLINE if kind == "camera" else RECOGNITION_DEADLINE):
                 reasons.add(f"{kind}_stalled")
             if self.failures[index] >= FAILED_BATCHES:
                 reasons.add("recognition_failing")
@@ -179,11 +176,6 @@ def demo():
     now[0] += 31
     checks.run_once("insightface"), checks.run_once("database")
     assert state() == ("unready", ["camera_stalled"]), state()
-    workers.beat("camera", "maingate_entry_cctv-camera-1", retrying=True)
-    now[0] += 600
-    checks.run_once("insightface"), checks.run_once("database")
-    workers.batch("thread_0", ok=True)
-    assert state() == ("ready", []), "a camera being retried is not held to the deadline"
     workers.beat("camera", "maingate_entry_cctv-camera-1")
 
     # Batches failing in a row, and an old check success, do not count as working
