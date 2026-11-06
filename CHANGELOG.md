@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.16.1 (2026-11-06)
+
+## What's Changed
+* fix(compose): put producer-consumer on the edge network, so the proxy's /health route reaches it by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/118
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.16.0...v2.16.1
+
 ## v2.16.0 (2026-11-06)
 
 ## What's Changed
