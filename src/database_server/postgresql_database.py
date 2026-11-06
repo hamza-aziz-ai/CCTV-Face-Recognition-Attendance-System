@@ -1,6 +1,7 @@
 import os
 import socket
 import sys
+from contextlib import closing
 from typing import Optional
 
 import psycopg2
@@ -120,6 +121,11 @@ def ensure_year_location_partition_exists(cursor, location, current_year):
     parent_partition = f"recognition_results_{current_year}"
     start_date = f"{current_year}-01-01"
     end_date = f"{current_year + 1}-01-01"
+    child_partition = f"{parent_partition}_{location}"
+    # CREATE TABLE IF NOT EXISTS is not safe against itself: two batches creating the same new partition at once make one
+    # fail with DuplicateTable. A lock per partition, held to the commit, lets the second find the first's table
+    for name in (parent_partition, child_partition):
+        cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"partition:{name}",))
     try:
         create_parent_query = sql.SQL("""
             CREATE TABLE IF NOT EXISTS {} 
@@ -136,7 +142,6 @@ def ensure_year_location_partition_exists(cursor, location, current_year):
         raise
 
     # Define the child partition for the specific academic year.
-    child_partition = f"{parent_partition}_{location}"
     try:
         create_child_query = sql.SQL("""
             CREATE TABLE IF NOT EXISTS {} 
@@ -161,8 +166,11 @@ def initialize_database_and_partitions(camera_config):
     """
     try:
         ensure_database_exists()
-        with psycopg2.connect(**DB_CONFIG) as conn:
+        with closing(psycopg2.connect(**DB_CONFIG)) as conn:
             with conn.cursor() as cursor:
+                # Committed on its own: the recognition table's DuplicateTable below aborts its transaction
+                cursor.execute("CREATE TABLE IF NOT EXISTS service_health (name TEXT PRIMARY KEY, checked_at TIMESTAMPTZ NOT NULL)")
+                conn.commit()
                 ensure_unified_table_exists(cursor)
             conn.commit()
         database_server_logger.info("Database and unified table initialized successfully.")
@@ -234,93 +242,87 @@ def camera_address(address: str) -> str:
         return "0.0.0.0"
 
 
-def insert_recognition_data(current_date: str, current_time: str, results: dict):
-    """
-    Insert recognition data into the PostgreSQL database while avoiding duplicate
-    entries within the SAME_CAM_TIME_ENTRY_THRESHOLD (in minutes).
+# The whole batch must finish well inside the sender's read timeout, so a slow database fails it rather than leaving the
+# sender unsure whether it was saved
+TRANSACTION_TIMEOUT = "20s"
+LOCK_TIMEOUT = "10s"
+
+
+def prepare_records(current_date: str, current_time: str, results: dict) -> tuple:
+    """Checks a payload and turns it into rows before any database work: decoding frames and resolving camera addresses
+    never hold a lock. Raises ValueError for a payload that can never be saved."""
+    event = datetime.strptime(f"{current_date} {current_time}", "%Y-%m-%d %H:%M:%S")
+    if not isinstance(results, dict) or not results:
+        raise ValueError("no results")
+    rows = []
+    for person_id, records in sorted(results.items()):
+        if not person_id or not isinstance(records, list):
+            raise ValueError("a result needs a person ID and a list of records")
+        for record in records:
+            if not isinstance(record, (list, tuple)) or len(record) != 5:
+                raise ValueError("a record needs camera name, camera address, score, frame and box")
+            camera_name, camera_ip, confidence_score, frame_base64, bbox = record
+            frame = base64_to_image(frame_base64)
+            if frame is None:
+                raise ValueError("a record's frame is not a readable image")
+            rows.append((person_id, camera_name.split("_")[0], camera_name, camera_address(camera_ip), float(confidence_score),
+                         plot_bbox(frame, bbox, person_id, confidence_score)))
+    return event, rows
+
+
+def insert_recognition_data(current_date: str, current_time: str, results: dict) -> tuple:
+    """Saves one batch of recognition records in one transaction and returns (inserted, deduplicated) once it is
+    committed. A record is skipped as a duplicate when the same person has one on the same camera within
+    SAME_CAM_TIME_ENTRY_THRESHOLD minutes before it, by the records' own time, so a batch sent again unchanged, even much
+    later, saves nothing twice. Raises ValueError for a bad payload and psycopg2.Error when the database fails; either way
+    nothing of the batch is saved.
 
     Arguments:
         current_date (str): Date in 'YYYY-MM-DD' format.
         current_time (str): Time in 'HH:MM:SS' format.
-        results (dict): A mapping of person_id to a list of tuples,
-                        where each tuple contains:
-                          (camera_name, camera_ip, confidence_score, frame_base64, bbox)
+        results (dict): A mapping of person_id to a list of
+                        (camera_name, camera_ip, confidence_score, frame_base64, bbox).
     """
-    try:
-        current_year = datetime.strptime(current_date, "%Y-%m-%d").year
-    except Exception as e:
-        database_server_logger.error(
-            f"Invalid date format for current_date: {current_date}. Error: {e}"
-        )
-        return
+    event, rows = prepare_records(current_date, current_time, results)
+    window_start = event - timedelta(minutes=SAME_CAM_TIME_ENTRY_THRESHOLD)
+    inserted = deduplicated = 0
+    options = f"-c transaction_timeout={TRANSACTION_TIMEOUT} -c lock_timeout={LOCK_TIMEOUT}"
+    with closing(psycopg2.connect(**DB_CONFIG, options=options)) as conn, conn, conn.cursor() as cursor:
+        for location in sorted({row[1] for row in rows}):
+            ensure_year_location_partition_exists(cursor, location, event.year)
+        cursor.execute("SELECT to_regclass('deletions') IS NOT NULL")
+        has_deletions = cursor.fetchone()[0]
+        # One lock per person, taken in order and held to the commit: parallel batches of one person save once, and the
+        # hourly clearing of camera pictures (enrolment_deletion.clear_frames) takes the same locks in the same order
+        for person_id in sorted({row[0] for row in rows}):
+            cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (person_id,))
+        for person_id, location, camera_name, camera_ip, confidence_score, recognition_frame in rows:
+            cursor.execute("""SELECT 1 FROM recognition_results
+                              WHERE person_id = %s AND location = %s AND camera_name = %s
+                                AND recognition_date BETWEEN %s AND %s
+                                AND recognition_date + recognition_time BETWEEN %s AND %s""",
+                           (person_id, location, camera_name, window_start.date(), event.date(), window_start, event))
+            if cursor.fetchone():
+                deduplicated += 1
+                continue
+            if has_deletions and recognition_frame is not None:
+                # A record arriving after its person's pictures were cleared (8e) keeps no picture either
+                cursor.execute("""SELECT 1 FROM deletions WHERE person_id = %s AND frames_cleared_at IS NOT NULL
+                                  AND %s::date <= requested_at::date LIMIT 1""", (person_id, event.date()))
+                if cursor.fetchone():
+                    recognition_frame = None
+            cursor.execute("""INSERT INTO recognition_results
+                              (person_id, location, camera_name, camera_ip, recognition_date, recognition_time, confidence_score, recognition_frame)
+                              VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                           (person_id, location, camera_name, camera_ip, event.date(), event.time(), confidence_score, recognition_frame))
+            inserted += 1
+    database_server_logger.info(f"Batch of {current_date} {current_time}: {inserted} saved, {deduplicated} duplicates skipped")
+    return inserted, deduplicated
 
-    try:
-        with psycopg2.connect(**DB_CONFIG) as conn:
-            with conn.cursor() as cursor:
-                # Now, for each record, ensure partition exists.
-                for person_id, records in sorted(results.items()):
-                    # Batches run in parallel, and an uncommitted row is invisible to the duplicate check below. Held until commit; sorted, so two batches cannot deadlock
-                    cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (person_id,))
-                    for record in records:
-                        camera_name, camera_ip, confidence_score, frame_base64, bbox = record
-                        frame = base64_to_image(frame_base64)
-                        camera_ip = camera_address(camera_ip)
-                        recognition_frame = plot_bbox(frame, bbox, person_id, confidence_score)
 
-                        # Determine location from camera_name (assuming the first part denotes location).
-                        location = camera_name.split("_")[0]
-
-                        # Calculate time threshold.
-                        current_datetime = datetime.strptime(
-                            f"{current_date} {current_time}", "%Y-%m-%d %H:%M:%S"
-                        )
-                        threshold_datetime = current_datetime - timedelta(
-                            minutes=SAME_CAM_TIME_ENTRY_THRESHOLD
-                        )
-
-                        # Check for duplicate entries within the threshold.
-                        select_query = sql.SQL("""
-                            SELECT 1 FROM recognition_results
-                            WHERE person_id = %s
-                              AND location = %s
-                              AND camera_name = %s
-                              AND recognition_date BETWEEN %s AND %s
-                              AND recognition_date + recognition_time BETWEEN %s AND %s
-                        """)
-                        # ensure_year_location_partition_exists(cursor, location, current_year)
-                        cursor.execute(
-                            select_query,
-                            (person_id, location, camera_name, threshold_datetime.date(), current_datetime.date(), threshold_datetime, current_datetime)
-                        )
-                        if cursor.fetchone():
-                            database_server_logger.warning(
-                                f"Skipping entry for {person_id} at camera {camera_name} "
-                                f"(record exists within {SAME_CAM_TIME_ENTRY_THRESHOLD} minutes)."
-                            )
-                            continue
-
-                        # Try ensuring partition
-                        try:
-                            ensure_year_location_partition_exists(cursor, location, current_year)
-                        except Exception as ddl_error:
-                            conn.rollback()  # rollback the aborted transaction before continuing
-                            database_server_logger.error(f"Error ensuring partition for {location}: {ddl_error}")
-                            # Optionally, decide whether to skip this record or re-open a new transaction
-                            continue
-
-                        # Insert the record into the unified table. PostgreSQL will route the data to the correct partition.
-                        insert_query = sql.SQL("""
-                            INSERT INTO recognition_results
-                            (person_id, location, camera_name, camera_ip, recognition_date, recognition_time, confidence_score, recognition_frame)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
-                        """)
-                        cursor.execute(
-                            insert_query,
-                            (person_id, location, camera_name, camera_ip, current_date, current_time, confidence_score, recognition_frame)
-                        )
-                        database_server_logger.info(
-                            f"Inserted entry for {person_id} under {camera_name}."
-                        )
-            conn.commit()
-    except Exception as error:
-        database_server_logger.error(f"Error while inserting data: {error}")
+def write_health():
+    """Commits one row, proving this client's database accepts writes now."""
+    with closing(psycopg2.connect(**DB_CONFIG, connect_timeout=5)) as conn, conn, conn.cursor() as cursor:
+        cursor.execute("SELECT set_config('statement_timeout', '5s', true)")
+        cursor.execute("""INSERT INTO service_health (name, checked_at) VALUES ('database-controller', now())
+                          ON CONFLICT (name) DO UPDATE SET checked_at = excluded.checked_at""")
