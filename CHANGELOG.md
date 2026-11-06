@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.16.2 (2026-11-06)
+
+## What's Changed
+* ci: render every Mermaid diagram on a pull request that changes Markdown by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/119
+* fix(collector): take each camera's crop cluster from the camera configuration, so crops from any camera are kept by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/120
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.16.1...v2.16.2
+
 ## v2.16.1 (2026-11-06)
 
 ## What's Changed
