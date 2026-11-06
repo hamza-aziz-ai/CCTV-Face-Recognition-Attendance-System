@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.22.1 (2026-11-06)
+
+## What's Changed
+* fix(roi): straighten hand-drawn circles and ellipses into circles and ellipses, not hexagons and pentagons by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/131
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.22.0...v2.22.1
+
 ## v2.22.0 (2026-11-06)
 
 ## What's Changed
