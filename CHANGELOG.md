@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.20.1 (2026-11-06)
+
+## What's Changed
+* fix(deploy): stop a central site's own capture when it switches from full, as up leaves those containers running by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/128
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.20.0...v2.20.1
+
 ## v2.20.0 (2026-11-06)
 
 ## What's Changed
