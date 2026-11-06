@@ -50,6 +50,8 @@ BASE_TIER = "standard"
 LAYOUTS = {"full": ["docker-compose-main.yml"], "central": ["docker-compose-main.yml", "docker-compose-central.yml"],
            "edge": ["docker-compose-edge.yml"]}
 BASE_LAYOUT = "full"
+# Off on a central site (docker-compose-central.yml); up leaves their old containers running, so start removes them
+EDGE_OWNED = ["mfr-cctv-producer-consumer", "mfr-database-controller", "mfr-feedback-controller"]
 # Bind-mounted into the containers: a missing file would be created by Docker as an empty folder
 SITE_FILES = [".env", "master.env", "src/Camera-Configuration/camera_configuration.json"]
 STABLE_SECONDS = 90
@@ -228,6 +230,8 @@ def start(tag, site):
     if layout(site) not in check_bundle(RELEASES / tag, tag).get("layouts", [BASE_LAYOUT]):
         raise RuntimeError(f"{tag} does not offer layout {layout(site)!r}")
     subprocess.run(["docker", "network", "create", "cctv-edge"], capture_output=True, creationflags=NO_WINDOW)  # fails harmlessly once it exists
+    if layout(site) == "central":  # a site switched from full would otherwise keep capturing beside its edge node
+        run(*compose(tag, site), "rm", "--stop", "--force", *EDGE_OWNED)
     run(*compose(tag, site), "up", "-d", "--pull", "missing", "--no-build", "--wait", "--wait-timeout", "600")
     if layout(site) != "edge":  # an edge node has no API; up --wait has already waited for every healthcheck
         smoke(site)
