@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.22.0 (2026-11-06)
+
+## What's Changed
+* feat(roi): straighten a hand-drawn region into the nearest clean shape by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/130
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.21.0...v2.22.0
+
 ## v2.21.0 (2026-11-06)
 
 ## What's Changed
