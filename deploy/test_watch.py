@@ -185,9 +185,11 @@ def test_layouts():
     del manifest["layouts"]  # a bundle from before D-052
     (old / "release-manifest.json").write_text(json.dumps(manifest))
     folder = site(tmp)
-    ups, smokes = [], []
+    ups, smokes, removed = [], [], []
 
     def fake_run(*cmd):
+        if "rm" in cmd:
+            removed.append((watch.layout(folder), cmd[cmd.index("rm") + 1:]))
         if "up" in cmd:
             ups.append([Path(cmd[i + 1]).name for i, arg in enumerate(cmd) if arg == "-f"])
         return ""
@@ -201,6 +203,8 @@ def test_layouts():
             assert ups[-1] == files, (layout, ups[-1])
             assert all((releases / "v9.9.9" / name).is_file() for name in files)
         assert len(smokes) == 2, "the edge layout has no API to smoke-test"
+        # Switching a running site to central stops its own capture: the edge node owns it now
+        assert removed == [("central", ("--stop", "--force", *watch.EDGE_OWNED))], removed
         for layout in ("central", "edge"):
             (folder / "layout").write_text(layout)
             try:
