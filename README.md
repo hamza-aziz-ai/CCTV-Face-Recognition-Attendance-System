@@ -25,11 +25,13 @@ flowchart TB
     NOPE["`No match: face ignored`"]:::outcome
     LIVE{"`(4) Liveness check enabled?`"}:::decision
     LV["`Liveness service :6386, off by default`"]:::store
-    DBC["`(5) DB controller, internal :20001`"]:::step
+    SND["`(5) Attendance sender: each batch kept on disk until saved`"]:::step
+    DBC["`DB controller, internal :20001`"]:::step
     PG[("`Shared PostgreSQL: recognition_results, partitioned by year and location`")]:::store
     FBC["`(6) Feedback controller, internal :20012`"]:::step
     K[("`Kafka topic per entry point, one partition per camera`")]:::store
     KW["`Kafka-WebApp display`"]:::outcome
+    HEALTH["`(9) Readiness, producer-consumer /health :20010`"]:::step
     DISP["`Display image server :20013`"]:::step
     API["`(7) ERP sync job in the reporting API, every minute`"]:::step
     ERP["`Institution ERP`"]:::outcome
@@ -45,7 +47,8 @@ flowchart TB
     DEC -->|"`no`"| NOPE
     DEC -->|"`yes`"| LIVE
     LIVE -.->|"`only when enabled`"| LV
-    LIVE --> DBC
+    LIVE --> SND
+    SND -->|"`POST /ingest until committed`"| DBC
     DBC --> PG
     DEC -->|"`strict primary matches`"| FBC
     FBC --> K --> KW
@@ -57,6 +60,7 @@ flowchart TB
     COL -.-> DYN
     DYN -.-> UPD
     UPD -.->|"`refresh staging vectors`"| MV
+    HEALTH -->|"`ready, starting or unready`"| KW
 
     classDef entry fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
     classDef step fill:#dcfce7,stroke:#15803d,color:#0f172a
@@ -66,14 +70,15 @@ flowchart TB
     classDef store fill:#f1f5f9,stroke:#475569,color:#0f172a
 ```
 
-1. **Camera input.** The producer process starts one thread per configured camera. Each thread reads frames, crops the camera's ROI polygon or resizes the frame to 640x360, and queues it with the camera name. When 80 of the last 100 frames are dark, the thread stops queueing and sends an `ERROR` message straight to the camera's Kafka partition, so the display can tell people why nothing is recognized.
+1. **Camera input.** The producer process starts one thread per configured camera. Each thread reads frames, crops the camera's ROI polygon or resizes the frame to 640x360, and queues it with the camera name. When 80 of the last 100 frames are dark, judged on the region's own pixels, the thread stops queueing and sends an `ERROR` message straight to the camera's Kafka partition, so the display can tell people why nothing is recognized. A region that no longer fits the camera's picture, and a camera that does not answer, are reported the same way; an unreachable camera is retried every 35 s.
 2. **Detection and embeddings.** Four recognition threads take 32 frames at a time from the in-memory queue and send them to InsightFace-REST through nginx. The queue keeps frames off the network and out of Kafka; it is lost on restart.
 3. **Identity search.** Every face is searched against both Milvus collections. A face is accepted when its best primary hit scores at least 0.5 (cosine). Otherwise, with `STAGING = True`, the best primary hit that also appears in the staging top 5 is accepted at 0.45 or more. Staging vectors come from CCTV crops, so they help people whose enrollment photos differ from how the cameras see them.
 4. **Liveness.** Anti-spoofing exists but is off (`ENABLE_FACE_LIVENESS_DETECTION = False`). When on, a person whose crops look spoofed more often than real is dropped from the attendance records; the display and the collector still receive that person.
-5. **Attendance record.** Accepted faces, with the annotated frame, go to the DB controller, which answers at once and writes to PostgreSQL in the background. Each record lands in a partition for its year and location.
-6. **Display.** Strict primary matches go over TCP to the feedback controller, which publishes each person ID to the entry point's Kafka topic, on the camera's partition. Kafka-WebApp (v0.3.0) reads every partition of the topic, so every camera of the entry point, asks the display image server for portraits, and shows them. Camera `ERROR` and `SUCCESS` messages go to a per-camera status strip on the display instead. Staging matches are recorded but not displayed.
+5. **Attendance record.** Accepted faces, with the annotated frame, go to the attendance sender, which writes each batch to disk before sending it, so no restart loses it. It sends the batch to the DB controller until the controller confirms it is saved, and deletes it only then. The controller saves a batch whole or not at all and answers only after the commit; a record already saved is skipped, so a batch sent again is never saved twice. Each record lands in a partition for its year and location (D-051).
+6. **Display.** Strict primary matches go over TCP to the feedback controller, which publishes each person ID to the entry point's Kafka topic, on the camera's partition. Kafka-WebApp, pinned in `docker-compose-main.yml`, reads every partition of the topic, so every camera of the entry point, asks the display image server for portraits, and shows them, or silhouettes when there are none. Camera `ERROR` and `SUCCESS` messages go to a per-camera status strip on the display instead. Staging matches are recorded but not displayed.
 7. **ERP.** Every minute the reporting API posts the day's unacknowledged records to the location's ERP endpoint, and marks each one acknowledged when the ERP confirms it. The same service answers report queries.
 8. **Gallery refresh.** Strict primary matches also send their face crops to the collector, which keeps the best three per person and camera cluster. At 01:00 the nightly updater embeds new crops and replaces that person's vectors in the staging collection.
+9. **Readiness.** producer-consumer answers `GET /health` with starting, ready or unready and reason codes only. It is ready while every camera and recognition thread keeps making progress, batches succeed, attendance is confirmed saved and InsightFace, Milvus, Kafka and both controllers pass their checks. The display shows the system up only while it says ready, and Docker's healthcheck reads it too. A worker that dies stops the container, so Docker starts it again (D-051).
 
 Each step is traced in detail in [docs/FLOW.md](docs/FLOW.md).
 
@@ -124,7 +129,7 @@ flowchart TB
 2. **Auto-merge.** `automerge.yml` runs from main's copy after `ci` or the code-review workflow finishes. It squash-merges a non-draft pull request from this repository, and deletes its branch, only when every check on the latest commit passed (D-013, D-025). Green CI is the merge and ship gate; there is no human review step.
 3. **Build and release.** After a merge, `release.yml` reads the merged pull request titles as Conventional Commits: `type!:` or a `BREAKING CHANGE` footer gives a major bump, `feat:` a minor one, `fix:` or `perf:` a patch, and anything else no release. It re-runs CI on the exact commit, pushes the eight app images, including the ROI page, to `ghcr.io/hamza-aziz-ai/cctv-face-recognition-<service>:<tag>`, builds the InsightFace-REST image if its source changed, and publishes the deploy bundle (D-033). Only then does it tag, create the GitHub Release with `mlops/model-manifest.json`, move the bundle's `stable` tag and add the notes to `CHANGELOG.md`. A failed release opens an issue for the owner (D-014, D-017, D-029). **Pull request titles must follow this convention.**
 4. **Watcher.** `watch.py` runs through Windows Task Scheduler from a deploy folder that holds no repository and no GitHub login, only a pull-only registry login (D-033, D-034). It pulls the deploy bundle's `stable` tag, which only `release.yml` moves, and reads the release from the image label. It serves every client folder under `sites\`, and deploys the release to a client only if it is not that client's current one and has not failed for it before. The owner installs `watch.py` by hand from a bundle; it never replaces itself. Starting automerge for green pull requests left open is a separate script, `deploy/nudge_automerge.py`, which runs only on the owner's laptop (D-029). On each run it also restarts any healthy container whose published port is dead, which Docker Desktop can leave behind after a reboot.
-5. **Deploy check.** The watcher copies the bundle out of its image with `docker create` and `docker cp`, without running it, into `releases\<tag>\`, and refuses it unless its manifest is for that release and pins every image to one of ours by digest. For each client it then runs `docker compose -p <project> --project-directory sites\<client> up --pull missing --no-build --wait` with the bundle's compose file, waits for the client's API (`API_PORT` in its `.env`, 9090 by default) to answer, then checks that no service is restarting or exited 90 seconds later. On failure it starts that client's previous release from its bundle, records the failed tag for that client so it is never retried unattended, and shows a Windows message; other clients are not touched. A registry login problem, a site-config problem, or a folder whose `master.env` names a different `CLIENT_ID`, stops deploys with a single message. See [docs/ROLLBACK.md](docs/ROLLBACK.md). On every run it tags the release's images, which compose pulled by digest, and drops their digest names, so Docker Desktop shows no `<none>` rows.
+5. **Deploy check.** The watcher copies the bundle out of its image with `docker create` and `docker cp`, without running it, into `releases\<tag>\`, and refuses it unless its manifest is for that release and pins every image to one of ours by digest. For each client it then runs `docker compose -p <project> --project-directory sites\<client> up --pull missing --no-build --wait` with the bundle's compose file, which waits for every healthcheck, producer-consumer's readiness included, waits for the client's API (`API_PORT` in its `.env`, 9090 by default) to answer, then checks that no service is restarting or exited 90 seconds later. On failure it starts that client's previous release from its bundle, records the failed tag for that client so it is never retried unattended, and shows a Windows message; other clients are not touched. A registry login problem, a site-config problem, or a folder whose `master.env` names a different `CLIENT_ID`, stops deploys with a single message. See [docs/ROLLBACK.md](docs/ROLLBACK.md). On every run it tags the release's images, which compose pulled by digest, and drops their digest names, so Docker Desktop shows no `<none>` rows.
 6. **Live stack.** The main compose stack runs seven application containers and Kafka-WebApp, plus the ROI page on demand. It is compose project `cctv` for the owner and `cctv-<client>` for any other client, with no fixed container names and its own network: the DB controller, feedback controller and face collector are reached by service name and not published on the host (D-036). Config and data come from the client's folder `sites\<client>\` in the deploy folder, so a new release changes only images and compose files. The watcher never starts a stack the owner stopped, and keeps only the bundles and images of each client's current and previous releases.
 7. **Standalone services.** PostgreSQL, InsightFace-REST, Milvus, Kafka and the dataset store are shared by every client stack on the host and run as separate compose stacks or containers, started by `start_standalone_services.sh`. The watcher does not manage them; they change only when someone runs that script. On a deployment host the script runs from a release bundle, with `CONFIG_DIR` pointing at the site folder.
 
