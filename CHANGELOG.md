@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.18.3 (2026-11-06)
+
+## What's Changed
+* fix(compose): let the feedback controller stop on SIGTERM instead of being killed after 10 s by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/125
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.18.2...v2.18.3
+
 ## v2.18.2 (2026-11-06)
 
 ## What's Changed
