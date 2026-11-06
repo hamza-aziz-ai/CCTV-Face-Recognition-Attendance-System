@@ -1,4 +1,5 @@
-"""Camera checks: a region reaching the frame's edge crops cleanly, darkness alerts Kafka at a steady pace, not once a frame, the GPU and CPU decoders open a clip, and the InsightFace client recovers from a connection error.
+"""Camera checks: a region reaching the frame's edge crops cleanly and one that does not fit is reported, not crashed on,
+darkness is judged on the region's own pixels and alerts Kafka at a steady pace, not once a frame, the GPU and CPU decoders open a clip, and the InsightFace client recovers from a connection error.
 Run in the producer-consumer image: python3 src/util/test_camera.py"""
 import json
 import os
@@ -17,13 +18,14 @@ os.makedirs("src/Camera-Configuration")
 with open("src/Camera-Configuration/camera_configuration.json", "w") as f:
     json.dump({"maingate": {"api-endpoint": "", "cctv-cameras": {"entry": {"cctv-camera-1": {}}, "exit": None}}}, f)
 import multicam_stream_producer as producer  # noqa: E402
-from util.generic_utilities import crop_and_mask_roi  # noqa: E402
+from util.generic_utilities import crop_and_mask_roi, resize_roi_to_area  # noqa: E402
 
 
-def camera(frames, messages):
+def camera(frames, messages, roi=None):
     """An IPCamera with no stream or Kafka: it reads the given frames and records what it would send."""
     cam = producer.IPCamera.__new__(producer.IPCamera)
-    cam.__dict__.update(cam_name="maingate_entry_cctv-camera-1", cam_ip="10.0.0.1", roi=None, process_this_frame=True, frame_counter=0, too_dark=False, light_intensity_detection_buffer=[], darkness_buffer=[], adequate_lighting_message_sent=False, inadequate_lighting_message_logged=False, last_lighting_alert=0.0, shared_buffer=mock.Mock())
+    cam.__dict__.update(cam_name="maingate_entry_cctv-camera-1", cam_ip="10.0.0.1", roi=roi, process_this_frame=True, frame_counter=0, shared_buffer=mock.Mock())
+    cam.reset_lighting()
 
     def read():
         cam.frame, cam.grabbed = next(frames), True
@@ -33,31 +35,81 @@ def camera(frames, messages):
     return cam
 
 
+def run(cam, count, now, step=0.1):
+    for _ in range(count):
+        cam.place_frame_in_buffer()
+        now[0] += step
+
+
+def raises(call, text):
+    try:
+        call()
+    except ValueError as error:
+        assert text in str(error), error
+    else:
+        raise AssertionError(f"expected ValueError {text!r}")
+
+
 def test():
     frame = np.full((360, 640, 3), 200, np.uint8)
     roi = crop_and_mask_roi(frame, [[0, 0], [640, 0], [640, 360], [0, 360]])
     assert roi.shape == frame.shape, roi.shape
     assert crop_and_mask_roi(frame, [[10, 10], [100, 10], [100, 50], [10, 50]]).shape == (41, 91, 3)
+    raises(lambda: crop_and_mask_roi(frame, [[10, 10], [700, 10], [700, 50]]), "does not fit the 640x360")
+    raises(lambda: crop_and_mask_roi(frame, [[-1, 10], [100, 10], [100, 50]]), "does not fit")
+    raises(lambda: crop_and_mask_roi(frame, [[10, 10], [100, 10]]), "3 or more")
+    raises(lambda: crop_and_mask_roi(frame, [[10, 10], [50, 10], [100, 10]]), "no area")
+    raises(lambda: crop_and_mask_roi(frame, [[640, 0], [640, 100], [640, 360]]), "no area")
+    raises(lambda: resize_roi_to_area(frame[:0]), "empty")
+
+    # Darkness of a region is the mean of its own pixels: the black outside it does not count, black inside it does
+    producer.CROP_ROI = True
+    cam = camera(iter([]), [], roi=[[0, 0], [600, 0], [0, 300]])
+    assert not cam.prepare(np.full((360, 640, 3), 120, np.uint8))[1], "the black outside a triangle made it dark"
+    scene = np.full((360, 640, 3), 200, np.uint8)
+    scene[:, 300:] = 0
+    cam.roi = [[200, 0], [400, 0], [400, 360], [200, 360]]
+    assert not cam.prepare(scene)[1]  # half 200, half 0: mean 100
+    cam.roi = [[300, 0], [640, 0], [640, 360], [300, 360]]
+    assert cam.prepare(scene)[1], "a dark door beside a bright lobby must count as dark"
+    cam.roi = [[0, 0], [639, 0], [639, 1], [0, 1]]  # two rows of pixels
+    assert cam.prepare(np.full((360, 640, 3), 40, np.uint8))[1] and not cam.prepare(np.full((360, 640, 3), 90, np.uint8))[1]
+    cam.roi = None
+    assert cam.prepare(np.full((1080, 1920, 3), 79, np.uint8))[1] and not cam.prepare(np.full((1080, 1920, 3), 80, np.uint8))[1]
 
     dark = np.zeros((360, 640, 3), np.uint8)
     light = np.full((360, 640, 3), 200, np.uint8)
-    frames = iter([dark] * 500 + [light] * 200)
-    messages = []
-    cam = camera(frames, messages)
     now = [1000.0]
-    with mock.patch.object(producer.time, "time", lambda: now[0]):
-        for _ in range(500):
-            cam.process_this_frame = True
-            cam.place_frame_in_buffer()
-            now[0] += 0.1  # 500 dark frames over 50 seconds
+    with mock.patch.object(producer.time, "monotonic", lambda: now[0]):
+        # Until the window fills, dark frames are held back and nothing is announced
+        messages = []
+        cam = camera(iter([dark] * 50 + [light] * 49), messages)
+        run(cam, 99, now)
+        assert cam.shared_buffer.put.call_count == 49 and not messages, (cam.shared_buffer.put.call_count, messages)
+
+        messages = []
+        cam = camera(iter([dark] * 500 + [light] * 200), messages)
+        run(cam, 500, now)  # 500 dark frames over 50 seconds
         alerts = [m for m in messages if m.startswith("ERROR")]
-        assert len(alerts) == 2, len(alerts)  # the first once the buffer shows darkness, the next 30 seconds later
-        for _ in range(200):
-            cam.process_this_frame = True
-            cam.place_frame_in_buffer()
-            now[0] += 0.1
-    assert sum(m.startswith("SUCCESS") for m in messages) == 1, messages[-3:]
-    print(f"camera ok (region at the frame edge crops, {len(alerts)} alerts for 500 dark frames, recovery announced once)")
+        assert len(alerts) == 2, len(alerts)  # the first once the window shows darkness, the next 30 seconds later
+        run(cam, 200, now)
+        assert sum(m.startswith("SUCCESS") for m in messages) == 1, messages[-3:]
+        assert cam.shared_buffer.put.call_count == 200 - 79, cam.shared_buffer.put.call_count
+
+        # Between the two marks the camera stays dark and keeps re-sending, so a display that reconnects sees it again
+        messages = []
+        cam = camera(iter([dark] * 100 + [dark, light] * 300), messages)
+        run(cam, 700, now)
+        assert cam.too_dark and sum(m.startswith("ERROR") for m in messages) == 2, messages  # the second 30 s in, half dark
+
+        # A region that no longer fits (the camera now sends a smaller picture) is reported at the same pace, never crashes
+        messages = []
+        cam = camera(iter([light] * 400), messages, roi=[[0, 0], [1280, 0], [1280, 720], [0, 720]])
+        run(cam, 400, now)
+        assert messages == ["ERROR maingate_entry_cctv-camera-1: Region of interest does not fit the 640x360 camera picture. Redraw it in the ROI page."] * 2, messages
+        assert not cam.shared_buffer.put.called
+    print(f"camera ok (regions checked and judged on their own pixels, {len(alerts)} alerts for 500 dark frames, "
+          "recovery announced once, dark frames held back before the window fills, re-sent while dark)")
 
 
 def test_decoders():

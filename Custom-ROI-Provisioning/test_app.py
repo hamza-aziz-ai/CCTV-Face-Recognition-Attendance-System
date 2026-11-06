@@ -47,6 +47,8 @@ def test():
         square = [[100, 100], [500, 100], [500, 400], [100, 400]]
         preview = client.post("/preview", json={"camera": CAMERA, "points": square})
         assert preview.status_code == 200 and preview.mimetype == "image/jpeg"
+        outside = client.post("/preview", json={"camera": CAMERA, "points": [[100, 100], [1500, 100], [1500, 400]]})
+        assert outside.status_code == 400 and "1280x720" in outside.get_json()["error"], outside.get_json()
 
         saved = client.post("/api/roi", json={"camera": CAMERA, "points": square})
         assert saved.status_code == 200, saved.get_json()
