@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.23.0 (2026-11-06)
+
+## What's Changed
+* feat(roi): straighten into symmetric, regular shapes, and stretch a shape along one axis by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/132
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.22.1...v2.23.0
+
 ## v2.22.1 (2026-11-06)
 
 ## What's Changed
