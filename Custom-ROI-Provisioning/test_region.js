@@ -64,9 +64,33 @@ const [a, b, c] = tilted.points, dot = (b[0] - a[0]) * (c[0] - b[0]) + (b[1] - a
 assert.ok(Math.abs(dot) / (Math.hypot(b[0] - a[0], b[1] - a[1]) * Math.hypot(c[0] - b[0], c[1] - b[1])) < 0.02, "right angle kept");
 // A round outline becomes an ellipse, not a hexagon
 const round = Region.straighten(wobble(circle.filter((_, i) => i % 20 === 0), 5), size);
-assert.equal(round.kind, "ellipse");
+assert.equal(round.kind, "circle");
 assert.ok(Math.abs(Region.area(round.points) / Region.area(circle) - 1) < 0.05, "ellipse keeps the area");
+// Hand-drawn round outlines, as the pencil leaves them (radius drifting, ends not meeting, the stroke simplified), become
+// ellipses: 5 or 6 corners also fit them within 3%, which once turned them into hexagons and pentagons
+function hand(rx, ry, drift, gap, seed) {
+    const pts = [];
+    for (let i = 0; i < 300 * (1 - gap); i++) {
+        const t = 2 * Math.PI * i / 300, r = 1 + drift * Math.sin(3 * t + seed) + drift * 0.5 * Math.sin(7 * t + seed * 2);
+        pts.push([960 + rx * r * Math.cos(t), 540 + ry * r * Math.sin(t)]);
+    }
+    return Region.fit(Region.simplify(pts.map(([x, y]) => Region.toImage(x / 2, y / 2, 2, size)), 3), 100);
+}
+for (const [rx, ry, drift, gap, seed, kind] of [[300, 300, 0.03, 0.02, 1.3, "circle"], [300, 300, 0.06, 0.05, 1.3, "circle"], [250, 250, 0.07, 0.06, 0.4, "circle"],
+                                                [120, 120, 0.05, 0.04, 1.3, "circle"], [450, 250, 0.04, 0.03, 1.3, "ellipse"], [180, 400, 0.05, 0.04, 2.1, "ellipse"]]) {
+    const out = Region.straighten(hand(rx, ry, drift, gap, seed), size);
+    assert.equal(out.kind, kind, `hand-drawn ${rx}x${ry} round outline`);
+    if (kind === "circle") {
+        const c = Region.centroid(out.points), radii = out.points.map(([x, y]) => Math.hypot(x - c[0], y - c[1]));
+        assert.ok(Math.max(...radii) - Math.min(...radii) <= 2, "a true circle: every point the same distance from the centre, to the pixel");
+    }
+}
+// ...while drawn polygons keep their corners, a shaky rectangle and a hexagon included
+const ngon = (k, r) => Array.from({length: k}, (_, i) => [960 + r * Math.cos(i * 2 * Math.PI / k - Math.PI / 2), 540 + r * Math.sin(i * 2 * Math.PI / k - Math.PI / 2)]);
+assert.equal(Region.straighten(wobble(trace(shapes.rectangle, 40), 14), size).kind, "rectangle");
+assert.equal(Region.straighten(wobble(trace(ngon(5, 350), 30), 5), size).kind, "pentagon");
+assert.equal(Region.straighten(wobble(trace(ngon(6, 350), 30), 5), size).kind, "hexagon");
 // A scribble that is no simple shape is left alone
 const star = Array.from({length: 10}, (_, i) => [960 + (i % 2 ? 150 : 450) * Math.cos(i * Math.PI / 5), 540 + (i % 2 ? 150 : 450) * Math.sin(i * Math.PI / 5)]);
 assert.equal(Region.straighten(star, size), null, "a star is not forced into a simple shape");
-console.log("shape correction ok (wobbly rectangle, quadrilateral and triangle straightened to their corners, tilted rectangle kept square, circle to ellipse, star left alone)");
+console.log("shape correction ok (wobbly rectangle, quadrilateral and triangle straightened to their corners, tilted rectangle kept square, hand-drawn circles to true circles and ovals to ellipses, pentagon and hexagon kept, star left alone)");

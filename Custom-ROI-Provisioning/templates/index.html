@@ -183,7 +183,7 @@
                 <button type="button" id="mode-line" aria-pressed="false" title="Drag from a point to draw a straight line; click to add a point (L)"><svg class="icon"><use href="#i-line"/></svg>Line</button>
                 <button type="button" id="mode-edit" aria-pressed="false" title="Drag a corner point, the shape, or a handle to scale (E)"><svg class="icon"><use href="#i-cursor"/></svg>Edit</button>
             </div>
-            <button class="btn" id="straighten" disabled title="Turn the outline into the nearest clean shape: triangle, quadrilateral or rectangle, pentagon, hexagon or ellipse (S)"><svg class="icon"><use href="#i-wand"/></svg>Straighten</button>
+            <button class="btn" id="straighten" disabled title="Turn the outline into the nearest clean shape: triangle, quadrilateral or rectangle, pentagon, hexagon, circle or ellipse (S)"><svg class="icon"><use href="#i-wand"/></svg>Straighten</button>
             <button class="btn icon-only" id="shrink" disabled title="Shrink the region by 10% (-)" aria-label="Shrink the region"><svg class="icon"><use href="#i-minus"/></svg></button>
             <button class="btn icon-only" id="grow" disabled title="Grow the region by 10% (+)" aria-label="Grow the region"><svg class="icon"><use href="#i-plus"/></svg></button>
             <span class="tool-sep"></span>
@@ -243,7 +243,7 @@
                 <ol class="steps">
                     <li><b>Pencil</b>: click to add corner points, or hold and drag to trace the area freehand; hold <kbd>Shift</kbd> while dragging for a straight line. Long strokes are smoothed to at most 100 points.</li>
                     <li><b>Line</b>: drag from a point to draw a straight line to where you let go, one side at a time. The outline stays open while you draw; click the first point, or switch to Edit, to close it.</li>
-                    <li><b>Straighten</b> (<kbd>S</kbd>): turns a hand-drawn outline into the nearest clean shape: a triangle, a quadrilateral (a rectangle when its corners are near right angles), a pentagon, a hexagon or an ellipse. Undo brings back the drawing.</li>
+                    <li><b>Straighten</b> (<kbd>S</kbd>): turns a hand-drawn outline into the nearest clean shape: a triangle, a quadrilateral (a rectangle when its corners are near right angles), a pentagon, a hexagon, a circle or an ellipse. Undo brings back the drawing.</li>
                     <li><b>Edit</b>: drag a corner point, drag inside the shape to move it, or drag a square handle to scale it. <kbd>+</kbd> and <kbd>−</kbd> grow or shrink it by 10%.</li>
                     <li>Everything outside the shape is ignored; without a region the whole picture is used. Points are stored at full resolution with the picture size.</li>
                     <li>Saving does not apply it yet: on an edge node, copy the camera configuration there first, then restart producer-consumer and the two controllers.</li>
