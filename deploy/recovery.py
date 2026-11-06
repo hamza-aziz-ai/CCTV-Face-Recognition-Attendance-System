@@ -262,8 +262,11 @@ def remove(client, confirm, sites, admin_env, pg, kafka, store, milvus, proxy):
     remove_store(store, env, client)
     admin_sql(pg, "".join(f'DROP DATABASE IF EXISTS "{db}" WITH (FORCE);\n' for db in provision.databases(client)) + f'DROP ROLE IF EXISTS "{env["PG_APP_USER"]}";\n')
     remove_route(client, sites, proxy)
+    # The stack's own volumes (attendance waiting to be saved, MediaMTX's configuration with camera passwords)
+    for volume in run(["docker", "volume", "ls", "-q", "--filter", f"label=com.docker.compose.project={project(client)}"]).split():
+        run(["docker", "volume", "rm", volume])
     shutil.rmtree(sites / client)  # last: its .env is what lets an interrupted remove run again
-    print(f"{client}: removed from PostgreSQL, Milvus, Kafka, the dataset store, the proxy and this host")
+    print(f"{client}: removed from PostgreSQL, Milvus, Kafka, the dataset store, the proxy, its Docker volumes and this host")
 
 
 def main(argv=None):

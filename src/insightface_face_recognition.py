@@ -7,6 +7,8 @@
 import json
 import io
 import cv2
+import multiprocessing
+import os
 import socket
 import threading
 import time
@@ -29,6 +31,7 @@ from parameters import ENABLE_FEEDBACK_SERVER, \
 from custom_logging import database_server_logger, dynamic_face_data_collector_logger
 from util.face_data_client import submit_faces_async
 from util.attendance_sender import AttendanceSender, http_post
+from parameters import ATTENDANCE_SPOOL_DIR
 
 _attendance_sender = None
 _attendance_sender_lock = threading.Lock()
@@ -39,7 +42,9 @@ def attendance_sender():
     global _attendance_sender
     with _attendance_sender_lock:
         if _attendance_sender is None:
-            _attendance_sender = AttendanceSender(http_post(f"http://{DATABASE_HOST}:{DATABASE_PORT}/ingest")).start()
+            # One spool per process, so a sender reloads its own batches after a restart (thread mode has one process)
+            spool = os.path.join(ATTENDANCE_SPOOL_DIR, multiprocessing.current_process().name)
+            _attendance_sender = AttendanceSender(http_post(f"http://{DATABASE_HOST}:{DATABASE_PORT}/ingest"), spool).start()
     return _attendance_sender
 
 

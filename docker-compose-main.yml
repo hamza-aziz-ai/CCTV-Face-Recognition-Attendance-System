@@ -22,6 +22,8 @@ services:
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
       - ./logs:/Multi-Person-Face-Recognition/logs
       - ./Recognition_Frames:/Multi-Person-Face-Recognition/Recognition_Frames
+      # Recognised attendance not yet confirmed saved, kept across restarts (D-051)
+      - attendance-spool:/Multi-Person-Face-Recognition/attendance-spool
     depends_on:
       mfr-database-controller:
         condition: service_healthy
@@ -290,6 +292,9 @@ services:
 volumes:
   # MediaMTX's configuration, which holds camera passwords: a Docker volume, not a file in the site folder
   live-video-config:
+  # Attendance waiting to be confirmed saved: a volume, not a site folder, because fsync is unreliable on Windows folder
+  # mounts (D-038); compose prefixes it with the project, so each client has its own, removed with the client
+  attendance-spool:
 
 # Shared with the host's HTTPS proxy (D-040); the watcher and the start script create it
 networks:
