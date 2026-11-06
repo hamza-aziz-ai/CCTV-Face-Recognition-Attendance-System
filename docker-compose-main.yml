@@ -140,6 +140,8 @@ services:
     volumes:
       - ./master.env:/Multi-Person-Face-Recognition/master.env
       - ./DYNAMIC-FACIAL-RECOGNITION-DATASET:/Multi-Person-Face-Recognition/DYNAMIC-FACIAL-RECOGNITION-DATASET
+      # Each camera's crop group comes from here ("cluster", else the camera's own name); read at start
+      - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
       - ./logs:/Multi-Person-Face-Recognition/logs
     environment:
       POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}

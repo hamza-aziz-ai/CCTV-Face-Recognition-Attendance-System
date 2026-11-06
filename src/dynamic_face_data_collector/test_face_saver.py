@@ -1,4 +1,6 @@
 """save_face_if_better keeps a full cluster when the new crop is worse, and swaps out the worst crop when it is better.
+Each camera's cluster comes from the camera configuration: its "cluster" key, else its own name; a camera that is not
+configured, or a cluster that is not a plain folder name, is refused.
 Run in the dynamic-face-dataset-collector image: python3 src/dynamic_face_data_collector/test_face_saver.py"""
 import json
 import os
@@ -10,11 +12,39 @@ from unittest import mock
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path[:0] = [HERE, os.path.dirname(HERE)]
+# The collector reads the camera configuration when imported, and images hold none
+CAMERAS = {"maingate": {"api-endpoint": "", "cctv-cameras": {
+    "entry": {"cctv-camera-1": {"cluster": "cluster-1"}, "cctv-camera-2": {"cluster": "cluster-1"}, "cctv-camera-11": {}},
+    "exit": None}}, "library": {"api-endpoint": "", "cctv-cameras": {"entry": {"cctv-camera-1": {"masking-coordinates": None}}}}}
+os.chdir(tempfile.mkdtemp())
+os.makedirs("src/Camera-Configuration")
+with open("src/Camera-Configuration/camera_configuration.json", "w") as f:
+    json.dump(CAMERAS, f)
 # No database here: the crop records are not what this checks
 sys.modules["postgresql_database_handler"] = types.SimpleNamespace(insert_face_data=lambda *a: None,
                                                                    delete_face_data=lambda *a: None)
 import face_saver  # noqa: E402
+
+
+def test_clusters():
+    from util.generic_utilities import camera_clusters
+    assert face_saver.get_cluster("maingate_entry_cctv-camera-1") == face_saver.get_cluster("maingate_entry_cctv-camera-2") == "cluster-1"
+    assert face_saver.get_cluster("maingate_entry_cctv-camera-11") == "maingate_entry_cctv-camera-11", "used to raise: not in the old fixed map"
+    assert face_saver.get_cluster("library_entry_cctv-camera-1") == "library_entry_cctv-camera-1"
+    try:
+        face_saver.get_cluster("maingate_entry_cctv-camera-99")
+        raise AssertionError("a camera that is not configured must be refused")
+    except KeyError:
+        pass
+    for bad in ("../x", "a/b", ".hidden", "x" * 101, 7):  # an empty or missing key means the camera's own name
+        try:
+            camera_clusters({"m": {"cctv-cameras": {"e": {"c": {"cluster": bad}}}}})
+            raise AssertionError(f"cluster {bad!r} accepted")
+        except ValueError:
+            pass
+    print("clusters ok (explicit key pools cameras, any other camera is its own cluster, unknown cameras and unsafe names refused)")
 
 
 def test():
@@ -46,4 +76,5 @@ def test():
 
 
 if __name__ == "__main__":
+    test_clusters()
     test()

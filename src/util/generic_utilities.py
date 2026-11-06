@@ -4,6 +4,7 @@ import os
 import cv2
 import sys
 import json
+import re
 import urllib.parse
 import numpy as np
 
@@ -179,3 +180,23 @@ def load_metadata(path):
 def save_metadata(path, data):
     with open(path, 'w') as f:
         json.dump(data, f, indent=4)
+
+
+SAFE_CLUSTER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
+
+
+def camera_clusters(camera_configuration):
+    """The face-crop group of every configured camera: its "cluster" key if it has one, so cameras can share a group,
+    otherwise its own full name. The collector keeps the best NUMBER_OF_PICTURES crops of a person per group. A group is
+    a folder name under the person's folder, so anything but a plain name is refused. Changing a camera's group neither
+    moves nor retires the crops already kept under the old one."""
+    clusters = {}
+    for location, points in camera_configuration.items():
+        for point, cameras in (points.get("cctv-cameras") or {}).items():
+            for camera, settings in (cameras or {}).items():
+                name = f"{location}_{point}_{camera}"
+                cluster = (settings or {}).get("cluster") or name
+                if not isinstance(cluster, str) or not SAFE_CLUSTER.fullmatch(cluster):
+                    raise ValueError(f"camera {name}: cluster {cluster!r} must be letters, digits, '.', '_' or '-', starting with a letter or digit")
+                clusters[name] = cluster
+    return clusters

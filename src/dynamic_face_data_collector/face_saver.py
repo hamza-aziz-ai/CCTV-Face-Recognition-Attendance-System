@@ -12,12 +12,13 @@ Usage:
     from dynamic_face_data_collector import face_saver
     face_saver(cropped_faces_data)
 """
+import json
 import os
 import sys
 import math
 from datetime import datetime
 from functools import reduce
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import cv2
 
@@ -29,50 +30,19 @@ parent = os.path.dirname(current)
 sys.path.append(parent)
 
 from parameters import (
+    CAMERA_CONFIGURATION_FILE,
     PUPIL_DISTANCE_THRESHOLD,
     DYNAMIC_DATASET_PATH,
     NUMBER_OF_PICTURES,
     METRIC_TYPE,
 )
-from util.generic_utilities import check_for_directory, load_metadata, save_metadata
+from util.generic_utilities import camera_clusters, check_for_directory, load_metadata, save_metadata
 from custom_logging import dynamic_face_data_collector_logger as logger
 
-# Mapping of camera groups to cluster names
-cluster_map: Dict[Tuple[str, str, str, str, str], str] = {
-    (
-        "maingate_entry_cctv-camera-1",
-        "maingate_entry_cctv-camera-2",
-        "maingate_entry_cctv-camera-3",
-        "maingate_entry_cctv-camera-4",
-        "maingate_entry_cctv-camera-5",
-    ): "cluster-1",
-    (
-        "maingate_entry_cctv-camera-6",
-        "maingate_entry_cctv-camera-7",
-        "maingate_entry_cctv-camera-8",
-        "maingate_entry_cctv-camera-9",
-        "maingate_entry_cctv-camera-10",
-    ): "cluster-2",
-    (
-        "maingate_exit_cctv-camera-1",
-        "maingate_exit_cctv-camera-2",
-        "maingate_exit_cctv-camera-3",
-        "maingate_exit_cctv-camera-4",
-        "maingate_exit_cctv-camera-5",
-    ): "cluster-3",
-    (
-        "maingate_exit_cctv-camera-6",
-        "maingate_exit_cctv-camera-7",
-        "maingate_exit_cctv-camera-8",
-        "maingate_exit_cctv-camera-9",
-        "maingate_exit_cctv-camera-10",
-    ): "cluster-4",
-}
-
-# Flattened map for quick lookup
-flat_map: Dict[str, str] = {
-    camera: cluster for cameras, cluster in cluster_map.items() for camera in cameras
-}
+# Each configured camera's crop group (util/generic_utilities.camera_clusters), read at start: restart the collector after
+# cameras change, as the feedback controller already needs
+with open(CAMERA_CONFIGURATION_FILE, "r", encoding="utf-8") as camera_configuration_file:
+    flat_map: Dict[str, str] = camera_clusters(json.load(camera_configuration_file))
 
 
 def get_cluster(camera_name: str) -> str:
@@ -86,7 +56,7 @@ def get_cluster(camera_name: str) -> str:
         Name of the cluster to which the camera belongs.
 
     Raises:
-        KeyError: If the camera_name is not recognized.
+        KeyError: If the camera is not in the camera configuration: its crops are refused.
     """
     try:
         cluster = flat_map[camera_name]

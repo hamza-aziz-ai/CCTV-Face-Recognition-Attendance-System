@@ -34,7 +34,8 @@
                             504,
                             357
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-1"
                 },
                 "cctv-camera-2": {
                     "username": null,
@@ -67,7 +68,8 @@
                             500,
                             312
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-1"
                 },
                 "cctv-camera-3": {
                     "username": null,
@@ -100,7 +102,8 @@
                             568,
                             262
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-1"
                 },
                 "cctv-camera-4": {
                     "username": null,
@@ -133,7 +136,8 @@
                             527,
                             329
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-1"
                 },
                 "cctv-camera-5": {
                     "username": null,
@@ -166,7 +170,8 @@
                             519,
                             306
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-1"
                 },
                 "cctv-camera-6": {
                     "username": null,
@@ -199,7 +204,8 @@
                             531,
                             245
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-2"
                 },
                 "cctv-camera-7": {
                     "username": null,
@@ -232,7 +238,8 @@
                             593,
                             251
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-2"
                 },
                 "cctv-camera-8": {
                     "username": null,
@@ -265,7 +272,8 @@
                             564,
                             231
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-2"
                 },
                 "cctv-camera-9": {
                     "username": null,
@@ -298,7 +306,8 @@
                             423,
                             237
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-2"
                 },
                 "cctv-camera-10": {
                     "username": null,
@@ -331,7 +340,8 @@
                             548,
                             337
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-2"
                 }
             },
             "exit": {
@@ -366,7 +376,8 @@
                             516,
                             168
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-3"
                 },
                 "cctv-camera-2": {
                     "username": null,
@@ -399,7 +410,8 @@
                             433,
                             121
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-3"
                 },
                 "cctv-camera-3": {
                     "username": null,
@@ -432,7 +444,8 @@
                             478,
                             159
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-3"
                 },
                 "cctv-camera-4": {
                     "username": null,
@@ -465,7 +478,8 @@
                             519,
                             220
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-3"
                 },
                 "cctv-camera-5": {
                     "username": null,
@@ -498,7 +512,8 @@
                             516,
                             181
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-3"
                 },
                 "cctv-camera-6": {
                     "username": null,
@@ -531,7 +546,8 @@
                             459,
                             269
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-4"
                 },
                 "cctv-camera-7": {
                     "username": null,
@@ -564,7 +580,8 @@
                             537,
                             190
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-4"
                 },
                 "cctv-camera-8": {
                     "username": null,
@@ -597,7 +614,8 @@
                             522,
                             209
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-4"
                 },
                 "cctv-camera-9": {
                     "username": null,
@@ -630,7 +648,8 @@
                             504,
                             225
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-4"
                 },
                 "cctv-camera-10": {
                     "username": null,
@@ -663,7 +682,8 @@
                             439,
                             195
                         ]
-                    ]
+                    ],
+                    "cluster": "cluster-4"
                 }
             }
         }
