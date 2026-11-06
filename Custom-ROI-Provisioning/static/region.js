@@ -144,69 +144,183 @@
         return at.map((index, i) => intersect(lines[(i - 1 + k) % k], lines[i]) || points[index]);
     };
 
-    const angleAt = (a, b, c) => {
-        const u = [a[0] - b[0], a[1] - b[1]], v = [c[0] - b[0], c[1] - b[1]];
-        return Math.acos(Math.max(-1, Math.min(1, (u[0] * v[0] + u[1] * v[1]) / (Math.hypot(...u) * Math.hypot(...v) || 1)))) * 180 / Math.PI;
-    };
+    // ---- Symmetry: the detected corners made into the regular shape they are close to ----
 
-    // A quadrilateral whose corners are all near right angles, squared into a rectangle at its own tilt, spanning the
-    // fitted corners (not every wobble of the drawing, which would only make it bigger)
-    function rectangle(quad) {
-        let sx = 0, sy = 0;  // the mean edge direction, folded into 0..90 degrees by doubling the angle twice
-        quad.forEach((a, i) => {
-            const b = quad[(i + 1) % 4], t = Math.atan2(b[1] - a[1], b[0] - a[0]) * 4;
-            sx += Math.cos(t); sy += Math.sin(t);
-        });
-        const t = Math.atan2(sy, sx) / 4, ux = [Math.cos(t), Math.sin(t)], uy = [-Math.sin(t), Math.cos(t)];
-        const along = quad.map((p) => p[0] * ux[0] + p[1] * ux[1]), across = quad.map((p) => p[0] * uy[0] + p[1] * uy[1]);
-        const [x0, x1, y0, y1] = [Math.min(...along), Math.max(...along), Math.min(...across), Math.max(...across)];
-        return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([a, c]) => [a * ux[0] + c * uy[0], a * ux[1] + c * uy[1]]);
+    const DEG = Math.PI / 180;
+    const minus = (a, b) => [a[0] - b[0], a[1] - b[1]];
+    const length = (v) => Math.hypot(v[0], v[1]);
+    const unit = (v) => { const l = length(v) || 1; return [v[0] / l, v[1] / l]; };
+    const turn = ([x, y], t) => [x * Math.cos(t) - y * Math.sin(t), x * Math.sin(t) + y * Math.cos(t)];
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1];
+    const signedArea = (points) => points.reduce((s, [x, y], i) => { const [nx, ny] = points[(i + 1) % points.length]; return s + x * ny - nx * y; }, 0) / 2;
+    const angleAt = (a, b, c) => Math.acos(Math.max(-1, Math.min(1, dot(unit(minus(a, b)), unit(minus(c, b)))))) / DEG;
+    // Turned onto the picture's axes when within this much of them: a nearly level shape is meant level
+    const LEVEL = 10 * DEG;
+    const snap = (t, step, base = 0) => { const k = Math.round((t - base) / step), s = base + k * step; return Math.abs(t - s) <= LEVEL ? s : t; };
+    const rotateAbout = (points, c, t) => points.map((p) => { const [x, y] = turn(minus(p, c), t); return [c[0] + x, c[1] + y]; });
+    // The direction of a line, folded into 0..90 degrees (its angle times 4 averages sides that point either way)
+    const quarterTurn = (dirs) => { let sx = 0, sy = 0; for (const t of dirs) { sx += Math.cos(4 * t); sy += Math.sin(4 * t); } return Math.atan2(sy, sx) / 4; };
+    const sideAngles = (q) => q.map((a, i) => { const b = q[(i + 1) % q.length]; return Math.atan2(b[1] - a[1], b[0] - a[0]); });
+    // How far apart two directions are, as lines (0..90 degrees)
+    const lineGap = (s, t) => { const d = Math.abs(((s - t) % Math.PI + Math.PI) % Math.PI); return Math.min(d, Math.PI - d); };
+
+    // A regular polygon (all sides and angles equal) with the corners' centre, mean radius, turning direction and
+    // orientation, set level (a flat side at the bottom) when it nearly is
+    function regular(corners) {
+        const n = corners.length, c = Region.centroid(corners), dir = signedArea(corners) >= 0 ? 1 : -1;
+        const r = corners.reduce((s, p) => s + length(minus(p, c)), 0) / n;
+        let sx = 0, sy = 0;
+        corners.forEach((p, i) => { const t = Math.atan2(p[1] - c[1], p[0] - c[0]) - dir * 2 * Math.PI * i / n; sx += Math.cos(t); sy += Math.sin(t); });
+        const phase = snap(Math.atan2(sy, sx), 2 * Math.PI / n, Math.PI / 2 + Math.PI / n);
+        return corners.map((_, i) => [c[0] + r * Math.cos(phase + dir * 2 * Math.PI * i / n), c[1] + r * Math.sin(phase + dir * 2 * Math.PI * i / n)]);
     }
 
-    // The ellipse with the outline's own centre, orientation and spread: a boundary's variance along an axis is a²/2
+    // A rectangle (a square when its sides are within 15% of each other) about the corners' centre, its sides the mean
+    // of the opposite sides, level when nearly so
+    function rectangle(quad) {
+        const t = snap(quarterTurn(sideAngles(quad)), Math.PI / 2), ux = [Math.cos(t), Math.sin(t)], uy = [-Math.sin(t), Math.cos(t)];
+        const c = Region.centroid(quad);
+        let w = 2 * quad.reduce((s, p) => s + Math.abs(dot(minus(p, c), ux)), 0) / 4, h = 2 * quad.reduce((s, p) => s + Math.abs(dot(minus(p, c), uy)), 0) / 4;
+        const square = Math.min(w, h) / Math.max(w, h) >= 0.85;
+        if (square) w = h = Math.sqrt(w * h);
+        // Each corner keeps its quadrant, so the outline keeps its order and turning direction
+        const corners = quad.map((p) => {
+            const sa = Math.sign(dot(minus(p, c), ux)) || 1, sb = Math.sign(dot(minus(p, c), uy)) || 1;
+            return [c[0] + sa * w / 2 * ux[0] + sb * h / 2 * uy[0], c[1] + sa * w / 2 * ux[1] + sb * h / 2 * uy[1]];
+        });
+        return {kind: square ? "square" : "rectangle", points: corners};
+    }
+
+    // A four-sided shape that is not rectangular: an isosceles trapezoid when one pair of sides is parallel (within
+    // 10 degrees), a rhombus or parallelogram when both are, otherwise the plain quadrilateral
+    function quadrilateral(q) {
+        const t = sideAngles(q), parallel = [lineGap(t[0], t[2]) <= LEVEL, lineGap(t[1], t[3]) <= LEVEL];
+        const c = Region.centroid(q);
+        if (parallel[0] && parallel[1]) {
+            const sides = q.map((a, i) => length(minus(q[(i + 1) % 4], a)));
+            if (Math.max(...sides) / Math.min(...sides) <= 1.15) {
+                // Rhombus: equal sides, its diagonals at right angles through the centre
+                const d1 = minus(q[2], q[0]), half1 = length(d1) / 2, half2 = length(minus(q[3], q[1])) / 2;
+                const a = snap(Math.atan2(d1[1], d1[0]), Math.PI / 2), u = [Math.cos(a), Math.sin(a)];
+                const v = signedArea(q) >= 0 ? [-u[1], u[0]] : [u[1], -u[0]];
+                return {kind: "rhombus", points: [[c[0] - u[0] * half1, c[1] - u[1] * half1], [c[0] + v[0] * half2, c[1] + v[1] * half2],
+                                                  [c[0] + u[0] * half1, c[1] + u[1] * half1], [c[0] - v[0] * half2, c[1] - v[1] * half2]]};
+            }
+            // Parallelogram: each pair of opposite sides made equal and parallel, about the centre
+            const e1 = [(q[1][0] - q[0][0] + q[2][0] - q[3][0]) / 2, (q[1][1] - q[0][1] + q[2][1] - q[3][1]) / 2];
+            const e2 = [(q[3][0] - q[0][0] + q[2][0] - q[1][0]) / 2, (q[3][1] - q[0][1] + q[2][1] - q[1][1]) / 2];
+            return {kind: "parallelogram", points: [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [c[0] + (a * e1[0] + b * e2[0]) / 2, c[1] + (a * e1[1] + b * e2[1]) / 2])};
+        }
+        if (parallel[0] || parallel[1]) {
+            // Isosceles trapezoid: the two parallel sides centred on one axis at right angles to them
+            const i = parallel[0] ? 0 : 1, j = i + 2;
+            const a = snap(quarterTurn([t[i], t[j]]) + (lineGap(quarterTurn([t[i], t[j]]), t[i]) > Math.PI / 4 ? Math.PI / 2 : 0), Math.PI / 2);
+            const u = [Math.cos(a), Math.sin(a)], n = [-u[1], u[0]];
+            const mid = (k) => [(q[k][0] + q[(k + 1) % 4][0]) / 2, (q[k][1] + q[(k + 1) % 4][1]) / 2];
+            const axis = (dot(mid(i), u) + dot(mid(j), u)) / 2;
+            const out = q.map((p) => p.slice());
+            for (const k of [i, j]) {
+                const half = length(minus(q[(k + 1) % 4], q[k])) / 2, h = dot(mid(k), n), s = Math.sign(dot(minus(q[(k + 1) % 4], q[k]), u)) || 1;
+                out[k] = [u[0] * (axis - s * half) + n[0] * h, u[1] * (axis - s * half) + n[1] * h];
+                out[(k + 1) % 4] = [u[0] * (axis + s * half) + n[0] * h, u[1] * (axis + s * half) + n[1] * h];
+            }
+            return {kind: "isosceles trapezoid", points: out};
+        }
+        return {kind: "quadrilateral", points: q};
+    }
+
+    // A triangle: equilateral when its sides are within 15% of each other; right-angled when an angle is within 12
+    // degrees of 90 (and isosceles too when its legs are within 15%); isosceles when two sides are within 12%
+    function triangle(tri) {
+        const sides = tri.map((_, i) => length(minus(tri[(i + 1) % 3], tri[(i + 2) % 3])));  // side opposite each corner
+        if (Math.max(...sides) / Math.min(...sides) <= 1.15) return {kind: "equilateral triangle", points: regular(tri)};
+        const angles = tri.map((p, i) => angleAt(tri[(i + 2) % 3], p, tri[(i + 1) % 3]));
+        const r = angles.reduce((best, a, i) => (Math.abs(a - 90) < Math.abs(angles[best] - 90) ? i : best), 0);
+        if (Math.abs(angles[r] - 90) <= 12) {
+            const v = tri[r], p = tri[(r + 1) % 3], q = tri[(r + 2) % 3];
+            let lp = length(minus(p, v)), lq = length(minus(q, v));
+            const isosceles = Math.max(lp, lq) / Math.min(lp, lq) <= 1.15;
+            if (isosceles) lp = lq = (lp + lq) / 2;
+            // The legs at exactly 90 degrees about the angle's bisector, level when nearly so
+            const bisector = unit([unit(minus(p, v))[0] + unit(minus(q, v))[0], unit(minus(p, v))[1] + unit(minus(q, v))[1]]);
+            const side = Math.sign(minus(p, v)[0] * minus(q, v)[1] - minus(p, v)[1] * minus(q, v)[0]) || 1;
+            let dp = turn(bisector, -side * Math.PI / 4);
+            const level = snap(Math.atan2(dp[1], dp[0]), Math.PI / 2) - Math.atan2(dp[1], dp[0]);
+            dp = turn(dp, level);
+            const dq = turn(dp, side * Math.PI / 2), out = [];
+            out[r] = v; out[(r + 1) % 3] = [v[0] + dp[0] * lp, v[1] + dp[1] * lp]; out[(r + 2) % 3] = [v[0] + dq[0] * lq, v[1] + dq[1] * lq];
+            return {kind: isosceles ? "right isosceles triangle" : "right triangle", points: out};
+        }
+        // Isosceles: the corner between the two near-equal sides moved onto the base's perpendicular bisector
+        for (let x = 0; x < 3; x++) {
+            const y = (x + 1) % 3, z = (x + 2) % 3;
+            if (Math.abs(sides[y] - sides[z]) / Math.max(sides[y], sides[z]) <= 0.12) {
+                const m = [(tri[y][0] + tri[z][0]) / 2, (tri[y][1] + tri[z][1]) / 2], base = minus(tri[z], tri[y]);
+                const t = Math.atan2(base[1], base[0]), level = snap(t, Math.PI / 2) - t;
+                const [by, bz] = [rotateAbout([tri[y]], m, level)[0], rotateAbout([tri[z]], m, level)[0]];
+                const n = unit([-(bz[1] - by[1]), bz[0] - by[0]]), h = dot(minus(rotateAbout([tri[x]], m, level)[0], m), n);
+                const out = [];
+                out[x] = [m[0] + n[0] * h, m[1] + n[1] * h]; out[y] = by; out[z] = bz;
+                return {kind: "isosceles triangle", points: out};
+            }
+        }
+        return {kind: "triangle", points: tri};
+    }
+
+    // The ellipse with the outline's own centre, orientation and spread (a boundary's variance along an axis is a²/2),
+    // level when nearly so, and a true circle when its axes are within 10% of each other
     function ellipse(drawn, sides = 32) {
         const boundary = densify(drawn, Math.sqrt(Region.area(drawn)) / 80 || 1);
         const [cx, cy] = Region.centroid(drawn);
         let xx = 0, yy = 0, xy = 0;
         for (const [x, y] of boundary) { xx += (x - cx) ** 2; yy += (y - cy) ** 2; xy += (x - cx) * (y - cy); }
         xx /= boundary.length; yy /= boundary.length; xy /= boundary.length;
-        const mid = (xx + yy) / 2, spread = Math.sqrt(((xx - yy) / 2) ** 2 + xy * xy), t = Math.atan2(2 * xy, xx - yy) / 2;
+        const mid = (xx + yy) / 2, spread = Math.sqrt(((xx - yy) / 2) ** 2 + xy * xy), t = snap(Math.atan2(2 * xy, xx - yy) / 2, Math.PI / 2);
         let a = Math.sqrt(2 * (mid + spread)), b = Math.sqrt(2 * Math.max(0, mid - spread));
-        const circle = b >= 0.9 * a;  // axes within 10% of each other: meant as a circle, so a true one
+        const circle = b >= 0.9 * a;
         if (circle) a = b = Math.sqrt(a * b);
-        return {circle, points: Array.from({length: sides}, (_, i) => {
+        return {kind: circle ? "circle" : "ellipse", points: Array.from({length: sides}, (_, i) => {
             const u = 2 * Math.PI * i / sides, x = a * Math.cos(u), y = b * Math.sin(u);
             return [cx + x * Math.cos(t) - y * Math.sin(t), cy + x * Math.sin(t) + y * Math.cos(t)];
         })};
     }
 
-    const NAMES = {3: "triangle", 4: "quadrilateral", 5: "pentagon", 6: "hexagon"};
-    // ponytail: fixed tolerances (a fit within 3% of the shape's size, an ellipse within 4.5%, 12 degrees from square
-    // for a rectangle), tuned on hand-drawn test shapes; make them settings if real drawings need it
+    // The corners made symmetric: a regular shape when the drawing is close to one
+    function symmetric(corners) {
+        if (corners.length === 3) return triangle(corners);
+        if (corners.length === 4) {
+            return corners.every((b, i) => Math.abs(angleAt(corners[(i + 3) % 4], b, corners[(i + 1) % 4]) - 90) <= 12) ? rectangle(corners) : quadrilateral(corners);
+        }
+        return {kind: corners.length === 5 ? "regular pentagon" : "regular hexagon", points: regular(corners)};
+    }
+
+    Region.symmetric = symmetric;
+
+    // ponytail: fixed tolerances (a fit within 3% of the shape's size, an ellipse within 4.5%, 10 to 15% for "equal"
+    // and 10 to 12 degrees for "square", "parallel" or "level"), tuned on hand-drawn test shapes; make them settings if
+    // real drawings need it
     Region.straighten = (points, size, tolerance = 0.03) => {
         if (points.length < 3 || Region.area(points) < 1) return null;
-        // raw: the fit of the plain corners, which decides the corner count; error: the fit of the shape returned
+        // The corner count comes from how well plain corners fit (raw); the shape returned is then made symmetric
         const fits = [3, 4, 5, 6].filter((k) => k <= points.length).map((k) => {
-            let shape = Region.corners(points, k), kind = NAMES[k];
-            const raw = Region.fitError(points, shape);
-            if (k === 4 && shape.every((b, i) => Math.abs(angleAt(shape[(i + 3) % 4], b, shape[(i + 1) % 4]) - 90) <= 12)) {
-                shape = rectangle(shape); kind = "rectangle";
-            }
-            return {kind, points: shape, raw, error: kind === "rectangle" ? Region.fitError(points, shape) : raw};
+            const corners = Region.corners(points, k);
+            return {corners, raw: Region.fitError(points, corners)};
         });
-        const oval = ellipse(points);
-        const round = {kind: oval.circle ? "circle" : "ellipse", points: oval.points, error: 0};
-        round.error = Region.fitError(points, round.points);
-        // A drawn polygon fits sharply at its true corner count: the error at least halves from one corner fewer (a
-        // rectangle drops from about 5% to under 1% at 4). A round outline only improves gradually with more corners,
-        // and 5 or 6 corners always fit it within 3%, so it is an ellipse unless some corner count fits that sharply
-        // Of the corner counts that fit that sharply, the closest: a hexagon also halves at 5, then fits far better at 6
-        // A real corner also cuts the error by at least a third of the tolerance, not by a sliver: a fifth point fits a
-        // rectangle marginally better too
+        // A drawn polygon fits sharply at its true corner count: the error at least halves from one corner fewer, and by
+        // a third of the tolerance or more (a rectangle drops from about 5% to under 1% at 4). A round outline only
+        // improves gradually, and 5 or 6 corners always fit it within 3%, so it is an ellipse unless some corner count
+        // fits that sharply. Of the sharp ones the closest wins: a hexagon also halves at 5, then fits far better at 6
         const sharp = (f, i) => i === 0 ? f.raw <= tolerance / 2 : f.raw <= fits[i - 1].raw / 2 && fits[i - 1].raw - f.raw >= tolerance / 3;
-        const polygon = fits.filter((f, i) => f.raw <= tolerance && f.error <= tolerance && sharp(f, i))
-            .reduce((a, f) => (!a || f.raw < a.raw ? f : a), null);
-        const best = polygon || (round.error <= tolerance * 1.5 ? round : null);
-        return best ? {kind: best.kind, error: best.error, points: best.points.map((p) => Region.clamp(p, size))} : null;
+        const polygon = fits.filter((f, i) => f.raw <= tolerance && sharp(f, i)).reduce((a, f) => (!a || f.raw < a.raw ? f : a), null);
+        let best = polygon && symmetric(polygon.corners);
+        if (!best) {
+            const round = ellipse(points);
+            best = Region.fitError(points, round.points) <= tolerance * 1.5 ? round : null;
+        }
+        return best ? {kind: best.kind, points: best.points.map((p) => Region.clamp(p, size))} : null;
     };
+
+    // Stretched along one axis of the picture, away from a fixed line (an edge of its bounding box), kept in the picture
+    Region.stretch = (points, axis, factor, anchor, size) =>
+        points.map((p) => Region.clamp(axis === 0 ? [anchor + (p[0] - anchor) * factor, p[1]] : [p[0], anchor + (p[1] - anchor) * factor], size));
 })(typeof module !== "undefined" ? module.exports : (window.Region = {}));

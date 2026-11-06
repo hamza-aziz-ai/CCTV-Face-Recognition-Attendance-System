@@ -183,7 +183,7 @@
                 <button type="button" id="mode-line" aria-pressed="false" title="Drag from a point to draw a straight line; click to add a point (L)"><svg class="icon"><use href="#i-line"/></svg>Line</button>
                 <button type="button" id="mode-edit" aria-pressed="false" title="Drag a corner point, the shape, or a handle to scale (E)"><svg class="icon"><use href="#i-cursor"/></svg>Edit</button>
             </div>
-            <button class="btn" id="straighten" disabled title="Turn the outline into the nearest clean shape: triangle, quadrilateral or rectangle, pentagon, hexagon, circle or ellipse (S)"><svg class="icon"><use href="#i-wand"/></svg>Straighten</button>
+            <button class="btn" id="straighten" disabled title="Turn the outline into the regular shape it is close to: square, rectangle, equilateral, right or isosceles triangle, trapezoid, regular pentagon or hexagon, circle or ellipse (S)"><svg class="icon"><use href="#i-wand"/></svg>Straighten</button>
             <button class="btn icon-only" id="shrink" disabled title="Shrink the region by 10% (-)" aria-label="Shrink the region"><svg class="icon"><use href="#i-minus"/></svg></button>
             <button class="btn icon-only" id="grow" disabled title="Grow the region by 10% (+)" aria-label="Grow the region"><svg class="icon"><use href="#i-plus"/></svg></button>
             <span class="tool-sep"></span>
@@ -243,8 +243,8 @@
                 <ol class="steps">
                     <li><b>Pencil</b>: click to add corner points, or hold and drag to trace the area freehand; hold <kbd>Shift</kbd> while dragging for a straight line. Long strokes are smoothed to at most 100 points.</li>
                     <li><b>Line</b>: drag from a point to draw a straight line to where you let go, one side at a time. The outline stays open while you draw; click the first point, or switch to Edit, to close it.</li>
-                    <li><b>Straighten</b> (<kbd>S</kbd>): turns a hand-drawn outline into the nearest clean shape: a triangle, a quadrilateral (a rectangle when its corners are near right angles), a pentagon, a hexagon, a circle or an ellipse. Undo brings back the drawing.</li>
-                    <li><b>Edit</b>: drag a corner point, drag inside the shape to move it, or drag a square handle to scale it. <kbd>+</kbd> and <kbd>−</kbd> grow or shrink it by 10%.</li>
+                    <li><b>Straighten</b> (<kbd>S</kbd>): turns a hand-drawn outline into the regular shape it is close to: a square or rectangle; an equilateral, right-angled or isosceles triangle; an isosceles trapezoid, parallelogram or rhombus; a regular pentagon or hexagon with all sides equal; a circle or ellipse. Nearly level shapes are set level. Undo brings back the drawing.</li>
+                    <li><b>Edit</b>: drag a corner point, drag inside the shape to move it, drag a corner handle to scale it evenly, or a side handle to stretch it sideways or up and down (a square into a rectangle). <kbd>+</kbd> and <kbd>−</kbd> grow or shrink it by 10%.</li>
                     <li>Everything outside the shape is ignored; without a region the whole picture is used. Points are stored at full resolution with the picture size.</li>
                     <li>Saving does not apply it yet: on an edge node, copy the camera configuration there first, then restart producer-consumer and the two controllers.</li>
                 </ol>
@@ -342,6 +342,15 @@
         return [[b.left, b.top], [b.right, b.top], [b.right, b.bottom], [b.left, b.bottom]];
     }
 
+    // The stretch handles: the middle of each side of the bounding box, on screen. Dragging one stretches the shape
+    // along that axis only, away from the opposite side, as a square is stretched into a rectangle
+    function sideHandles() {
+        if (points.length < 3) return [];
+        const b = Region.bounds(points.map(toScreen)), mx = (b.left + b.right) / 2, my = (b.top + b.bottom) / 2;
+        return [{at: [mx, b.top], axis: 1, edge: "top"}, {at: [b.right, my], axis: 0, edge: "right"},
+                {at: [mx, b.bottom], axis: 1, edge: "bottom"}, {at: [b.left, my], axis: 0, edge: "left"}];
+    }
+
     function render() {
         const cam = byId(current);
         canvas.width = img.clientWidth; canvas.height = img.clientHeight;
@@ -367,6 +376,10 @@
                 ctx.strokeRect(h[0][0], h[0][1], h[2][0] - h[0][0], h[2][1] - h[0][1]); ctx.restore();
                 ctx.fillStyle = "#ffffff"; ctx.strokeStyle = "#0b5f63"; ctx.lineWidth = 2;
                 for (const [x, y] of h) { ctx.fillRect(x - HANDLE / 2, y - HANDLE / 2, HANDLE, HANDLE); ctx.strokeRect(x - HANDLE / 2, y - HANDLE / 2, HANDLE, HANDLE); }
+                for (const {at: [x, y], axis} of sideHandles()) {
+                    const [w, hh] = axis === 0 ? [HANDLE * 0.6, HANDLE * 1.6] : [HANDLE * 1.6, HANDLE * 0.6];
+                    ctx.fillRect(x - w / 2, y - hh / 2, w, hh); ctx.strokeRect(x - w / 2, y - hh / 2, w, hh);
+                }
             }
             ctx.strokeStyle = "#5eead4"; ctx.lineWidth = 2;
             points.map(toScreen).forEach(([x, y], i) => {
@@ -407,6 +420,13 @@
         const vertex = points.map(toScreen).findIndex((v) => near(v, p, HIT));
         if (vertex >= 0) return {kind: "vertex", index: vertex};
         if (handles().some((h) => near(h, p, HANDLE + 2))) return {kind: "scale"};
+        const side = sideHandles().find((h) => near(h.at, p, HANDLE + 2));
+        if (side) {
+            // Stretch away from the opposite side, in picture pixels
+            const b = Region.bounds(points), far = {top: b.bottom, bottom: b.top, left: b.right, right: b.left}[side.edge];
+            const edge = {top: b.top, bottom: b.bottom, left: b.left, right: b.right}[side.edge];
+            return {kind: "stretch", axis: side.axis, anchor: far, from: edge};
+        }
         if (Region.inside(Region.toImage(p[0], p[1], factor(), shown.size), points)) return {kind: "move"};
         return null;
     }
@@ -439,7 +459,8 @@
         if (!gesture) {
             if (mode === "edit" && ready()) {
                 const hit = hitTest(p);
-                canvas.style.cursor = !hit ? "default" : hit.kind === "move" ? "move" : hit.kind === "scale" ? "nwse-resize" : "grab";
+                canvas.style.cursor = !hit ? "default" : hit.kind === "move" ? "move" : hit.kind === "scale" ? "nwse-resize"
+                    : hit.kind === "stretch" ? (hit.axis === 0 ? "ew-resize" : "ns-resize") : "grab";
             }
             return;
         }
@@ -459,6 +480,10 @@
             points = gesture.before.map((q, i) => i === gesture.index ? Region.toImage(p[0], p[1], factor(), size) : q);
         } else if (gesture.kind === "move") {
             points = Region.translate(gesture.before, (p[0] - gesture.start[0]) * factor(), (p[1] - gesture.start[1]) * factor(), size);
+        } else if (gesture.kind === "stretch") {
+            const here = Region.toImage(p[0], p[1], factor(), size)[gesture.axis], span = gesture.from - gesture.anchor;
+            const f = span ? (here - gesture.anchor) / span : 1;
+            points = Region.stretch(gesture.before, gesture.axis, Math.max(0.05, f), gesture.anchor, size);  // never folded past the opposite side
         } else {
             const c = toScreen(gesture.center);
             const from = Math.hypot(gesture.start[0] - c[0], gesture.start[1] - c[1]) || 1;
