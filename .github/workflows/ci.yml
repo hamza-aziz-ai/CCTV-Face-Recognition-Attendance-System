@@ -198,6 +198,10 @@ jobs:
       - name: Face vectors
         if: matrix.service == 'producer-consumer'
         run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test src/util/face_vectors.py demo
+      # Attendance batches are retried unchanged until confirmed saved, refused payloads and a full queue are counted as lost
+      - name: Attendance sender
+        if: matrix.service == 'producer-consumer'
+        run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test src/util/attendance_sender.py
       # A re-embed takes photos from the bucket or the folder, and changes nothing if anyone's photos fail
       - name: Re-embed
         if: matrix.service == 'producer-consumer'

@@ -42,6 +42,9 @@ def signal_handler(sig, frame):
         cam.release()
         del cam
 
+    from insightface_face_recognition import stop_attendance_sender
+    stop_attendance_sender()  # sends what is still waiting, and logs what it could not
+
     multicam_server_logger.warning("EXITING THE PROGRAM...")
     sys.exit(0)
 

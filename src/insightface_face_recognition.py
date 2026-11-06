@@ -8,6 +8,7 @@ import json
 import io
 import cv2
 import socket
+import threading
 import time
 import requests
 from custom_logging import multicam_server_logger
@@ -27,6 +28,24 @@ from parameters import ENABLE_FEEDBACK_SERVER, \
     CAMERA_CONFIGURATION_FILE
 from custom_logging import database_server_logger, dynamic_face_data_collector_logger
 from util.face_data_client import submit_faces_async
+from util.attendance_sender import AttendanceSender, http_post
+
+_attendance_sender = None
+_attendance_sender_lock = threading.Lock()
+
+
+def attendance_sender():
+    """This process's one sender of attendance batches (util/attendance_sender.py), started on first use."""
+    global _attendance_sender
+    with _attendance_sender_lock:
+        if _attendance_sender is None:
+            _attendance_sender = AttendanceSender(http_post(f"http://{DATABASE_HOST}:{DATABASE_PORT}/ingest")).start()
+    return _attendance_sender
+
+
+def stop_attendance_sender():
+    if _attendance_sender is not None:
+        _attendance_sender.stop()
 
 # kafka_CONSUMER = create_kafka_CONSUMER()
 error_encounter = 0
@@ -209,19 +228,8 @@ def batched_frame_face_recognition(
         # data_sending_start_time = time.perf_counter()
         # Check if the database server is enabled
         if ENABLE_DATABASE_SERVER and formatted_result:
-            # Build the URL for the FastAPI ingestion endpoint.
-            url = f"http://{DATABASE_HOST}:{DATABASE_PORT}/ingest"
-            try:
-                # Use the "json" parameter to let requests handle encoding and proper content-type.
-                response = requests.post(url, json=data_to_send, timeout=5)
-
-                if response.status_code == 200:
-                    pass
-                    # database_server_logger.info("Data sent successfully:", response.json())
-                else:
-                    database_server_logger.error(f"Failed to send data. Status code: {response.status_code}. Response: {response.text}")
-            except Exception as e:
-                database_server_logger.error("Exception sending data to database server:", e)
+            # Handed to the sender, which saves it or retries it unchanged; recognition never waits on the database
+            attendance_sender().submit(data_to_send, sum(len(records) for records in formatted_result.values()))
         # data_sending_end_time = time.perf_counter()
         # data_sending_total_time = data_sending_end_time - data_sending_start_time
         # multicam_server_logger.debug(
