@@ -126,6 +126,11 @@ IP_CAM_REINIT_WAIT_DURATION = 30  # seconds
 # Boolean flag to indicate whether to detect darkness in live stream
 DARKNESS_DETECTION = True
 
+# A frame is dark when its mean grey level (0 to 255) is below this: over the region's own pixels for a camera with a
+# region of interest, otherwise over the whole picture. Not yet calibrated on real cameras; tune per site from the
+# brightness the producer logs when a camera turns dark or light
+DARKNESS_THRESHOLD = 80
+
 # Maximum buffer size for low light intensity detection buffer
 LOW_LIGHT_INTENSITY_DETECTION_BUFFER_SIZE = 100
 

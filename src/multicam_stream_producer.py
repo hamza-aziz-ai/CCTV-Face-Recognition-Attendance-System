@@ -11,9 +11,8 @@ Date: 2022-03-17
 import json
 import threading
 import time
-from collections import Counter, defaultdict
+from collections import deque
 import cv2
-import numpy as np
 
 from custom_logging import multicam_server_logger
 from feedback_server.feedback_message_kafka_publisher import create_kafka_producer
@@ -26,6 +25,7 @@ from parameters import FRAME_HEIGHT, \
     IP_CAM_REINIT_WAIT_DURATION, \
     FRAME_RATE_FACTOR, \
     DARKNESS_DETECTION, \
+    DARKNESS_THRESHOLD, \
     LIGHTING_ALERT_SECONDS,     LOW_LIGHT_INTENSITY_DETECTION_BUFFER_SIZE, \
     MAXIMUM_DARK_FRAMES, \
     RESIZE_FRAME, \
@@ -113,16 +113,7 @@ class IPCamera:
         self.process_this_frame = True
         # initialize a frame counter
         self.frame_counter = 0
-        # buffers for darkness detection
-        self.light_intensity_detection_buffer = []
-        self.darkness_buffer = []
-        # initial darkness status
-        self.too_dark = False
-        self.last_lighting_alert = 0.0
-        # Flag to track if adequate lighting message is sent
-        self.adequate_lighting_message_sent = True
-        # Flag to track if inadequate lighting message is logged
-        self.inadequate_lighting_message_logged = False
+        self.reset_lighting()
 
         if not self.is_initialized:
             multicam_server_logger.error(
@@ -147,25 +138,74 @@ class IPCamera:
         """Releases the camera stream"""
         self.stream.release()
 
-    @staticmethod
-    def is_too_dark(frame, adaptive=True, threshold=80):
-        # Convert frame to grayscale
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-        if adaptive:
-            # Use adaptive thresholding to determine darkness
-            mean_intensity = cv2.mean(gray)[0]
-            return mean_intensity < threshold
-        else:
-            # Calculate the average pixel intensity
-            avg_intensity = np.mean(gray)
-            # Check if the average intensity is below the threshold
-            return avg_intensity < threshold
+    def reset_lighting(self):
+        """Darkness state of a new stream: nothing judged yet."""
+        self.darkness = deque(maxlen=LOW_LIGHT_INTENSITY_DETECTION_BUFFER_SIZE)
+        self.too_dark = False
+        self.last_lighting_alert = None
+        self.last_region_alert = None
 
     @staticmethod
-    def reduce_noise(frame):
-        # Apply Gaussian blur to reduce noise
-        return cv2.GaussianBlur(frame, (5, 5), 0)
+    def brightness(image, mask=None):
+        """Mean grey level, 0 to 255; with a mask, over the mask's pixels only."""
+        return cv2.mean(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), mask=mask)[0]
+
+    def prepare(self, frame):
+        """The frame recognition gets, and whether its picture is dark. With a region, only the region's own pixels are
+        judged, at the camera's resolution: a bright lobby beside a dark door must not hide it, and resizing first would
+        blend the black outside the region into its edge. Without one, a FRAME_WIDTH x FRAME_HEIGHT thumbnail is judged.
+        Raises ValueError when the region does not fit the frame."""
+        if CROP_ROI and self.roi is not None:
+            roi, mask = crop_and_mask_roi(frame, self.roi, return_mask=True)
+            dark = DARKNESS_DETECTION and self.brightness(roi, mask) < DARKNESS_THRESHOLD
+            return resize_roi_to_area(roi), dark
+        large = frame.shape[0] > FRAME_HEIGHT or frame.shape[1] > FRAME_WIDTH
+        if RESIZE_FRAME and large:
+            frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT), interpolation=cv2.INTER_AREA)
+        elif DARKNESS_DETECTION and large:
+            return frame, self.brightness(cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT), interpolation=cv2.INTER_AREA)) < DARKNESS_THRESHOLD
+        return frame, DARKNESS_DETECTION and self.brightness(frame) < DARKNESS_THRESHOLD
+
+    def lighting_allows(self, dark):
+        """Records one frame's darkness and says whether the frame may go to recognition. The camera turns dark when
+        MAXIMUM_DARK_FRAMES of the last LOW_LIGHT_INTENSITY_DETECTION_BUFFER_SIZE frames are dark, and light again when as
+        many are light; in between it stays as it was. Until the window first fills, dark frames are held back and nothing
+        is announced: streams often open on a few black frames."""
+        if not DARKNESS_DETECTION:
+            return True
+        self.darkness.append(dark)
+        if len(self.darkness) < self.darkness.maxlen:
+            return not dark
+        dark_frames = sum(self.darkness)
+        if not self.too_dark and dark_frames >= MAXIMUM_DARK_FRAMES:
+            self.too_dark = True
+            multicam_server_logger.warning(f"Inadequate lighting condition detected at {self.cam_name}. Halting recognition temporarily for {self.cam_name}.")
+        elif self.too_dark and len(self.darkness) - dark_frames >= MAXIMUM_DARK_FRAMES:
+            self.too_dark = False
+            self.last_lighting_alert = None
+            multicam_server_logger.info(f"Lighting condition becomes adequate at {self.cam_name}. Recognition process resumed for {self.cam_name}.")
+            self.send_kafka_message(
+                message=f"SUCCESS {self.cam_name}: Lighting condition becomes adequate at {self.cam_name}. Recognition process resumed for {self.cam_name}."
+            )
+        # Once a frame was thousands of messages a minute. This pace keeps the alert on the display, which forgets a
+        # camera's status whenever it reconnects to Kafka and relies on the re-send
+        if self.too_dark and self.due(self.last_lighting_alert):
+            self.last_lighting_alert = time.monotonic()
+            self.send_kafka_message(
+                message=f"ERROR {self.cam_name}: Inadequate lighting condition detected at {self.cam_name}. Halting recognition temporarily for {self.cam_name}."
+            )
+        return not self.too_dark
+
+    @staticmethod
+    def due(last_alert):
+        return last_alert is None or time.monotonic() - last_alert >= LIGHTING_ALERT_SECONDS
+
+    def alert_region(self, problem):
+        """A region that does not fit the camera's picture: no recognition for that frame, an alert at the lighting pace."""
+        if self.due(self.last_region_alert):
+            self.last_region_alert = time.monotonic()
+            multicam_server_logger.error(f"Region of interest of {self.cam_name} {problem}: frames skipped until it is redrawn")
+            self.send_kafka_message(message=f"ERROR {self.cam_name}: Region of interest {problem}. Redraw it in the ROI page.")
 
     def place_frame_in_buffer(self):
         """Places the frame in the buffer"""
@@ -183,82 +223,13 @@ class IPCamera:
                 self.is_initialized = False
                 # frame_stats_manager.record_discarded(self.cam_name)
             else:
-                # Darkness is judged on the whole scene at FRAME_WIDTH x FRAME_HEIGHT: blurring full camera frames was
-                # the producer's largest CPU cost (23 ms of 39 ms per 1080p frame), and the mean brightness barely changes
-                if CROP_ROI and self.roi is not None:
-                    if DARKNESS_DETECTION:
-                        frame_copy = cv2.resize(self.frame, (FRAME_WIDTH, FRAME_HEIGHT), interpolation=cv2.INTER_AREA)
-                    # Separate Region of Interest from the frame
-                    roi_frame = crop_and_mask_roi(self.frame, self.roi)
-                    self.frame = resize_roi_to_area(roi_frame)
+                try:
+                    self.frame, dark = self.prepare(self.frame)
+                except ValueError as problem:  # the region does not fit this frame: say so and keep the stream open
+                    self.alert_region(problem)
                 else:
-                    if RESIZE_FRAME and (self.frame.shape[0] > FRAME_HEIGHT or self.frame.shape[1] > FRAME_WIDTH):
-                        self.frame = cv2.resize(self.frame, (FRAME_WIDTH, FRAME_HEIGHT), interpolation=cv2.INTER_AREA)
-                    frame_copy = self.frame
-
-                if DARKNESS_DETECTION:
-                    # Reduce noise from the frame
-                    frame_copy = self.reduce_noise(frame_copy)
-
-                    # Put the frame_copy in `light_intensity_detection_buffer`
-                    self.light_intensity_detection_buffer.append(frame_copy)
-
-                    # Check if the extracted roi is too dark for processing
-                    if self.is_too_dark(frame_copy, adaptive=True):
-                        self.darkness_buffer.append(True)
-                    else:
-                        self.darkness_buffer.append(False)
-
-                    # print()
-                    # print("=======================================================================================")
-                    # print(f"1) Darkness Status: {self.too_dark}")
-                    # Make decision whether it is getting dark or not
-                    # print(f"2) Light Intensity Buffer Status: {len(self.light_intensity_detection_buffer)}")
-                    if len(self.light_intensity_detection_buffer) >= LOW_LIGHT_INTENSITY_DETECTION_BUFFER_SIZE:
-                        darkness_count = Counter(self.darkness_buffer)
-                        # print(f"3) Dark Frames Buffer Status: {darkness_count}")
-                        if darkness_count[True] >= MAXIMUM_DARK_FRAMES:
-                            self.too_dark = True
-                            # Once a frame was thousands of messages a minute; this pace keeps the alert on the display
-                            if time.time() - self.last_lighting_alert >= LIGHTING_ALERT_SECONDS:
-                                self.last_lighting_alert = time.time()
-                                self.send_kafka_message(
-                                    message=f"ERROR {self.cam_name}: Inadequate lighting condition detected at {self.cam_name}. Halting recognition temporarily for {self.cam_name}."
-                                )
-                            self.adequate_lighting_message_sent = False
-                            # print(f"4) Darkness Status: {self.too_dark}")
-                            if not self.inadequate_lighting_message_logged:
-                                multicam_server_logger.warn(f"Inadequate lighting condition detected at {self.cam_name}. Halting recognition temporarily for {self.cam_name}.")
-                                # print(f"Inadequate lighting condition detected at {self.cam_name}. Halting recognition temporarily for {self.cam_name}.")
-                                self.inadequate_lighting_message_logged = True
-
-                            # time.sleep(IP_CAM_REINIT_WAIT_DURATION)
-
-                        elif darkness_count[False] >= MAXIMUM_DARK_FRAMES and not self.adequate_lighting_message_sent:
-                            multicam_server_logger.info(f"Lighting condition becomes adequate at {self.cam_name}. Recognition process resumed for {self.cam_name}.")
-                            self.too_dark = False
-                            self.last_lighting_alert = 0.0
-                            self.send_kafka_message(
-                                message=f"SUCCESS {self.cam_name}: Lighting condition becomes adequate at {self.cam_name}. Recognition process resumed for {self.cam_name}."
-                            )
-                            # print(f"Lighting condition becomes adequate at {self.cam_name}. Recognition process resumed for {self.cam_name}.")
-
-                            # print("MESSAGE: Rise and Shine Buddy")
-                            self.adequate_lighting_message_sent = True
-                            self.inadequate_lighting_message_logged = False  # reset the flag
-                            # print(f"5) Darkness Status: {self.too_dark}")
-
-                        # Pop the first element from the buffers
-                        self.light_intensity_detection_buffer.pop(0)
-                        self.darkness_buffer.pop(0)
-                        # print(f"6) Light Intensity Buffer Status: {len(self.light_intensity_detection_buffer)}")
-                        # print(f"7) Dark Frames Buffer Status: {Counter(self.darkness_buffer)}")
-
-                    if not self.too_dark:
+                    if self.lighting_allows(dark):
                         self.shared_buffer.put((self.frame, self.cam_name, self.cam_ip))
-
-                else:
-                    self.shared_buffer.put((self.frame, self.cam_name, self.cam_ip))
 
                 # frame_stats_manager.record_put(self.cam_name)
 

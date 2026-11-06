@@ -97,8 +97,19 @@ def camera_stream_url(camera_config):
     return f"rtsp://{username}:{password}@{ip_address}:{port}/{endpoint}"
 
 
-def crop_and_mask_roi(frame, polygon_points):
+def crop_and_mask_roi(frame, polygon_points, return_mask=False):
+    """The polygon's bounding rectangle, black outside the polygon, and with return_mask also the polygon's mask.
+    Raises ValueError, before any OpenCV call, for a region this frame cannot hold: not 3 or more [x, y] points, a point
+    outside the frame (a point on its right or bottom edge is fine), or no area. Points are pixels of the snapshot the
+    region was drawn on, so a camera whose resolution changed with every point still inside the frame is not caught."""
     polygon_points_np = np.array(polygon_points, dtype=np.int32)
+    height, width = frame.shape[:2]
+    if polygon_points_np.ndim != 2 or polygon_points_np.shape[0] < 3 or polygon_points_np.shape[1] != 2:
+        raise ValueError("needs 3 or more [x, y] points")
+    if polygon_points_np.min() < 0 or polygon_points_np[:, 0].max() > width or polygon_points_np[:, 1].max() > height:
+        raise ValueError(f"does not fit the {width}x{height} camera picture")
+    if cv2.contourArea(polygon_points_np) == 0:
+        raise ValueError("has no area")
 
     # Compute the bounding rectangle for the polygon:
     x_min, y_min, w, h = cv2.boundingRect(polygon_points_np)
@@ -106,6 +117,8 @@ def crop_and_mask_roi(frame, polygon_points):
 
     # --- 1. Crop the bounding rectangle from the frame ---
     roi_cropped = frame[y_min:y_max, x_min:x_max]
+    if roi_cropped.size == 0:
+        raise ValueError(f"does not fit the {width}x{height} camera picture")
 
     # --- 2. Create a mask the size of the crop: boundingRect is a pixel larger than a frame the polygon reaches the edge of ---
     mask = np.zeros(roi_cropped.shape[:2], dtype=np.uint8)
@@ -119,7 +132,7 @@ def crop_and_mask_roi(frame, polygon_points):
     # Everything outside the polygon will become black.
     masked_roi = cv2.bitwise_and(roi_cropped, roi_cropped, mask=mask)
 
-    return masked_roi
+    return (masked_roi, mask) if return_mask else masked_roi
 
 
 def resize_roi_to_area(roi_frame, target_area=FRAME_SIZE):
@@ -137,6 +150,8 @@ def resize_roi_to_area(roi_frame, target_area=FRAME_SIZE):
     # Get the current dimensions of the ROI
     original_height, original_width = roi_frame.shape[:2]
     current_area = original_width * original_height
+    if current_area == 0:
+        raise ValueError("is empty")
 
     # Compute the scale factor to achieve the target area
     scale_factor = (target_area / current_area) ** 0.5
@@ -150,7 +165,7 @@ def resize_roi_to_area(roi_frame, target_area=FRAME_SIZE):
     # print(f"New dimensions: {new_width}x{new_height} (approximate area = {new_width * new_height})")
 
     # Resize the ROI using the computed dimensions
-    resized_roi = cv2.resize(roi_frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
+    resized_roi = cv2.resize(roi_frame, (max(new_width, 1), max(new_height, 1)), interpolation=cv2.INTER_AREA)
     return resized_roi
 
 
