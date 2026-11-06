@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.18.2 (2026-11-06)
+
+## What's Changed
+* fix(insightface): judge InsightFace and its load balancer healthy by /health, the model self-check, not /info by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/124
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.18.1...v2.18.2
+
 ## v2.18.1 (2026-11-06)
 
 ## What's Changed
