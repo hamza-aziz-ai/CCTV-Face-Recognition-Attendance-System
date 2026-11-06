@@ -99,13 +99,14 @@ def test():
     test_clients()
     test_registry_failure()
     test_tiers()
+    test_layouts()
     test_check_bundle()
     test_stage()
     test_prune()
     test_tag_images()
     test_heal_ports()
     test_stable()
-    print("watch decisions ok (13 scenarios, 2 clients kept apart, registry failure notified once, images tagged, bundles checked "
+    print("watch decisions ok (13 scenarios, 2 clients kept apart, layouts kept on rollback, registry failure notified once, images tagged, bundles checked "
           "and staged, old releases pruned, crash loops caught)")
 
 
@@ -170,6 +171,46 @@ def test_tiers():
             (folder / "tier").write_text("standard\n")
             watch.deploy("v4", "bundle@v4", folder)
         assert started == ["v1", "v3", "v4"], started
+
+
+def test_layouts():
+    """A site runs only its own layout's compose files (D-052), and a release without that layout is never started,
+    rollback included: an edge site never falls back to the full stack, which would capture its cameras twice."""
+    tmp = Path(tempfile.mkdtemp())
+    releases = tmp / "releases"
+    sample_bundle(releases / "v9.9.9", "v9.9.9")
+    old = sample_bundle(releases / "v9.9.8", "v9.9.8")
+    manifest = json.loads((old / "release-manifest.json").read_text())
+    del manifest["layouts"]  # a bundle from before D-052
+    (old / "release-manifest.json").write_text(json.dumps(manifest))
+    folder = site(tmp)
+    ups, smokes = [], []
+
+    def fake_run(*cmd):
+        if "up" in cmd:
+            ups.append([Path(cmd[i + 1]).name for i, arg in enumerate(cmd) if arg == "-f"])
+        return ""
+    with mock.patch.multiple(watch, RELEASES=releases, run=fake_run, smoke=smokes.append, stable=lambda s: None,
+                             tag_images=lambda tag: None):
+        for layout, files in (("full", ["docker-compose-main.yml"]), ("central", ["docker-compose-main.yml", "docker-compose-central.yml"]),
+                              ("edge", ["docker-compose-edge.yml"])):
+            (folder / "layout").write_text(layout)
+            assert watch.layout(folder) == layout
+            watch.start("v9.9.9", folder)
+            assert ups[-1] == files, (layout, ups[-1])
+            assert all((releases / "v9.9.9" / name).is_file() for name in files)
+        assert len(smokes) == 2, "the edge layout has no API to smoke-test"
+        for layout in ("central", "edge"):
+            (folder / "layout").write_text(layout)
+            try:
+                watch.start("v9.9.8", folder)
+            except RuntimeError as e:
+                assert f"layout {layout!r}" in str(e)
+            else:
+                raise AssertionError(f"a release without the {layout} layout was started")
+        (folder / "layout").unlink()
+        watch.start("v9.9.8", folder)  # no layout file: the full stack, which every bundle offers
+        assert len(ups) == 4 and ups[-1] == ["docker-compose-main.yml"]
 
 
 def test_registry_failure():

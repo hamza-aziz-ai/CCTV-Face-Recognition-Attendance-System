@@ -13,6 +13,10 @@ Runtime folder (this file is installed there by hand, and is never replaced by a
   pythonw watch.py                   poll; deploy a newer release to each enrolled client; roll back on failure
   python  watch.py --enroll CLIENT   first deploy of a client, by the owner: deploy the newest release now, start watching
   python  watch.py --check           fetch and check the newest bundle without deploying it
+sites/<client>/layout, set by the owner like tier (D-052): absent or full runs the whole stack here; edge, on an edge node,
+only capture (docker-compose-edge.yml); central, for a client an edge captures, the rest (docker-compose-central.yml added).
+A rollback never changes it: a release that does not offer the site's layout is refused, rollback included.
+On Linux (an edge node) run it from cron or a systemd timer with python3; notifications are only logged there.
 Each client is its own compose project: cctv for the owner, cctv-<client> for the others. One client's failure,
 rollback or stopped stack never touches another's. Only the main compose stack is managed; the standalone services
 (InsightFace-REST, Milvus, Kafka, PostgreSQL) must already run.
@@ -40,6 +44,9 @@ IMAGE_PREFIX = "ghcr.io/hamza-aziz-ai/cctv-face-recognition-"
 CLIENT_ID = re.compile(r"[a-z][a-z0-9]{2,29}")
 OWNER = "owner"
 BASE_TIER = "standard"
+LAYOUTS = {"full": ["docker-compose-main.yml"], "central": ["docker-compose-main.yml", "docker-compose-central.yml"],
+           "edge": ["docker-compose-edge.yml"]}
+BASE_LAYOUT = "full"
 # Bind-mounted into the containers: a missing file would be created by Docker as an empty folder
 SITE_FILES = [".env", "master.env", "src/Camera-Configuration/camera_configuration.json"]
 STABLE_SECONDS = 90
@@ -63,7 +70,10 @@ def run(*cmd):
 
 
 def notify(msg):
-    subprocess.run(["msg", os.environ.get("USERNAME", "*"), msg], capture_output=True, creationflags=NO_WINDOW)
+    try:
+        subprocess.run(["msg", os.environ.get("USERNAME", "*"), msg], capture_output=True, creationflags=NO_WINDOW)
+    except OSError:  # no msg outside Windows: the log line before every notification is the record
+        pass
 
 
 def project(site):
@@ -78,9 +88,15 @@ def setting(path, key, default=None):
     return values[-1] if values else default
 
 
+def layout(site):
+    """The owner-set layout (D-052). No container mounts this file; a client without one runs the whole stack here."""
+    file = site / "layout"
+    return file.read_text(encoding="utf-8").strip() if file.is_file() else BASE_LAYOUT
+
+
 def compose(tag, site):
-    return ["docker", "compose", "-p", project(site), "--project-directory", str(site),
-            "-f", str(RELEASES / tag / "docker-compose-main.yml")]
+    files = [arg for name in LAYOUTS[layout(site)] for arg in ("-f", str(RELEASES / tag / name))]
+    return ["docker", "compose", "-p", project(site), "--project-directory", str(site), *files]
 
 
 def latest_release():
@@ -105,9 +121,10 @@ def check_bundle(folder, tag):
     for ref, pinned in manifest["images"].items():
         if not re.fullmatch(rf"{re.escape(IMAGE_PREFIX)}[a-z-]+@sha256:[0-9a-f]{{64}}", pinned):
             raise RuntimeError(f"bundle pins {ref} to {pinned}, not one of our images by digest")
-    text = (folder / "docker-compose-main.yml").read_text(encoding="utf-8")
-    if "${IMAGE_TAG" in text or "build:" in text or re.search(r"^\s*- \.:", text, re.M):
-        raise RuntimeError("bundle compose file builds, mounts the checkout, or has an unpinned app image")
+    for path in folder.glob("docker-compose*.yml"):
+        text = path.read_text(encoding="utf-8")
+        if "${IMAGE_TAG" in text or "build:" in text or re.search(r"^\s*- \.:", text, re.M):
+            raise RuntimeError(f"bundle {path.name} builds, mounts the checkout, or has an unpinned app image")
     return manifest
 
 
@@ -186,7 +203,7 @@ def tag_images(tag):
     try:
         folder = RELEASES / tag
         names = dict(check_bundle(folder, tag)["images"])
-        for path in [folder / "docker-compose-main.yml", *folder.glob("STANDALONE-SERVICES/*/docker-compose*.yml")]:
+        for path in [*folder.glob("docker-compose*.yml"), *folder.glob("STANDALONE-SERVICES/*/docker-compose*.yml")]:
             for name, digest in re.findall(r"(\S+:[^@\s]+)@(sha256:[0-9a-f]{64})", path.read_text(encoding="utf-8")):
                 names[name] = f"{name.rsplit(':', 1)[0]}@{digest}"
     except (OSError, RuntimeError) as e:
@@ -203,10 +220,14 @@ def tag_images(tag):
 
 
 def start(tag, site):
-    """Start the release's stack from its bundle, with this client's config and data."""
+    """Start the release's stack from its bundle, with this client's config and data. Deploys and rollbacks both come here,
+    so a release without this site's layout is never started: bundles from before D-052 offer only the full one."""
+    if layout(site) not in check_bundle(RELEASES / tag, tag).get("layouts", [BASE_LAYOUT]):
+        raise RuntimeError(f"{tag} does not offer layout {layout(site)!r}")
     subprocess.run(["docker", "network", "create", "cctv-edge"], capture_output=True, creationflags=NO_WINDOW)  # fails harmlessly once it exists
     run(*compose(tag, site), "up", "-d", "--pull", "missing", "--no-build", "--wait", "--wait-timeout", "600")
-    smoke(site)
+    if layout(site) != "edge":  # an edge node has no API; up --wait has already waited for every healthcheck
+        smoke(site)
     stable(site)
     tag_images(tag)
 

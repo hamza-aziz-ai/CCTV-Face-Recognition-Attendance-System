@@ -18,9 +18,13 @@ CLIENTS = {
 }
 
 
-def render(project, site, ports):
+CAPTURE = {"mfr-cctv-producer-consumer", "mfr-database-controller", "mfr-feedback-controller"}
+
+
+def render(project, site, ports, *files):
     env = {k: v for k, v in os.environ.items() if k not in ("API_PORT", "DISPLAY_IMAGE_PORT", "DISPLAY_PORT")} | ports
-    out = subprocess.run(["docker", "compose", "-p", project, "--project-directory", str(site), "-f", str(COMPOSE),
+    out = subprocess.run(["docker", "compose", "-p", project, "--project-directory", str(site),
+                          *[arg for f in files or [COMPOSE] for arg in ("-f", str(f))],
                           "config", "--format", "json"], env=env, capture_output=True, text=True, check=True).stdout
     return json.loads(out)["services"]
 
@@ -50,10 +54,25 @@ def test():
                 assert host in services and not services[host].get("ports"), (host, "must be a service, not published")
             # Edge crops reach the collector only through the API's token check, so rolling the API back closes the way in
             assert set(services["dynamic-face-dataset-collector"].get("networks", {})) == {"default"}, "collector on the proxy's network"
+        # D-052: the edge runs exactly the capture half, with its own dependencies; the central site runs the rest
+        site = Path(tmp, "edge").resolve()
+        site.mkdir()
+        edge = render("cctv", site, {"DYNAMIC_FACE_DATA_COLLECTOR_API": "https://c/api/v1/edge", "DYNAMIC_FACE_DATA_COLLECTOR_TOKEN": "t"},
+                      ROOT / "docker-compose-edge.yml")
+        assert set(edge) == CAPTURE, set(edge)
+        assert set(edge["mfr-cctv-producer-consumer"]["depends_on"]) == CAPTURE - {"mfr-cctv-producer-consumer"}
+        assert all(service.get("healthcheck") for service in edge.values())
+        assert {v["source"] for v in edge["mfr-cctv-producer-consumer"]["volumes"] if v["type"] == "volume"} == {"attendance-spool"}
+        assert [int(p["published"]) for p in edge["mfr-cctv-producer-consumer"]["ports"]] == [20010]
+        assert all("deploy" not in service for service in edge.values()), "the edge decodes on the CPU; no GPU reservation"
+        central = render("cctv", site, {"PIPELINE_HEALTH_URL": "http://10.0.0.9:20010/health"}, COMPOSE, ROOT / "docker-compose-central.yml")
+        assert not set(central) & CAPTURE and "dynamic-face-dataset-collector" in central, set(central)
+        assert central["kafka-webapp"]["environment"]["HEALTH_URL"] == "http://10.0.0.9:20010/health"
+        assert central["mfr-api-service"]["depends_on"]["mfr-database-controller"]["required"] is False
     assert published["cctv"] == {9090, 20013, 9095}, published["cctv"]
     assert not published["cctv"] & published["cctv-acme"], published
     print(f"layout ok ({len(CLIENTS)} clients: no container names, own ports, data in own site folder, "
-          f"{len(internal_hosts())} internal services by name)")
+          f"{len(internal_hosts())} internal services by name, edge runs the capture half, central the rest)")
 
 
 if __name__ == "__main__":

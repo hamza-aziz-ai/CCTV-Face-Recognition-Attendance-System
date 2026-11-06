@@ -153,6 +153,22 @@ Since D-046, InsightFace-REST is one image for both architectures, built from `D
 
 `trtexec` on the base alone ran `w600k_r50` at 291 batches/s at batch 1 on the Jetson. Engine file names carry the TensorRT version, so the new engines sit beside the old ones and either image can start.
 
+## Running a client's capture on the Jetson (D-052)
+
+The edge site holds no source, like any host: the watcher, a pull-only registry login and the site folder.
+
+1. On the central host, write the edge's `.env` with only its logins: `python provision.py --edge-env CLIENT`, which writes `sites/CLIENT/edge.env`.
+2. Create its token in the central API container: `python3 src/api/accounts.py add-token <edge name> edge_collector`. It is printed once.
+3. On the edge, make `sites/CLIENT/` with that `.env` plus:
+   - `DYNAMIC_FACE_DATA_COLLECTOR_API=https://<central host>/api/v1/edge` and `DYNAMIC_FACE_DATA_COLLECTOR_TOKEN=<token>`;
+   - for a central host whose name no DNS has, `EDGE_CENTRAL_HOST` and `EDGE_CENTRAL_IP`;
+   - for the proxy's own certificate, its root (`/data/caddy/pki/authorities/local/root.crt` in the proxy container) as `ca/root.crt`, and `EDGE_CA_BUNDLE=/Multi-Person-Face-Recognition/ca/root.crt`.
+4. Add `master.env` (`CLIENT_ID`, the central `IP_ADDRESS`, `INSIGHTFACE_HOST` for the board's own InsightFace-REST), a copy of the client's camera configuration, and a `layout` file holding `edge`.
+5. Run `python3 watch.py --enroll CLIENT` on the edge, then from cron or a systemd timer.
+6. On the central host, add `PIPELINE_HEALTH_URL=http://<edge>:20010/health` to the client's `.env` and write `central` to its `layout`. Run `python provision.py --proxy CLIENT` and `python watch.py --enroll CLIENT`.
+
+After a camera change, copy the configuration to the edge and restart its three services.
+
 ## What this means
 
 - An amd64-only image cannot run here; every image we publish now has an arm64 build (D-044, D-046).
