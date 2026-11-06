@@ -2,42 +2,209 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>ROI Provisioning</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Camera regions · Attendance Display</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; background: #f0f0f0; }
-        h1 { background: #00008b; color: #fff; padding: 10px; margin: 0; text-align: center; font-size: 1.4em; }
-        main { max-width: 1100px; margin: 0 auto; padding: 16px; background: #fff; }
-        .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
-        button { background: #00008b; color: #fff; border: none; border-radius: 4px; padding: 8px 14px; cursor: pointer; }
-        button:disabled { background: #999; cursor: default; }
-        .stage { position: relative; display: inline-block; max-width: 100%; }
-        .stage img { display: block; max-width: 100%; height: auto; }
-        .stage canvas { position: absolute; left: 0; top: 0; cursor: crosshair; }
-        #status { margin: 8px 0; min-height: 1.2em; }
-        #preview { max-width: 100%; margin-top: 12px; border: 1px solid #ccc; }
+        /* The display's theme, as on the sign-in page and the live view. This page runs on this computer only, outside the
+           proxy, so IBM Plex Sans is used when installed and the system font otherwise */
+        :root {
+            --ink: #14202b;
+            --ink-muted: #46535f;
+            --ground: #f3f5f7;
+            --surface: #ffffff;
+            --line: #d5dbe1;
+            --accent: #0b5f63;
+            --accent-dark: #084649;
+            --accent-soft: #e3f0f0;
+            --error: #a32019;
+            --error-soft: #fbeceb;
+            --video: #0d151c;
+        }
+
+        * { box-sizing: border-box; }
+        [hidden] { display: none !important; }
+
+        body {
+            margin: 0;
+            background: var(--ground);
+            color: var(--ink);
+            font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 18px 28px;
+            border-bottom: 1px solid var(--line);
+            background: var(--surface);
+        }
+
+        .brand { display: flex; align-items: center; gap: 0.6rem; color: var(--accent); font-weight: 600; }
+        .brand svg { width: 1.6rem; height: 1.6rem; }
+        h1 { margin: 0; font-size: 1.3rem; font-weight: 600; color: var(--ink); }
+        .note { color: var(--ink-muted); font-size: 0.9rem; }
+
+        main {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 320px;
+            align-items: start;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px 28px;
+        }
+
+        @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .card h2 { margin: 0; padding: 14px 16px; font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--line); }
+        .card .body { padding: 16px; }
+
+        .stage {
+            position: relative;
+            display: grid;
+            place-items: center;
+            min-height: 360px;
+            background: var(--video);
+        }
+
+        .frame { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+        .frame img { display: block; max-width: 100%; height: auto; }
+        .frame canvas { position: absolute; left: 0; top: 0; cursor: crosshair; }
+        .placeholder { color: #9aa7b2; font-size: 0.95rem; text-align: center; padding: 24px; line-height: 1.5; }
+
+        label { display: block; margin-bottom: 0.4rem; font-weight: 600; font-size: 0.9rem; }
+
+        select {
+            width: 100%;
+            padding: 0.6rem 0.7rem;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--ground);
+            color: var(--ink);
+            font: inherit;
+        }
+
+        .stack { display: grid; gap: 10px; align-content: start; }
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+        button {
+            padding: 0.6rem 0.8rem;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--surface);
+            color: var(--ink);
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+        button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+        button.primary:hover:not(:disabled) { background: var(--accent-dark); color: #fff; }
+        button.danger { color: var(--error); }
+        button.danger:hover:not(:disabled) { border-color: var(--error); color: var(--error); background: var(--error-soft); }
+        button:disabled { opacity: 0.45; cursor: default; }
+
+        select:focus-visible, button:focus-visible {
+            outline: 3px solid rgb(11 95 99 / 0.35);
+            outline-offset: 1px;
+            border-color: var(--accent);
+        }
+
+        #status {
+            min-height: 1.4em;
+            margin: 0;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 0.92rem;
+            line-height: 1.4;
+        }
+
+        #status:empty { padding: 0; min-height: 0; }
+        #status.ok { background: var(--accent-soft); color: var(--accent-dark); }
+        #status.bad { background: var(--error-soft); color: var(--error); }
+
+        ol.steps { margin: 0; padding-left: 1.2rem; color: var(--ink-muted); font-size: 0.9rem; line-height: 1.55; }
+        .count { color: var(--ink-muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+
+        #preview { display: block; max-width: 100%; margin: 0 auto; }
     </style>
 </head>
 <body>
-<h1>Custom Region of Interest Provisioning</h1>
+<header>
+    <div class="brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 8a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <path d="M16 10.5 21 8v8l-5-2.5"></path>
+        </svg>
+        <h1>Camera regions</h1>
+    </div>
+    <span class="note">Custom Region of Interest provisioning · this computer only, no sign-in</span>
+</header>
 <main>
-    <p>Pick a camera, then click around the area to recognise faces in. Everything outside the shape is ignored.
-       Points are saved at the camera's full resolution. Restart producer-consumer after saving.</p>
-    <div class="controls">
-        <label for="camera">Camera</label>
-        <select id="camera"></select>
-        <button id="load">Load snapshot</button>
-        <button id="undo" disabled>Undo point</button>
-        <button id="reset" disabled>Clear shape</button>
-        <button id="show-preview" disabled>Preview crop</button>
-        <button id="save" disabled>Save region</button>
-        <button id="remove" disabled>Remove region</button>
+    <div class="stack">
+        <section class="card">
+            <div class="stage">
+                <p class="placeholder" id="placeholder">Pick a camera and load a snapshot to draw its region.</p>
+                <div class="frame" hidden id="frame">
+                    <img id="snapshot" alt="Camera snapshot">
+                    <canvas id="canvas"></canvas>
+                </div>
+            </div>
+        </section>
+        <section class="card preview-card" id="preview-card" hidden>
+            <h2>What recognition will see</h2>
+            <div class="stage"><img id="preview" alt="Preview of the cropped region"></div>
+        </section>
     </div>
-    <div id="status" role="status"></div>
-    <div class="stage">
-        <img id="snapshot" alt="Camera snapshot">
-        <canvas id="canvas"></canvas>
-    </div>
-    <img id="preview" alt="Preview of the cropped region" hidden>
+
+    <aside class="stack">
+        <section class="card">
+            <h2>Camera</h2>
+            <div class="body stack">
+                <div>
+                    <label for="camera">Camera</label>
+                    <select id="camera"></select>
+                </div>
+                <button id="load" class="primary">Load snapshot</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Region <span class="count" id="count"></span></h2>
+            <div class="body stack">
+                <div class="row">
+                    <button id="undo" disabled>Undo point</button>
+                    <button id="reset" disabled>Clear shape</button>
+                </div>
+                <button id="show-preview" disabled>Preview crop</button>
+                <button id="save" class="primary" disabled>Save region</button>
+                <button id="remove" class="danger" disabled>Remove region</button>
+                <p id="status" role="status"></p>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>How it works</h2>
+            <div class="body">
+                <ol class="steps">
+                    <li>Click around the area where faces should be recognised. Everything outside the shape is ignored.</li>
+                    <li>Points are saved at the camera's full resolution, with the picture size.</li>
+                    <li>Without a region, the whole picture is used.</li>
+                    <li>Restart the camera services after saving: producer-consumer and the two controllers, on the edge node if one captures.</li>
+                </ol>
+            </div>
+        </section>
+    </aside>
 </main>
 <script>
     const $ = (id) => document.getElementById(id);
@@ -46,7 +213,7 @@
     // no longer selected is ignored and its size can never be saved with another camera's region
     let saved = {}, savedSize = {}, points = [], shown = null, loads = 0;
 
-    function status(text, error) { $("status").textContent = text; $("status").style.color = error ? "#b00" : "#060"; }
+    function status(text, error) { $("status").textContent = text; $("status").className = text ? (error ? "bad" : "ok") : ""; }
     function camera() { return $("camera").value; }
     function scale() { return img.naturalWidth / img.clientWidth; }
 
@@ -54,13 +221,17 @@
         canvas.width = img.clientWidth; canvas.height = img.clientHeight;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         if (points.length) {
-            ctx.strokeStyle = "#ff0"; ctx.fillStyle = "rgba(255,255,0,0.2)"; ctx.lineWidth = 2;
+            const screen = points.map(([x, y]) => [x / scale(), y / scale()]);
+            ctx.strokeStyle = "#5eead4"; ctx.fillStyle = "rgba(94, 234, 212, 0.22)"; ctx.lineWidth = 2;
             ctx.beginPath();
-            points.forEach(([x, y], i) => { const sx = x / scale(), sy = y / scale(); i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); });
+            screen.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
             if (points.length > 2) ctx.closePath();
             ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#ffffff";
+            for (const [x, y] of screen) { ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); }
         }
         const ready = shown !== null && shown.camera === camera();
+        $("count").textContent = points.length ? `· ${points.length} point${points.length === 1 ? "" : "s"}` : "";
         $("undo").disabled = $("reset").disabled = !points.length;
         $("show-preview").disabled = $("save").disabled = !(ready && points.length > 2);
         $("remove").disabled = !saved[camera()];
@@ -80,26 +251,28 @@
         $("camera").innerHTML = "";
         for (const cam of list) {
             saved[cam.id] = cam.points; savedSize[cam.id] = cam.size;
-            const label = cam.points ? (cam.size ? " (region set)" : " (region set, size not recorded: save it again)") : "";
+            const label = cam.points ? (cam.size ? " · region set" : " · region set, size not recorded: save it again") : "";
             $("camera").add(new Option(cam.id + label, cam.id));
         }
     }
 
     $("load").onclick = async () => {
         status("Reading a frame from the camera...");
-        $("preview").hidden = true;
+        $("preview-card").hidden = true;
         const load = ++loads, cam = camera();
         try {
             const blob = await (await request("/snapshot?camera=" + encodeURIComponent(cam))).blob();
             if (load !== loads) return;
             img.onload = () => {
                 if (load !== loads) return;
+                $("placeholder").hidden = true; $("frame").hidden = false;
                 shown = {camera: cam, size: [img.naturalWidth, img.naturalHeight]};
                 points = (saved[cam] || []).map((p) => [...p]); draw();
                 const old = savedSize[cam];
-                status(saved[cam] && old && (old[0] !== shown.size[0] || old[1] !== shown.size[1])
+                const changed = Boolean(saved[cam] && old && (old[0] !== shown.size[0] || old[1] !== shown.size[1]));
+                status(changed
                     ? `The region was drawn on a ${old[0]}x${old[1]} picture; the camera now sends ${shown.size[0]}x${shown.size[1]}. Draw it again.`
-                    : "Click to add points.", Boolean(saved[cam] && old && (old[0] !== shown.size[0] || old[1] !== shown.size[1])));
+                    : `Snapshot ${shown.size[0]}x${shown.size[1]}. Click to add points.`, changed);
             };
             img.src = URL.createObjectURL(blob);
         } catch (e) { if (load === loads) status(e.message, true); }
@@ -119,8 +292,8 @@
                 method: "POST", headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({camera: camera(), points}),
             })).blob();
-            $("preview").src = URL.createObjectURL(blob); $("preview").hidden = false;
-            status("This is what the producer will see.");
+            $("preview").src = URL.createObjectURL(blob); $("preview-card").hidden = false;
+            status("Below is what recognition will see.");
         } catch (e) { status(e.message, true); }
     };
 
@@ -137,7 +310,10 @@
     }
     $("save").onclick = () => store(points, "Region saved.");
     $("remove").onclick = () => { points = []; store(null, "Region removed."); };
-    $("camera").onchange = () => { loads++; shown = null; img.removeAttribute("src"); points = []; $("preview").hidden = true; draw(); status(""); };
+    $("camera").onchange = () => {
+        loads++; shown = null; img.removeAttribute("src"); points = [];
+        $("frame").hidden = true; $("placeholder").hidden = false; $("preview-card").hidden = true; draw(); status("");
+    };
 
     loadCameras().then(draw).catch((e) => status(e.message, true));
 </script>
