@@ -95,6 +95,11 @@ class IPCamera:
         self.cam_name = cam_name
         self.cam_ip = camera_config["ip_address"]
         self.roi = camera_config["masking-coordinates"]
+        # The size of the snapshot the region was drawn on (ROI page); regions saved before it was recorded have none
+        self.roi_size = camera_config.get("masking-frame-size")
+        if CROP_ROI and self.roi is not None and self.roi_size is None:
+            multicam_server_logger.warning(f"Region of interest of {cam_name} has no recorded frame size, so a change of the "
+                                           "camera's resolution would go unnoticed: save it again on the ROI page")
         # Map camera to its corresponding kafka topic and partition
         self.kafka_topic_name, self.topic_partition = camera_to_topic_and_partition[self.cam_name]
         # Create Kafka Producer
@@ -156,6 +161,9 @@ class IPCamera:
         blend the black outside the region into its edge. Without one, a FRAME_WIDTH x FRAME_HEIGHT thumbnail is judged.
         Raises ValueError when the region does not fit the frame."""
         if CROP_ROI and self.roi is not None:
+            height, width = frame.shape[:2]
+            if self.roi_size is not None and [width, height] != list(self.roi_size):
+                raise ValueError(f"was drawn on a {self.roi_size[0]}x{self.roi_size[1]} picture; the camera now sends {width}x{height}")
             roi, mask = crop_and_mask_roi(frame, self.roi, return_mask=True)
             dark = DARKNESS_DETECTION and self.brightness(roi, mask) < DARKNESS_THRESHOLD
             return resize_roi_to_area(roi), dark

@@ -42,7 +42,9 @@
 <script>
     const $ = (id) => document.getElementById(id);
     const img = $("snapshot"), canvas = $("canvas"), ctx = canvas.getContext("2d");
-    let saved = {}, points = [];
+    // shown: the snapshot on screen, its camera and size; loads counts snapshot requests, so a late answer for a camera
+    // no longer selected is ignored and its size can never be saved with another camera's region
+    let saved = {}, savedSize = {}, points = [], shown = null, loads = 0;
 
     function status(text, error) { $("status").textContent = text; $("status").style.color = error ? "#b00" : "#060"; }
     function camera() { return $("camera").value; }
@@ -58,7 +60,7 @@
             if (points.length > 2) ctx.closePath();
             ctx.fill(); ctx.stroke();
         }
-        const ready = img.naturalWidth > 0;
+        const ready = shown !== null && shown.camera === camera();
         $("undo").disabled = $("reset").disabled = !points.length;
         $("show-preview").disabled = $("save").disabled = !(ready && points.length > 2);
         $("remove").disabled = !saved[camera()];
@@ -77,19 +79,30 @@
         const list = await (await request("/api/cameras")).json();
         $("camera").innerHTML = "";
         for (const cam of list) {
-            saved[cam.id] = cam.points;
-            $("camera").add(new Option(cam.id + (cam.points ? " (region set)" : ""), cam.id));
+            saved[cam.id] = cam.points; savedSize[cam.id] = cam.size;
+            const label = cam.points ? (cam.size ? " (region set)" : " (region set, size not recorded: save it again)") : "";
+            $("camera").add(new Option(cam.id + label, cam.id));
         }
     }
 
     $("load").onclick = async () => {
         status("Reading a frame from the camera...");
         $("preview").hidden = true;
+        const load = ++loads, cam = camera();
         try {
-            const blob = await (await request("/snapshot?camera=" + encodeURIComponent(camera()))).blob();
-            img.onload = () => { points = (saved[camera()] || []).map((p) => [...p]); draw(); status("Click to add points."); };
+            const blob = await (await request("/snapshot?camera=" + encodeURIComponent(cam))).blob();
+            if (load !== loads) return;
+            img.onload = () => {
+                if (load !== loads) return;
+                shown = {camera: cam, size: [img.naturalWidth, img.naturalHeight]};
+                points = (saved[cam] || []).map((p) => [...p]); draw();
+                const old = savedSize[cam];
+                status(saved[cam] && old && (old[0] !== shown.size[0] || old[1] !== shown.size[1])
+                    ? `The region was drawn on a ${old[0]}x${old[1]} picture; the camera now sends ${shown.size[0]}x${shown.size[1]}. Draw it again.`
+                    : "Click to add points.", Boolean(saved[cam] && old && (old[0] !== shown.size[0] || old[1] !== shown.size[1])));
+            };
             img.src = URL.createObjectURL(blob);
-        } catch (e) { status(e.message, true); }
+        } catch (e) { if (load === loads) status(e.message, true); }
     };
 
     canvas.onclick = (e) => {
@@ -115,7 +128,7 @@
         try {
             const body = await (await request("/api/roi", {
                 method: "POST", headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({camera: camera(), points: newPoints}),
+                body: JSON.stringify(newPoints ? {camera: shown.camera, points: newPoints, size: shown.size} : {camera: camera(), points: null}),
             })).json();
             const selected = camera();
             await loadCameras(); $("camera").value = selected; draw();
@@ -124,7 +137,7 @@
     }
     $("save").onclick = () => store(points, "Region saved.");
     $("remove").onclick = () => { points = []; store(null, "Region removed."); };
-    $("camera").onchange = () => { img.removeAttribute("src"); points = []; $("preview").hidden = true; draw(); status(""); };
+    $("camera").onchange = () => { loads++; shown = null; img.removeAttribute("src"); points = []; $("preview").hidden = true; draw(); status(""); };
 
     loadCameras().then(draw).catch((e) => status(e.message, true));
 </script>

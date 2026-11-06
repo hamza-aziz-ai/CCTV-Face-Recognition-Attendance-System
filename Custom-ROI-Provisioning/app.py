@@ -5,6 +5,8 @@ The producer crops every frame to the camera's `masking-coordinates` polygon bef
 (src/util/generic_utilities.py: crop_and_mask_roi). This page shows a full-resolution snapshot of a camera, lets you
 click the polygon on it, previews the crop with the producer's own function, and saves the points to
 src/Camera-Configuration/camera_configuration.json. The producer reads that file at start, so restart it afterwards.
+The points are pixels of the snapshot, so its size is saved with them as `masking-frame-size`, and only when a fresh frame
+from the camera still has that size: the producer then refuses the region if the camera's resolution later changes.
 
 Author: Kshitij Parashar
 Date: 4 October 2023
@@ -50,22 +52,37 @@ def find_camera(config, camera_id):
     raise KeyError(f"no camera {camera_id!r} in the camera configuration")
 
 
-def valid_points(points):
-    """A polygon as the producer expects it: at least 3 [x, y] integer points inside the frame."""
+def valid_size(size):
+    """[width, height] of the snapshot the points were drawn on."""
+    if (not isinstance(size, list) or len(size) != 2
+            or not all(isinstance(v, int) and not isinstance(v, bool) and 0 < v <= MAX_COORDINATE for v in size)):
+        raise ValueError(f"not a snapshot size: {size!r}")
+    return size
+
+
+def valid_points(points, size=(MAX_COORDINATE, MAX_COORDINATE)):
+    """A polygon as the producer expects it: at least 3 [x, y] integer points inside the frame (its right and bottom
+    edges included)."""
     if not isinstance(points, list) or not 3 <= len(points) <= MAX_POINTS:
         raise ValueError(f"a region needs 3 to {MAX_POINTS} points")
     for point in points:
         if (not isinstance(point, list) or len(point) != 2
-                or not all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= MAX_COORDINATE for v in point)):
+                or not all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= limit for v, limit in zip(point, size))):
             raise ValueError(f"not a point inside the frame: {point!r}")
     return points
 
 
-def save_points(camera_id, points):
-    """Set one camera's masking-coordinates (None clears it). Written to a temporary file in the same folder and
-    swapped in, so a crash never leaves a half-written configuration for the producer."""
+def save_points(camera_id, points, size=None):
+    """Set one camera's masking-coordinates and the masking-frame-size they were drawn on (points None clears both).
+    Written to a temporary file in the same folder and swapped in, so a crash never leaves a half-written configuration
+    for the producer."""
     config = load_config()
-    find_camera(config, camera_id)["masking-coordinates"] = None if points is None else valid_points(points)
+    camera = find_camera(config, camera_id)
+    camera["masking-coordinates"] = points
+    if points is None:
+        camera.pop("masking-frame-size", None)
+    else:
+        camera["masking-frame-size"] = size
     folder = os.path.dirname(os.path.abspath(CAMERA_CONFIGURATION_FILE))
     fd, tmp = tempfile.mkstemp(dir=folder, suffix=".tmp")
     try:
@@ -101,7 +118,8 @@ def index():
 
 @app.get("/api/cameras")
 def list_cameras():
-    return jsonify([{"id": cid, "points": camera.get("masking-coordinates")} for cid, camera in cameras(load_config())])
+    return jsonify([{"id": cid, "points": camera.get("masking-coordinates"), "size": camera.get("masking-frame-size")}
+                    for cid, camera in cameras(load_config())])
 
 
 @app.get("/snapshot")
@@ -127,14 +145,40 @@ def preview():
         return jsonify(error=str(e)), 502
 
 
+class SizeChanged(ValueError):
+    pass
+
+
+def current_size(camera, drawn):
+    """The camera's frame size now, which must still be the size of the snapshot the region was drawn on: saving old
+    points with a new size would hide exactly the change the size is there to catch."""
+    height, width = snapshot(camera).shape[:2]
+    if [width, height] != drawn:
+        raise SizeChanged(f"the camera now sends {width}x{height}, but the region was drawn on a {drawn[0]}x{drawn[1]} "
+                          "snapshot. Load a new snapshot and draw it again")
+    return drawn
+
+
 @app.post("/api/roi")
 def update_roi():
-    """Save (or, with points null, clear) one camera's region."""
+    """Save (or, with points null, clear) one camera's region. Saving needs the size of the snapshot it was drawn on,
+    checked against a fresh frame; clearing needs no camera."""
     body = request.get_json(silent=True) or {}
     try:
-        save_points(body.get("camera", ""), body.get("points"))
+        camera_id = body.get("camera", "")
+        if body.get("points") is None:
+            find_camera(load_config(), camera_id)
+            save_points(camera_id, None)
+        else:
+            size = valid_size(body.get("size"))
+            points = valid_points(body.get("points"), size)
+            save_points(camera_id, points, current_size(find_camera(load_config(), camera_id), size))
+    except SizeChanged as e:
+        return jsonify(error=str(e)), 409
     except (KeyError, ValueError) as e:
         return jsonify(error=str(e)), 400
+    except ConnectionError as e:
+        return jsonify(error=str(e)), 502
     return jsonify(saved=body.get("camera"), note="Restart producer-consumer to apply it.")
 
 
