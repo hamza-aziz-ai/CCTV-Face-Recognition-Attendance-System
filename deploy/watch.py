@@ -40,6 +40,9 @@ SITES = ROOT / "sites"
 RELEASES = ROOT / "releases"
 CHANNEL = "ghcr.io/hamza-aziz-ai/cctv-face-recognition-deploy:stable"
 IMAGE_PREFIX = "ghcr.io/hamza-aziz-ai/cctv-face-recognition-"
+# The bundle image is files only (FROM scratch, never run) and is published for amd64; an arm64 edge node (D-052) asks
+# for that one too, or its pull finds no image for its own platform
+BUNDLE_PLATFORM = "linux/amd64"
 # Same rule as src/parameters.py; the owner's stack keeps the project name it had before D-036
 CLIENT_ID = re.compile(r"[a-z][a-z0-9]{2,29}")
 OWNER = "owner"
@@ -102,9 +105,9 @@ def compose(tag, site):
 def latest_release():
     """The release :stable points at, and its bundle by digest; None while nothing is published."""
     try:
-        run("docker", "pull", "-q", CHANNEL)
+        run("docker", "pull", "-q", "--platform", BUNDLE_PLATFORM, CHANNEL)
     except RuntimeError as e:
-        if "not found" in str(e) or "manifest unknown" in str(e):
+        if ("not found" in str(e) or "manifest unknown" in str(e)) and "no matching manifest" not in str(e):
             return None
         raise
     tag = run("docker", "inspect", "--format", '{{index .Config.Labels "org.opencontainers.image.version"}}', CHANNEL)
@@ -136,7 +139,7 @@ def stage(tag, ref):
     tmp = RELEASES / f".{tag}.tmp"
     shutil.rmtree(tmp, ignore_errors=True)
     RELEASES.mkdir(exist_ok=True)
-    container = run("docker", "create", ref)
+    container = run("docker", "create", "--platform", BUNDLE_PLATFORM, ref)
     try:
         run("docker", "cp", f"{container}:/bundle", str(tmp))
     finally:
