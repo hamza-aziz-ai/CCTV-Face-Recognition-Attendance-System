@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.15.3 (2026-11-06)
+
+## What's Changed
+* fix(camera): judge darkness on the region's own pixels, stop keeping frames only to count them, and report a region that does not fit instead of reconnecting forever by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/113
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.15.2...v2.15.3
+
 ## v2.15.2 (2026-11-06)
 
 ## What's Changed
