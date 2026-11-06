@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.19.0 (2026-11-06)
+
+## What's Changed
+* feat(roi): give the region page the display's theme and a console layout by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/126
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.18.3...v2.19.0
+
 ## v2.18.3 (2026-11-06)
 
 ## What's Changed
