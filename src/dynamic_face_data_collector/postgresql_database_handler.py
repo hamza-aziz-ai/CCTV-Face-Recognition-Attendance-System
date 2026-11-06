@@ -210,6 +210,7 @@ def insert_face_data(person_id: str, image_path: str, camera_name: str, cluster_
             conn.commit()
     except Exception as error:
         dynamic_face_data_collector_logger.error(f"Error while inserting data: {error}")
+        raise
 
 
 def delete_face_data(person_id: str, worst_image_file_path: str, cluster_id: str):
@@ -238,6 +239,7 @@ def delete_face_data(person_id: str, worst_image_file_path: str, cluster_id: str
             conn.commit()
     except Exception as error:
         dynamic_face_data_collector_logger.error(f"Error while deleting data: {error}")
+        raise
 
 
 def get_latest_timestamp(rows: List[RealDictRow]) -> datetime:

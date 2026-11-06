@@ -4,7 +4,7 @@ Each client's accounts live in its own database, so a login cannot reach another
   python3 src/api/accounts.py add-user NAME ROLE        password from stdin
   python3 src/api/accounts.py set-password NAME         password from stdin; ends the user's sessions
   python3 src/api/accounts.py disable-user NAME         ends the user's sessions
-  python3 src/api/accounts.py add-token NAME ROLE       prints the token once
+  python3 src/api/accounts.py add-token NAME ROLE       prints the token once; ROLE may also be edge_collector
   python3 src/api/accounts.py revoke-token NAME
 """
 import getpass
@@ -27,6 +27,8 @@ from custom_logging import api_logger  # noqa: E402
 from parameters import LOGIN_ATTEMPTS, LOGIN_WINDOW_MINUTES, SESSION_HOURS  # noqa: E402
 
 ROLES = ("client_admin", "enrolment_operator", "viewer")
+# Machine tokens only: an edge node uploading face crops (edge.py). No person can hold it, and no page or report allows it
+MACHINE_ROLES = ("edge_collector",)
 COOKIE = "__Host-session"  # the prefix makes browsers require Secure, Path=/ and no Domain: a host-only cookie
 PASSWORD_LENGTHS = (12, 128)
 SCRYPT = {"n": 2 ** 17, "r": 8, "p": 1, "maxmem": 256 * 1024 * 1024, "dklen": 32}  # OWASP's minimum for scrypt
@@ -215,8 +217,9 @@ def command(args: list) -> str:
     action, name = args[0], args[1]
     with psycopg2.connect(dbname=POSTGRESQL_DATABASE, user=user, password=password, host=POSTGRESQL_HOST, port=POSTGRESQL_PORT) as conn, conn.cursor() as cursor:
         cursor.execute(SCHEMA)
-        if action in ("add-user", "add-token") and args[2] not in ROLES:
-            raise SystemExit(f"Role must be one of {', '.join(ROLES)}")
+        allowed = ROLES + MACHINE_ROLES if action == "add-token" else ROLES
+        if action in ("add-user", "add-token") and args[2] not in allowed:
+            raise SystemExit(f"Role must be one of {', '.join(allowed)}")
         if action in ("add-user", "set-password"):
             secret = sys.stdin.readline().strip() if not sys.stdin.isatty() else getpass.getpass("Password: ")
             if not PASSWORD_LENGTHS[0] <= len(secret) <= PASSWORD_LENGTHS[1]:

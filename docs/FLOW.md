@@ -329,7 +329,7 @@ Report routes:
 ```mermaid
 flowchart TB
     MATCH["`(1) Strict primary match with its face crop and landmarks`"]:::entry
-    POST["`(2) POST /faces to the face collector, internal :8000, in the background`"]:::step
+    POST["`(2) POST /faces to the face collector, internal :8000, in the background; an edge node through the API with its token`"]:::step
     VALID{"`(3) At least two landmarks and a readable image?`"}:::decision
     FAIL["`Record failed, answer 207`"]:::error
     CLUSTER{"`(4) Camera in the camera configuration?`"}:::decision
@@ -363,6 +363,7 @@ flowchart TB
     BETTER -->|"`yes`"| REPLACE --> SAVE
     BETTER -->|"`no`"| SKIP
     SAVE --> STORE
+    SAVE -->|"`file or database error`"| FAIL
     NIGHT --> ROWS
     STORE --> ROWS
     ROWS --> EMBED --> ANY
@@ -381,12 +382,12 @@ flowchart TB
 **Key:** the sender is `collect_cropped_face_data()` in `src/inference_data_cleaner.py` and `submit_faces_async()` in `src/util/face_data_client.py`. The collector is `src/dynamic_face_data_collector/` (`api.py`, `face_saver.py`, `postgresql_database_handler.py`). The updater is `src/automatic-vector-db-updation/milvus_updater.py`.
 
 1. When `SAVE_FACE = True`, the recognition thread collects the crops of strict primary matches, with score, camera and landmarks.
-2. `submit_faces_async()` posts them as JSON to `http://dynamic-face-dataset-collector:8000/faces`, by service name, from a pool of 16 threads, so recognition does not wait.
-3. A record needs at least two landmarks and a decodable base64 image. A failed record is reported in a 207 answer; the others still count.
+2. `submit_faces_async()` posts them as JSON to `http://dynamic-face-dataset-collector:8000/faces`, by service name, from a pool of 16 threads, so recognition does not wait. At most 16 more batches wait; past that a batch is dropped and counted in the log, so a slow collector never grows memory. A 207 answer, an error or no answer is logged as crops not kept. An edge node has no collector: `DYNAMIC_FACE_DATA_COLLECTOR_API` points at `https://<central host>/api/v1/edge`, and `DYNAMIC_FACE_DATA_COLLECTOR_TOKEN`, a machine token with the `edge_collector` role, goes with it, only over verified HTTPS. The API (`src/api/edge.py`) checks the token, refuses bodies over 8 MiB and forwards to this client's own collector, which has no route of its own (D-043).
+3. A record needs a person ID that is a plain folder name, a finite score, two to ten landmarks and a decodable base64 image, at most 500 records a request. A failed record is reported in a 207 answer; the others still count.
 4. `get_cluster()` maps the camera to its cluster from the camera configuration, read when the collector starts (`camera_clusters()` in `src/util/generic_utilities.py`): the camera's `"cluster"` key, so cameras can share one, otherwise the camera's own full name. A camera that is not configured fails the record, and a cluster that is not a plain folder name stops the collector at start. The example configuration and the owner's site give the maingate entry and exit cameras 1 to 10 their old `cluster-1` to `cluster-4`, so crops kept before keep their group. Changing a camera's cluster neither moves nor retires crops already kept; restart the collector after cameras change.
 5. The pupil distance, from the first two landmarks, must be at least `PUPIL_DISTANCE_THRESHOLD = 28` px. A smaller face is not kept.
 6. Each person keeps at most `NUMBER_OF_PICTURES = 3` crops per cluster. When the cluster is full, the worst crop (smaller pupil distance, then lower score) is replaced if the new one is better; otherwise the new crop is not kept. `src/dynamic_face_data_collector/test_face_saver.py` checks both cases in CI.
-7. The crop is saved under `DYNAMIC-FACIAL-RECOGNITION-DATASET/<person>/<cluster>/`, `meta.json` is updated, and a `face_images` row is inserted with `is_processed` false.
+7. The crop is saved under `DYNAMIC-FACIAL-RECOGNITION-DATASET/<person>/<cluster>/`, `meta.json` is updated, and a `face_images` row is inserted with `is_processed` false. If the file or the row cannot be written, the record fails in the 207 answer and the file is removed; until 2026-11-06 the error was only logged and the answer was 200.
 8. The updater container runs `process_unprocessed_images_from_db()` every day at 01:00, container time. The module docstring still says 12:00 AM.
 9. It selects every `face_images` row not yet processed and groups them by person.
 10. Each crop is read from disk and sent to InsightFace-REST on 6385 for its embedding.

@@ -260,7 +260,7 @@ Each client is at `https://<client>.localhost`, or `SITE_HOST` in its site `.env
 docker exec -it cctv-mfr-api-service-1 python3 src/api/accounts.py add-user NAME client_admin
 ```
 
-Roles are `client_admin`, `enrolment_operator` and `viewer`. Report routes are under `/api/`. Machines use `add-token NAME ROLE` and send `Authorization: Bearer <token>`.
+Roles are `client_admin`, `enrolment_operator` and `viewer`. Report routes are under `/api/`. Machines use `add-token NAME ROLE` and send `Authorization: Bearer <token>`. An edge node's token has the machine-only role `edge_collector`, which can only upload face crops to `/api/v1/edge/faces` and opens nothing else.
 
 Trust the proxy's private CA once on each device. On this host, in PowerShell:
 

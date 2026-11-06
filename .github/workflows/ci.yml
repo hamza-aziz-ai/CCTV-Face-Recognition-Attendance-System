@@ -208,6 +208,10 @@ jobs:
         if: matrix.service == 'producer-consumer'
         run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test src/util/face_vectors.py demo
       # Attendance batches are retried unchanged until confirmed saved, refused payloads and a full queue are counted as lost
+      # Crops a collector did not keep (207, errors) count as failures; an edge token goes only over https; a slow collector drops batches
+      - name: Face crop sender
+        if: matrix.service == 'producer-consumer'
+        run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test src/util/test_face_data_client.py
       - name: Attendance sender
         if: matrix.service == 'producer-consumer'
         run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test src/util/attendance_sender.py

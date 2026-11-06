@@ -1,5 +1,6 @@
 """Accounts on a real PostgreSQL: the role matrix, CSRF, throttling, expiry and revocation, through the running API.
 CI runs this against a throwaway PostgreSQL, with IP_ADDRESS, POSTGRES_USER, POSTGRES_PASSWORD, CLIENT_ID=owner and LEGACY_SHARED_SERVICES=1 set."""
+import http.server
 import io
 import json
 import os
@@ -32,6 +33,7 @@ admin_connection.cursor().execute(f'CREATE DATABASE "{POSTGRESQL_DATABASE}"')
 
 import accounts  # noqa: E402
 import app as api  # noqa: E402
+import edge  # noqa: E402
 import enrolment  # noqa: E402
 from enrolment_store import MemoryStore  # noqa: E402
 
@@ -176,8 +178,58 @@ def test():
     assert requests.post(f"{BASE}/auth/login", json={"username": "nobody", "password": GOOD}).status_code == 401
 
     check_enrolment()
+    check_edge()
     server.should_exit = True
     print("accounts ok (role matrix, live view roles and latest recognitions, CSRF, logout, expiry, disabled users, password change, machine tokens, throttling, no key in the URL)")
+
+
+def check_edge():
+    """Edge face crops (D-043): only an edge_collector machine token gets through, to this client's collector only."""
+    received = []
+
+    class Collector(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            received.append((self.rfile.read(int(self.headers["Content-Length"])), self.headers.get("Authorization")))
+            body = b'{"message": "1 succeeded, 1 failed", "failures": [{"index": 1}]}'
+            self.send_response(207)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    collector = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Collector)
+    threading.Thread(target=collector.serve_forever, daemon=True).start()
+    url = f"{BASE}/v1/edge/faces"
+    crops = b'[{"person_id": "p-001"}]'
+    try:
+        cli("add-user", "edge-person", "edge_collector", stdin=GOOD)
+        raise AssertionError("a person must not hold the edge_collector role")
+    except SystemExit:
+        pass
+    edge_token = {"Authorization": f"Bearer {cli('add-token', 'jetson-1', 'edge_collector')}"}
+    viewer = {"Authorization": f"Bearer {cli('add-token', 'erp-read', 'viewer')}"}
+    with mock.patch.object(edge, "COLLECTOR", f"http://127.0.0.1:{collector.server_port}/faces"):
+        assert requests.post(url, data=crops).status_code == 401
+        assert requests.post(url, data=crops, headers={"Authorization": "Bearer another-clients-token"}).status_code == 401
+        assert requests.post(url, data=crops, headers=viewer).status_code == 403
+        assert not received
+        r = requests.post(url, data=crops, headers=edge_token)
+        assert r.status_code == 207 and r.json()["failures"] == [{"index": 1}], r.text  # the collector's partial answer reaches the edge
+        assert received == [(crops, None)], received  # the edge's token stops at the API
+        assert requests.post(url, data=b"x" * (edge.MAX_BODY + 1), headers=edge_token).status_code == 413
+        # The token opens nothing else: not the proxy's page gate, the live view, enrolment or reports
+        for path in ("/auth/check", "/auth/me", "/live/cameras", "/fetch_module_data"):
+            assert get(path, edge_token) == 403, path
+        assert requests.get(f"{BASE}/v1/persons", headers=edge_token).json() == {"error": "role_cannot_enrol"}
+        collector.shutdown()
+        collector.server_close()
+        assert requests.post(url, data=crops, headers=edge_token).json() == {"error": "collector_unavailable"}
+        cli("revoke-token", "jetson-1")
+        assert requests.post(url, data=crops, headers=edge_token).status_code == 401
+    assert len(received) == 1
+    print("edge crops ok (edge_collector token forwarded with the collector's 207, missing, unknown, wrong-role and revoked tokens refused, too large refused, nothing else opened)")
 
 
 def check_enrolment():

@@ -253,7 +253,11 @@ CLIENT_NAME = os.getenv("CLIENT_NAME") or CLIENT_ID
 NUMBER_OF_PICTURES = 3
 
 # API address for dynamic facial dataset collection service
-DYNAMIC_FACE_DATA_COLLECTOR_API = "http://dynamic-face-dataset-collector:8000"  # service name: this client's own collector (D-036)
+DYNAMIC_FACE_DATA_COLLECTOR_LOCAL = "http://dynamic-face-dataset-collector:8000"  # service name: this client's own collector (D-036)
+# An edge node has no collector: it sends to https://<central host>/api/v1/edge with DYNAMIC_FACE_DATA_COLLECTOR_TOKEN, an
+# edge_collector machine token, checked against REQUESTS_CA_BUNDLE when the site's certificate is its own (D-043)
+DYNAMIC_FACE_DATA_COLLECTOR_API = os.getenv("DYNAMIC_FACE_DATA_COLLECTOR_API") or DYNAMIC_FACE_DATA_COLLECTOR_LOCAL
+DYNAMIC_FACE_DATA_COLLECTOR_TOKEN = os.getenv("DYNAMIC_FACE_DATA_COLLECTOR_TOKEN")
 
 # PostgreSQL Database Name
 POSTGRESQL_DATABASE_NAME = client_name("Face_Recognition_Database")

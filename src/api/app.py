@@ -39,6 +39,7 @@ from parameters import (
 )
 from custom_logging import api_logger
 import accounts
+import edge
 import enrolment
 import live
 
@@ -334,6 +335,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(accounts.router)
 app.include_router(live.router)
 app.include_router(enrolment.router)
+app.include_router(edge.router)
 
 
 @app.exception_handler(enrolment.Refused)

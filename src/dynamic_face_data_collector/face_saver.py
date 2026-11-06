@@ -167,15 +167,20 @@ def save_face_if_better(
             new_entry["filename"] = filename
             file_path = os.path.join(save_dir, filename)
             try:
-                cv2.imwrite(file_path, face_crop)
+                if not cv2.imwrite(file_path, face_crop):
+                    raise OSError(f"could not write {file_path}")
                 metadata.append(new_entry)
                 insert_face_data(person_id, file_path, camera_name, cluster_name, pupil_distance, face_matching_score)
                 save_metadata(metadata_path, metadata)
                 logger.info(f"Updated facial dataset for {person_id}. Image saved at {file_path}, metadata updated at {metadata_path}")
             except Exception as error:
                 logger.error(f"Unable to update face data for {person_id} at {file_path} due to error: {error}")
+                if os.path.exists(file_path):  # no row for it, so the nightly update would never see it
+                    os.remove(file_path)
+                raise
 
         except Exception as exc:
             logger.error(
                 f"Failed to save face for {person_id} from {camera_name}: {exc}"
             )
+            raise
