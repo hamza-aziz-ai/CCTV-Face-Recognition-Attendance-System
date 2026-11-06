@@ -66,7 +66,7 @@ class Arcface(AbstractArcFace):
         rec_name (str): The file path to the TensorRT engine for the ArcFace model.
         input_mean (float, optional): The mean value for input normalization. Defaults to 0.
         input_std (float, optional): The standard deviation for input normalization. Defaults to 1.
-        swapRB (bool, optional): Whether to swap the red and blue channels in input images. Defaults to False.
+        swapRB (bool, optional): Whether to swap the red and blue channels in input images. Defaults to True, like the ONNX and Triton backends: images arrive BGR and ArcFace models were trained on RGB.
 
     Attributes:
         rec_model (TrtModel): The TensorRT model instance.
@@ -86,7 +86,7 @@ class Arcface(AbstractArcFace):
     def __init__(self, rec_name: str = '/models/trt-engines/arcface_r100_v1/arcface_r100_v1.plan',
                  input_mean: float = 0.,
                  input_std: float = 1.,
-                 swapRB=False,
+                 swapRB=True,
                  **kwargs):
         self.rec_model = TrtModel(rec_name)
         self.input_mean = input_mean

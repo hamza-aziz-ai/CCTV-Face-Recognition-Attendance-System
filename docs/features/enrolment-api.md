@@ -61,6 +61,7 @@ The pose and blur limits were calibrated on one person's 10 real photos on 2026-
 - `enrolment-worker` (the producer-consumer image) takes the oldest pending job, locked so a second worker skips it.
 - Rejected: the photos are deleted at once and only the reasons stay. A job still pending after 24 hours expires the same way.
 - Accepted: the photos move to `persons/<person_id>/`, the vectors are saved to the site's `FACIAL-RECOGNITION-DATASET/<person_id>/vectors.parquet`, and `face_vectors.publish` rebuilds Milvus (D-030) under a PostgreSQL advisory lock, so two publishes never race. A re-enrolment replaces the person's vectors and photos.
+- After the recognition model or its preprocessing changes, every saved vector is stale. `python3 src/util/enrolment_worker.py reembed`, run in the `enrolment-worker` container, takes each enrolled person's vectors again from their photos (the bucket, or the person's folder for a command-line enrolment) and publishes once. It changes nothing unless every person's photos pass; the previous Milvus version stays for `face_vectors.py use <n>`. First used 2026-11-06 for the colour-order fix: InsightFace-REST's TensorRT backend fed `w600k_r50` BGR, but the model was trained on RGB.
 
 ## Deletion (8e)
 
