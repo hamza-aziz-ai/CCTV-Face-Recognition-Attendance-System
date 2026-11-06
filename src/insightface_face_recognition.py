@@ -48,7 +48,6 @@ def stop_attendance_sender():
         _attendance_sender.stop()
 
 # kafka_CONSUMER = create_kafka_CONSUMER()
-error_encounter = 0
 
 
 @functools.cache
@@ -101,12 +100,10 @@ def batched_frame_face_recognition(
         embeddings_collection: A collection of embeddings of known faces
         staging_collection: A collection of embeddings of faces captured from CCTV footage
     """
-    global error_encounter    # , kafka_CONSUMER
     load_with_retry(staging_collection)
 
     # USE EXCEPTION HANDLING TO HANDLE ERRORS THAT MAY OCCUR DURING BATCH PROCESSING
     try:
-        error_encounter = 0
         ################################################################################################################
         # PERFORM FACE RECOGNITION ON THE BATCH OF FRAMES
         ################################################################################################################
@@ -262,18 +259,8 @@ def batched_frame_face_recognition(
         ################################################################################################################
 
     except Exception as e:
-        error_encounter += 1
-
-        if error_encounter >= 10:
-            # error_message = "ERROR: Unexpected Error Occurred"
-
-            # for camera in IP_CAMS:
-            #     kafka_topic = f"{KAFKA_TOPIC_NAME_PREFIX}_{camera}"
-            #     kafka_CONSUMER.produce(kafka_topic, key="ERROR", value=error_message.encode('utf-8'))
-            #     kafka_CONSUMER.flush()
-
-            multicam_server_logger.error(
-                f'Thread: {thread_name} - Error in batched_face_locations: {e}'
-            )
-
-            error_encounter = 0
+        # The counter used to be reset at the top of every batch, so this was never logged; each failure is now logged
+        # and reported to the caller, which counts failures in a row for the health check (util/pipeline_health.py)
+        multicam_server_logger.error(f"Thread: {thread_name} - batch failed: {type(e).__name__}: {e}")
+        return False
+    return True

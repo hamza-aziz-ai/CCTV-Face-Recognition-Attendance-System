@@ -29,6 +29,8 @@ RUN $PIP_INSTALL cupy-cuda13x cython setuptools && $PIP_INSTALL --no-build-isola
 WORKDIR /app
 COPY if_rest /app/if_rest
 COPY entrypoint.sh /app/entrypoint.sh
+# GET /health recognises test_images/Stallone.jpg under root_images_dir (/images); without it the self-check always failed
+COPY test_images/Stallone.jpg /images/test_images/Stallone.jpg
 
 ENTRYPOINT [ "bash" ]
 CMD ["entrypoint.sh"]

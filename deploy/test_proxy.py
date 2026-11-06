@@ -38,6 +38,10 @@ LIVE = """:8888 {
 	respond "live {path}" 200
 }
 """
+HEALTH = """:20010 {
+	respond "health {path}" 200
+}
+"""
 
 
 def docker(*args, check=True):
@@ -76,12 +80,13 @@ def test():
             pass
         else:
             raise AssertionError("a host name with Caddy syntax was accepted")
-        names = ("cctv-acme-mfr-api-service-1", "cctv-acme-kafka-webapp-1", "cctv-acme-live-video-1", "proxytest-caddy")
+        names = ("cctv-acme-mfr-api-service-1", "cctv-acme-kafka-webapp-1", "cctv-acme-live-video-1", "proxytest-caddy", "cctv-acme-mfr-cctv-producer-consumer-1")
         docker("network", "create", NETWORK)
         try:
             stand_in(names[0], API, folder)
             stand_in(names[1], DISPLAY, folder)
             stand_in(names[2], LIVE, folder)
+            stand_in(names[4], HEALTH, folder)
             docker("run", "-d", "--name", names[3], "--network", NETWORK, "-p", f"127.0.0.1:{PORT}:443", "-v", f"{ROOT / 'STANDALONE-SERVICES/Proxy/Caddyfile'}:/etc/caddy/Caddyfile:ro", "-v", f"{sites.parent / 'proxy'}:/routes:ro", IMAGE)
             for _ in range(40):
                 if fetch("/auth/sign-in")[0] == "200":
@@ -106,10 +111,13 @@ def test():
             assert live[0] == "302" and live[1].endswith("/auth/sign-in"), live
             assert fetch("/live/maingate_entry_cctv-camera-1/", "session=operator")[0] == "403"
             assert fetch("/live/maingate_entry_cctv-camera-1/", "session=good")[::2] == ("200", "live /live/maingate_entry_cctv-camera-1/")
+            # Readiness for displays outside the stack needs no session, and only /health itself is open (D-051)
+            assert fetch("/health")[::2] == ("200", "health /health")
+            assert fetch("/health/x")[0] == "302"
         finally:
             docker("rm", "-f", *names, check=False)
             docker("network", "rm", NETWORK, check=False)
-    print("proxy ok (signed-out visitors sent to sign-in, display and WebSockets need a session, API routes reachable, API docs closed, live video for viewers only, bad host names refused)")
+    print("proxy ok (signed-out visitors sent to sign-in, display and WebSockets need a session, API routes reachable, API docs closed, live video for viewers only, readiness open at /health only, bad host names refused)")
 
 
 if __name__ == "__main__":

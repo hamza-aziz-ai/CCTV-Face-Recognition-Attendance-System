@@ -12,6 +12,9 @@ from multiprocessing_shared_buffer import MULTIPROCESS_SHARED_BUFFER
 from custom_logging import multicam_server_logger
 from insightface_face_detection import IFRClient
 from insightface_face_recognition import batched_frame_face_recognition
+
+# Progress slots (util/pipeline_health.Workers), set by src/main.py before the threads start; None in tests
+workers = None
 from locks import lock
 from multicam_stream_producer import cameras
 from parameters import CAMERA_CONFIGURATION_FILE, \
@@ -40,6 +43,8 @@ def face_recognition(shared_buffer, thread_id: str, embeddings_collection, stagi
     ifr_client = IFRClient(host=INSIGHTFACE_HOST, port=INSIGHTFACE_PORT)
 
     while True:
+        if workers is not None:
+            workers.beat("recognition", thread_id)  # waiting for frames is healthy, as long as this loop keeps turning
         # consumption_start_time = time.perf_counter()
 
         # Apply thread lock to the shared buffer
@@ -81,7 +86,7 @@ def face_recognition(shared_buffer, thread_id: str, embeddings_collection, stagi
 
         # recognition_start_time = time.perf_counter()
         # Perform batched face recognition on the frames in the buffer
-        batched_frame_face_recognition(
+        ok = batched_frame_face_recognition(
             ifr_client=ifr_client,
             thread_name=thread_id,
             batch_of_frames=batch_of_frames,
@@ -90,6 +95,8 @@ def face_recognition(shared_buffer, thread_id: str, embeddings_collection, stagi
             embeddings_collection=embeddings_collection,
             staging_collection=staging_collection
         )
+        if workers is not None:
+            workers.batch(thread_id, ok)
         # recognition_end_time = time.perf_counter()
         # recognition_total_time = recognition_end_time - recognition_start_time
         # multicam_server_logger.debug(
@@ -136,9 +143,8 @@ def threaded_gpu_face_recognition(shared_buffer, embeddings_collection, staging_
             # Start processes
             threads[i].start()
 
-    # Keep the main thread running while camera threads process
-    for i in range(num_of_threads):
-        threads[i].join()
+    # Handed back to src/main.py, which watches them and stops the container if one dies
+    return threads
 
 
 def multiprocess_gpu_face_recognition(shared_buffer, embeddings_collection, staging_collection):
@@ -181,12 +187,12 @@ def consumer_main(shared_buffer, embeddings_collection, staging_collection):
     try:
         if THREAD_FLAG is True:
             # Start the face recognition thread
-            threaded_gpu_face_recognition(shared_buffer, embeddings_collection, staging_collection)
+            return threaded_gpu_face_recognition(shared_buffer, embeddings_collection, staging_collection)
         elif MULTIPROCESSING_FLAG is True:
             # Start the face recognition thread
             multiprocess_gpu_face_recognition(shared_buffer, embeddings_collection, staging_collection)
         else:
-            face_recognition(shared_buffer, 'no_thread', embeddings_collection)
+            face_recognition(shared_buffer, 'no_thread', embeddings_collection, staging_collection)
 
     except KeyboardInterrupt:
         # Release the camera streams, store the dataframe in csv and exit the program

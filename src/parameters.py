@@ -302,6 +302,9 @@ FEEDBACK_HOST = "mfr-feedback-controller"  # service name: this client's own con
 
 # FEEDBACK port
 FEEDBACK_PORT = 20012
+
+# producer-consumer's own health check (util/pipeline_health.py): Docker and the display read GET /health here
+PIPELINE_HEALTH_PORT = 20010
 ########################################################################################################################
 
 

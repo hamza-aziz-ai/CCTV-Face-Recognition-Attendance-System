@@ -202,6 +202,10 @@ jobs:
       - name: Attendance sender
         if: matrix.service == 'producer-consumer'
         run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test src/util/attendance_sender.py
+      # Readiness comes from the workers' own progress, batch outcomes, expiring dependency checks and the sender (D-051)
+      - name: Pipeline health
+        if: matrix.service == 'producer-consumer'
+        run: docker run --rm --entrypoint python3 -e CLIENT_ID=owner ci/${{ matrix.service }}:test src/util/pipeline_health.py
       # A re-embed takes photos from the bucket or the folder, and changes nothing if anyone's photos fail
       - name: Re-embed
         if: matrix.service == 'producer-consumer'

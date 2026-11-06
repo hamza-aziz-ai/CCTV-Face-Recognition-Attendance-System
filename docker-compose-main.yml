@@ -29,6 +29,15 @@ services:
         condition: service_healthy
       dynamic-face-dataset-collector:
         condition: service_healthy
+    # Healthy only while camera and recognition threads make progress, batches succeed, attendance is confirmed saved and
+    # InsightFace, Milvus, Kafka, the feedback and database controllers pass their checks (src/util/pipeline_health.py).
+    # Docker does not restart an unhealthy container; a worker that dies makes the container exit, and restart does that
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:20010/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
     stop_grace_period: 30s
     # The GPU's video decoder (NVDEC) decodes the camera streams (VIDEO_DECODE, docs/features/gpu-decode.md); "video"
     # gives the container the decoder library, which Docker Desktop also provides once it is asked for
