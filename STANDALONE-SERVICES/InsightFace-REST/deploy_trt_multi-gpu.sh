@@ -59,6 +59,8 @@ for i in "${INSIGHTFACE_GPUS[@]}"; do
 
     echo --- Starting container "$container_name" with "$device" at port "$port";
     ((p++));
+    # Healthy on /health, which runs a test picture through the models (/info only proves the server answers); the first
+    # start builds TensorRT engines, hence the start period. The load balancer below uses the same check
     # shellcheck disable=SC2046
     docker run -p $port:18080 \
         --gpus "$device" \
@@ -85,10 +87,11 @@ for i in "${INSIGHTFACE_GPUS[@]}"; do
         -e DEF_EXTRACT_EMBEDDING="$EXTRACT_EMBEDDINGS" \
         -e DEF_EXTRACT_GA="$DETECT_GENDER_AGE" \
         -v "$MODELS_DIR":/models \
-        --health-cmd='curl -f http://localhost:18080/info || exit 1' \
+        --health-cmd='curl -fsS http://localhost:18080/health || exit 1' \
         --health-interval=1m \
         --health-timeout=10s \
         --health-retries=3 \
+        --health-start-period=10m \
         --name="$container_name" \
         "$INSIGHTFACE_IMAGE"
 done
@@ -114,4 +117,9 @@ docker run -d \
   -v "$HERE"/misc/nginx_conf/conf.d:/etc/nginx/conf.d \
   -p 6385:18080 \
   --ulimit nofile=200000:200000 \
+  --health-cmd='curl -fsS http://localhost:18080/health || exit 1' \
+  --health-interval=1m \
+  --health-timeout=10s \
+  --health-retries=3 \
+  --health-start-period=10m \
   nginx
