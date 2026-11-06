@@ -1,0 +1,89 @@
+# An edge node, e.g. a Jetson, that captures one client's cameras (D-052). It runs only the capture half: producer-consumer,
+# the database controller and the feedback controller, from the same release images as the main file. PostgreSQL, Kafka
+# and Milvus are the client's on the central host (master.env IP_ADDRESS, POSTGRES_HOST_PORT and the client's own logins,
+# D-037); InsightFace-REST runs on this node (master.env INSIGHTFACE_HOST). Face crops go to the central API with an
+# edge_collector machine token (D-043). The central host runs the same client with docker-compose-central.yml added.
+# Each service is written out in full, not extended from the main file: extends would bring the collector dependency.
+name: cctv
+
+services:
+  mfr-cctv-producer-consumer:
+    image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-producer-consumer:${IMAGE_TAG:-v-beta}
+    restart: unless-stopped
+    environment:
+      CAM_USERNAME: ${CAM_USERNAME}
+      CAM_PASSWORD: ${CAM_PASSWORD}
+      MILVUS_APP_USER: ${MILVUS_APP_USER:-}
+      MILVUS_APP_PASSWORD: ${MILVUS_APP_PASSWORD:-}
+      KAFKA_APP_USER: ${KAFKA_APP_USER:-}
+      KAFKA_APP_PASSWORD: ${KAFKA_APP_PASSWORD:-}
+      # https://<central host>/api/v1/edge and its edge_collector token: there is no collector on this node
+      DYNAMIC_FACE_DATA_COLLECTOR_API: ${DYNAMIC_FACE_DATA_COLLECTOR_API:?the central API, https://<central host>/api/v1/edge}
+      DYNAMIC_FACE_DATA_COLLECTOR_TOKEN: ${DYNAMIC_FACE_DATA_COLLECTOR_TOKEN:?an edge_collector machine token from the central API}
+      # The central proxy's own certificate authority, e.g. /Multi-Person-Face-Recognition/ca/root.crt; empty for a public one
+      REQUESTS_CA_BUNDLE: ${EDGE_CA_BUNDLE:-}
+    volumes:
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
+      - ./logs:/Multi-Person-Face-Recognition/logs
+      - ./Recognition_Frames:/Multi-Person-Face-Recognition/Recognition_Frames
+      - ./ca:/Multi-Person-Face-Recognition/ca:ro
+      # Recognised attendance not yet confirmed saved, kept across restarts (D-051)
+      - attendance-spool:/Multi-Person-Face-Recognition/attendance-spool
+    # The central host's name when no DNS has it, e.g. a laptop's <client>.localhost: EDGE_CENTRAL_HOST and EDGE_CENTRAL_IP
+    extra_hosts:
+      - "${EDGE_CENTRAL_HOST:-central.invalid}=${EDGE_CENTRAL_IP:-127.0.0.1}"
+    depends_on:
+      mfr-database-controller:
+        condition: service_healthy
+      mfr-feedback-controller:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:20010/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    # The central display and proxy read this node's readiness (PIPELINE_HEALTH_URL on the central site); it answers only
+    # starting, ready or unready and reason codes (D-051)
+    ports:
+      - "${PIPELINE_HEALTH_PORT:-20010}:20010"
+    stop_grace_period: 30s
+
+  mfr-database-controller:
+    image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-database-controller:${IMAGE_TAG:-v-beta}
+    restart: unless-stopped
+    environment:
+      POSTGRESQL_PORT: ${POSTGRES_HOST_PORT:-5432}
+      PG_APP_USER: ${PG_APP_USER:-}
+      PG_APP_PASSWORD: ${PG_APP_PASSWORD:-}
+    volumes:
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
+      - ./logs:/Multi-Person-Face-Recognition/logs
+    healthcheck:
+      test: ["CMD", "./src/database_server/healthcheck_db_controller.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  mfr-feedback-controller:
+    image: ghcr.io/hamza-aziz-ai/cctv-face-recognition-feedback-controller:${IMAGE_TAG:-v-beta}
+    restart: unless-stopped
+    environment:
+      KAFKA_APP_USER: ${KAFKA_APP_USER:-}
+      KAFKA_APP_PASSWORD: ${KAFKA_APP_PASSWORD:-}
+    volumes:
+      - ./master.env:/Multi-Person-Face-Recognition/master.env
+      - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
+      - ./logs:/Multi-Person-Face-Recognition/logs
+    healthcheck:
+      test: [ "CMD", "./src/feedback_server/healthcheck_feedback_controller.sh" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  attendance-spool:

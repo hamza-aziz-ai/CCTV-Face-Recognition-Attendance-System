@@ -68,11 +68,26 @@ def fetch(path, cookie=None, *extra):
 def test():
     assert "cctv-mfr-api-service-1:8000" in provision.proxy_route("owner", "owner.localhost")
     assert "collector" not in provision.proxy_route("owner", "owner.localhost"), "the collector is reached only through the API"
+    # An edge node captures (D-052): /health follows its readiness, and nothing but http://host:port/health goes into the file
+    assert provision.edge_health(None) is None
+    assert provision.edge_health("http://10.0.0.9:20010/health") == "10.0.0.9:20010"
+    assert "reverse_proxy 10.0.0.9:20010" in provision.proxy_route("owner", "owner.localhost", "10.0.0.9:20010")
+    for bad in ("https://10.0.0.9:20010/health", "http://10.0.0.9/health", "http://10.0.0.9:20010/x", "http://a{b}:1/health"):
+        try:
+            provision.edge_health(bad)
+            raise AssertionError(f"accepted {bad}")
+        except provision.Stop:
+            pass
     with tempfile.TemporaryDirectory(dir=os.environ.get("RUNNER_TEMP")) as folder:
         sites = Path(folder) / "sites"
         (sites / "acme").mkdir(parents=True)
         (sites / "acme" / ".env").write_text(f"SITE_HOST={HOST}\n", encoding="utf-8")
         assert provision.write_proxy_route("acme", sites) == HOST
+        # The edge's .env: its own logins and the camera login, never central-only keys
+        (sites / "acme" / ".env").write_text(f"SITE_HOST={HOST}\nPG_APP_USER=acme_app\nPG_APP_PASSWORD=p1\nCAM_PASSWORD=c\n"
+                                             "KAFKA_DISPLAY_PASSWORD=d\nSTORE_APP_SECRET_KEY=s\nPOSTGRES_PASSWORD=admin\n", encoding="utf-8")
+        edge = provision.read_env(provision.write_edge_env("acme", sites))
+        assert edge == {"CAM_PASSWORD": "c", "PG_APP_USER": "acme_app", "PG_APP_PASSWORD": "p1"}, edge
         (sites / "evil").mkdir()
         (sites / "evil" / ".env").write_text("SITE_HOST=x { respond hacked }\n", encoding="utf-8")
         try:

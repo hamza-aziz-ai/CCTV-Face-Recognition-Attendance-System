@@ -1,0 +1,20 @@
+# Added to docker-compose-main.yml for a client whose cameras an edge node captures (D-052): the edge runs producer-consumer
+# and the database and feedback controllers (docker-compose-edge.yml), so they stay off here. Putting them in a profile
+# nobody enables keeps them out of up; the main file alone is unchanged for every other client.
+services:
+  mfr-cctv-producer-consumer:
+    profiles: [edge-owned]
+  mfr-database-controller:
+    profiles: [edge-owned]
+  mfr-feedback-controller:
+    profiles: [edge-owned]
+  mfr-api-service:
+    depends_on:
+      # Created by the edge's database controller: enrol the edge first, or the API restarts until it exists
+      mfr-database-controller:
+        condition: service_healthy
+        required: false
+  kafka-webapp:
+    environment:
+      # The edge's readiness, e.g. http://<edge>:20010/health; the proxy's /health follows the same address
+      HEALTH_URL: ${PIPELINE_HEALTH_URL:?the edge node's readiness, http://<edge>:20010/health}

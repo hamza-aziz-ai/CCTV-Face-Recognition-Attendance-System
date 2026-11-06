@@ -30,6 +30,7 @@ import sys
 import tempfile
 import urllib.error
 import urllib.request
+from urllib.parse import urlparse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -289,7 +290,7 @@ def root_token(admin_env):
     return f"root:{password}"
 
 
-def proxy_route(client, host):
+def proxy_route(client, host, health=None):
     """This client's HTTPS route (D-040). Pages with no login of their own, Kafka-WebApp and its WebSockets, are guarded by the API's /auth/check, and report routes by the API itself. /health is producer-consumer's readiness for displays outside the stack: open by design, it answers only starting/ready/unready and reason codes (D-051). Compose names the containers from the project."""
     project = "cctv" if client == "owner" else f"cctv-{client}"
     api = f"{project}-mfr-api-service-1:8000"
@@ -308,7 +309,7 @@ def proxy_route(client, host):
 		reverse_proxy {api}
 	}}
 	handle /health {{
-		reverse_proxy {project}-mfr-cctv-producer-consumer-1:20010
+		reverse_proxy {health or f"{project}-mfr-cctv-producer-consumer-1:20010"}
 	}}
 	handle /live/* {{
 		forward_auth {api} {{
@@ -334,13 +335,38 @@ def proxy_route(client, host):
 """
 
 
+def edge_health(url):
+    """host:port of an edge node's readiness for /health (D-052), from PIPELINE_HEALTH_URL; None when this host captures."""
+    if not url:
+        return None
+    parts = urlparse(url)
+    if parts.scheme != "http" or parts.path != "/health" or not parts.port or not re.fullmatch(r"[A-Za-z0-9.-]+", parts.hostname or ""):
+        raise Stop(f"PIPELINE_HEALTH_URL {url!r} is not http://<edge>:<port>/health")  # it goes into a Caddy file
+    return f"{parts.hostname}:{parts.port}"
+
+
+# What an edge node needs from the client's site .env (D-052): its own logins and the camera login, nothing central-only
+EDGE_KEYS = ["CAM_USERNAME", "CAM_PASSWORD", "POSTGRES_HOST_PORT", "PG_APP_USER", "PG_APP_PASSWORD", "MILVUS_APP_USER",
+             "MILVUS_APP_PASSWORD", "KAFKA_APP_USER", "KAFKA_APP_PASSWORD"]
+
+
+def write_edge_env(client, sites):
+    """sites/<client>/edge.env, the edge node's .env without the token: copy it to the edge site and add the lines
+    docker-compose-edge.yml asks for. Never overwrites a value already there."""
+    env = read_env(sites / client / ".env")
+    path = sites / client / "edge.env"
+    save_missing(path, {key: env[key] for key in EDGE_KEYS if key in env})
+    return path
+
+
 def write_proxy_route(client, sites):
     host = read_env(sites / client / ".env").get("SITE_HOST") or f"{client}.localhost"
     if not re.fullmatch(r"[a-z0-9]([a-z0-9.-]*[a-z0-9])?", host):  # it goes into a Caddy file
         raise Stop(f"SITE_HOST {host!r} is not a host name")
+    health = edge_health(read_env(sites / client / ".env").get("PIPELINE_HEALTH_URL"))
     folder = sites.parent / "proxy"
     folder.mkdir(exist_ok=True)
-    (folder / f"{client}.caddy").write_bytes(proxy_route(client, host).encode())
+    (folder / f"{client}.caddy").write_bytes(proxy_route(client, host, health).encode())
     return host
 
 
@@ -418,6 +444,7 @@ def main(argv=None):
     parser.add_argument("--init-milvus-root", action="store_true")
     parser.add_argument("--init-kafbat", action="store_true")
     parser.add_argument("--proxy", action="store_true", help="only write this client's HTTPS route")
+    parser.add_argument("--edge-env", action="store_true", help="only write the edge node's .env, sites/CLIENT/edge.env")
     parser.add_argument("--sites", type=Path, default=ROOT / "sites")
     parser.add_argument("--admin-env", type=Path, default=ROOT / "admin.env")
     parser.add_argument("--postgres", default="cctv-postgresql")
@@ -430,6 +457,8 @@ def main(argv=None):
             init_milvus_root(args.admin_env, args.milvus)
         elif args.init_kafbat:
             init_kafbat(args.admin_env, args.kafka)
+        elif args.edge_env and args.client:
+            print(write_edge_env(args.client, args.sites))
         elif args.proxy and args.client:
             print(f"https://{write_proxy_route(args.client, args.sites)}")
         elif args.client:

@@ -18,6 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FILES = [
     "docker-compose-main.yml",
+    "docker-compose-central.yml",
+    "docker-compose-edge.yml",
     "STANDALONE-SERVICES/standalone-services.env",
     "STANDALONE-SERVICES/Confluent-Kafka/docker-compose.yml",
     "STANDALONE-SERVICES/Milvus-Vector-Database/docker-compose.yml",
@@ -50,6 +52,9 @@ APP_IMAGE = re.compile(r"(ghcr\.io/hamza-aziz-ai/cctv-face-recognition-[a-z-]+):
 SCHEMA = 1
 # Each tier a release can run. A tier joins this list in the release that ships its image (D-041).
 TIERS = ["standard"]
+# Each site layout a release can run (D-052), the keys of LAYOUTS in deploy/watch.py
+LAYOUTS = ["full", "central", "edge"]
+COMPOSE_FILES = ["docker-compose-main.yml", "docker-compose-edge.yml"]  # the ones naming app images
 
 
 def app_images(compose_text, tag):
@@ -74,12 +79,13 @@ def build(out, tag, commit, digests, root=ROOT):
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
             sys.exit(f"{ref}: not a digest: {digest}")
         pinned[ref] = f"{ref.rsplit(':', 1)[0]}@{digest}"
-    compose = out / "docker-compose-main.yml"
-    text = compose.read_text(encoding="utf-8")
-    missing = [ref for ref in app_images(text, tag) if ref not in pinned]
-    if missing:
-        sys.exit(f"No digest for {missing}")
-    compose.write_text(APP_IMAGE.sub(lambda m: pinned[f"{m.group(1)}:{tag}"], text), encoding="utf-8")
+    for name in COMPOSE_FILES:
+        compose = out / name
+        text = compose.read_text(encoding="utf-8")
+        missing = [ref for ref in app_images(text, tag) if ref not in pinned]
+        if missing:
+            sys.exit(f"No digest for {missing}")
+        compose.write_text(APP_IMAGE.sub(lambda m: pinned[f"{m.group(1)}:{tag}"], text), encoding="utf-8")
     env = out / "STANDALONE-SERVICES/standalone-services.env"
     insightface = [ref for ref in pinned if "insightface-rest:" in ref]
     if len(insightface) != 1:
@@ -87,7 +93,7 @@ def build(out, tag, commit, digests, root=ROOT):
     with env.open("a", encoding="utf-8") as f:
         f.write(f"\n# Pinned by the release bundle: deploy_trt_multi-gpu.sh pulls exactly this image\n"
                 f"INSIGHTFACE_IMAGE='{pinned[insightface[0]]}'\n")
-    manifest = {"schema": SCHEMA, "release": tag, "commit": commit, "tiers": TIERS, "images": dict(sorted(pinned.items()))}
+    manifest = {"schema": SCHEMA, "release": tag, "commit": commit, "tiers": TIERS, "layouts": LAYOUTS, "images": dict(sorted(pinned.items()))}
     (out / "release-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     check(out)
     return manifest
@@ -99,9 +105,10 @@ def check(out):
     extra = sorted(set(found) - set(FILES) - {"release-manifest.json"})
     if extra:
         sys.exit(f"Not allowed in the bundle: {extra}")
-    compose = (Path(out) / "docker-compose-main.yml").read_text(encoding="utf-8")
-    if re.search(r"^\s*- \.:", compose, re.M) or "${IMAGE_TAG" in compose or "build:" in compose:
-        sys.exit("docker-compose-main.yml mounts the checkout, builds, or uses an unpinned app image")
+    for path in Path(out).glob("docker-compose*.yml"):
+        compose = path.read_text(encoding="utf-8")
+        if re.search(r"^\s*- \.:", compose, re.M) or "${IMAGE_TAG" in compose or "build:" in compose:
+            sys.exit(f"{path.name} mounts the checkout, builds, or uses an unpinned app image")
 
 
 def demo(keep=None):
@@ -118,6 +125,8 @@ def demo(keep=None):
         assert "INSIGHTFACE_IMAGE='ghcr.io/hamza-aziz-ai/cctv-face-recognition-insightface-rest@sha256:" in \
             (Path(out) / "STANDALONE-SERVICES/standalone-services.env").read_text(encoding="utf-8")
         assert manifest["release"] == tag and len(manifest["images"]) == 9 and manifest["tiers"] == ["standard"]
+        assert manifest["layouts"] == ["full", "central", "edge"]
+        assert (Path(out) / "docker-compose-edge.yml").read_text(encoding="utf-8").count("@sha256:") == 3  # the capture half's images
         # Host tools only: watch.py, provision.py and recovery.py run on the host (D-034, D-037, D-042); no app code ships
         assert sorted(p.relative_to(out).as_posix() for p in Path(out).rglob("*.py")) == ["deploy/provision.py", "deploy/recovery.py", "deploy/watch.py"], "no app code"
         (Path(out) / "src/main.py").write_text("x")
