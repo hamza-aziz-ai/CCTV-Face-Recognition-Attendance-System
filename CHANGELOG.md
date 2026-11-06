@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.18.0 (2026-11-06)
+
+## What's Changed
+* feat(deploy): run a client's capture on an edge node, and the rest on the central host (D-052) by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/122
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.17.0...v2.18.0
+
 ## v2.17.0 (2026-11-06)
 
 ## What's Changed
