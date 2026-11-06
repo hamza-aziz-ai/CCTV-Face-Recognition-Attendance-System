@@ -137,6 +137,12 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #115 | 2026-11-06 12:22 | about 6h (estimate, incl. two councils and live proofs) | 11m | +1191/-382 23f | feat(health): true readiness for the display, attendance confirmed saved and kept on disk, and a restart when a worker dies |
 | #117 | 2026-11-06 12:38 | about 30m (estimate) | 5m | +35/-12 2f | fix(records): take the person locks before creating a partition, so batches never deadlock |
 | #118 | 2026-11-06 13:23 | about 15m (estimate) | 3m | +4/-0 1f | fix(compose): put producer-consumer on the edge network, so the proxy's /health route reaches it |
+| #119 | 2026-11-06 14:52 | about 1h (estimate, incl. local Chrome setup) | 7m | +69/-0 3f | ci: render every Mermaid diagram on a pull request that changes Markdown |
+| #120 | 2026-11-06 15:31 | about 45m (estimate, incl. a 4-exchange council for #120 to #122) | 6m | +115/-103 9f | fix(collector): take each camera's crop cluster from the camera configuration, so crops from any camera are kept |
+| #121 | 2026-11-06 15:53 | about 1h 15m (estimate) | 13m | +284/-34 17f | feat(api): accept edge nodes' face crops through the API with an edge_collector machine token |
+| #122 | 2026-11-06 16:12 | about 1h 15m (estimate) | 9m | +297/-26 10f | feat(deploy): run a client's capture on an edge node, and the rest on the central host (D-052) |
+| #123 | 2026-11-06 16:49 | about 30m (estimate, incl. the central switch fix found live) | 3m | +34/-3 2f | fix(deploy): pull the release bundle as amd64 on any host, so an arm64 edge node finds releases |
+| #124 | 2026-11-06 17:12 | about 20m (estimate) | 3m | +9/-1 1f | fix(insightface): judge InsightFace and its load balancer healthy by /health, the model self-check, not /info |
 
 ## Incidents that cost time
 
@@ -177,6 +183,9 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | 2026-11-06 12:23 to 12:38 | The release after #114 and #115 failed: the new race test deadlocked on the arm64 runner (a batch creating a partition held the table and waited for a person lock). Nothing was published; #117 fixed the lock order and made the test deterministic | about 15m | Release run log | A race test that only fails under one runner's timing needs a deterministic version before it is trusted |
 | 2026-11-05 16:12 to 16:22 | v2.15.0 did not start after #110 merged: the release starts only from automerge, and #110 was merged by hand; started by hand | about 10m | Run timestamps | A hand merge must be followed by `gh workflow run release.yml` |
 | 2026-11-05 16:12 | Codex's review of #110, posted during CI, found a hidden deadlock between a deletion and a publish, a skipped folder failure, and a restore that could remove a re-enrolment; fixed on `fix/8e-review` | under 1h (estimate) | PR comments | Read review comments that arrive before the merge |
+| 2026-11-06 16:18 to 16:40 | The Orin's GPU did not initialise on that boot (CUDA error 35, `Bootstrap HS ACR failed`), so InsightFace crash-looped; a reboot cleared it. A firmware package was suspected first and was not the cause | about 20m (estimate) | Jetson session report | After a Jetson boot, check `cuInit` or InsightFace `/health` before blaming software; reboot first |
+| 2026-11-06 16:43 to 16:50 | The Orin's watcher logged "No published release yet": the bundle image is amd64 only, the arm64 pull found no match, and the error read as no release. Fixed by #123, run on the board before it merged | about 7m (measured, watch.log) | watch.log | Pin the platform of files-only images; never map a broad "not found" to an empty result |
+| 2026-11-06 16:58 to 17:04 | The Orin cleanup deleted `~/insightface-spike`, which `ifr-jetson` mounts for its models and self-check picture; the edge was unready (`insightface_unavailable`) until both were restored | about 6m (measured, display log) | Display log, Jetson session report | Name live mounts in the runbook (done); check `docker inspect` mounts before deleting a folder |
 
 ## Estimating from this
 
