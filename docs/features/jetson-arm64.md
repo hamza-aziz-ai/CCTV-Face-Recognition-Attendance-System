@@ -169,6 +169,8 @@ The edge site holds no source, like any host: the watcher, a pull-only registry 
 
 After a camera change, copy the configuration to the edge and restart its three services.
 
+The board's InsightFace-REST (`ifr-jetson`) is a live dependency of the edge, and it mounts `~/insightface-spike/models` (`models.json`, the ONNX files and the built engines) and `~/insightface-spike/test_images` (its self-check picture). Deleting that folder makes its `/health` fail and the edge report `insightface_unavailable`, as happened in the 2026-11-06 cleanup. To restore it: `models.json` from the bundle's `STANDALONE-SERVICES/InsightFace-REST/models/`, test images from the repo's `STANDALONE-SERVICES/InsightFace-REST/src/test_images`; InsightFace downloads the ONNX files again by itself.
+
 ## What this means
 
 - An amd64-only image cannot run here; every image we publish now has an arm64 build (D-044, D-046).
