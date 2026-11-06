@@ -2,11 +2,11 @@ import base64
 import math
 import os
 import sys
-from typing import List, Tuple
+from typing import Annotated, List, Tuple
 
 import cv2
 import numpy as np
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -22,13 +22,14 @@ from custom_logging import dynamic_face_data_collector_logger as logger
 
 
 class FaceRecord(BaseModel):
-    person_id: str = Field(..., description="Unique identifier for the person")
-    camera_name: str = Field(..., description="Name of the camera source")
-    match_score: float = Field(..., description="Face matching score")
+    # The person ID becomes a folder name: the enrolment API's rule (src/api/enrolment.py PERSON_ID)
+    person_id: str = Field(..., pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", description="Unique identifier for the person")
+    camera_name: str = Field(..., max_length=200, description="Name of the camera source; it must be in the camera configuration")
+    match_score: float = Field(..., allow_inf_nan=False, description="Face matching score")
     landmarks: List[Tuple[int, int]] = Field(
-        ..., description="List of at least two (x, y) pupil landmarks"
+        ..., min_length=2, max_length=10, description="List of at least two (x, y) pupil landmarks"
     )
-    image_base64: str = Field(..., description="Base64-encoded cropped face image")
+    image_base64: str = Field(..., max_length=4 * 1024 * 1024, description="Base64-encoded cropped face image")
 
 
 app = FastAPI(
@@ -39,7 +40,7 @@ app = FastAPI(
 
 
 @app.post("/faces", summary="Submit multiple face crop records")
-async def submit_faces(records: List[FaceRecord]) -> JSONResponse:
+async def submit_faces(records: Annotated[List[FaceRecord], Body(max_length=500)]) -> JSONResponse:
     failed = []
     for idx, record in enumerate(records):
         try:

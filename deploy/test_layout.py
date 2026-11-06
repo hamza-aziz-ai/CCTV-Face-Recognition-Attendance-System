@@ -29,7 +29,7 @@ def internal_hosts():
     """The services that src/parameters.py reaches by name."""
     values = {node.targets[0].id: node.value.value for node in ast.parse((ROOT / "src/parameters.py").read_text(encoding="utf-8")).body
               if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name) and isinstance(node.value, ast.Constant)}
-    return {values["DATABASE_HOST"], values["FEEDBACK_HOST"], urlparse(values["DYNAMIC_FACE_DATA_COLLECTOR_API"]).hostname}
+    return {values["DATABASE_HOST"], values["FEEDBACK_HOST"], urlparse(values["DYNAMIC_FACE_DATA_COLLECTOR_LOCAL"]).hostname}
 
 
 def test():
@@ -48,6 +48,8 @@ def test():
                         assert Path(volume["source"]).resolve().is_relative_to(site), (project, name, volume["source"])
             for host in internal_hosts():
                 assert host in services and not services[host].get("ports"), (host, "must be a service, not published")
+            # Edge crops reach the collector only through the API's token check, so rolling the API back closes the way in
+            assert set(services["dynamic-face-dataset-collector"].get("networks", {})) == {"default"}, "collector on the proxy's network"
     assert published["cctv"] == {9090, 20013, 9095}, published["cctv"]
     assert not published["cctv"] & published["cctv-acme"], published
     print(f"layout ok ({len(CLIENTS)} clients: no container names, own ports, data in own site folder, "

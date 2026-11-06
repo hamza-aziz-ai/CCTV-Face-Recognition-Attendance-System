@@ -67,6 +67,7 @@ def fetch(path, cookie=None, *extra):
 
 def test():
     assert "cctv-mfr-api-service-1:8000" in provision.proxy_route("owner", "owner.localhost")
+    assert "collector" not in provision.proxy_route("owner", "owner.localhost"), "the collector is reached only through the API"
     with tempfile.TemporaryDirectory(dir=os.environ.get("RUNNER_TEMP")) as folder:
         sites = Path(folder) / "sites"
         (sites / "acme").mkdir(parents=True)
