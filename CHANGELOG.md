@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.15.2 (2026-11-06)
+
+## What's Changed
+* fix(recognition): feed the recognition model RGB, as it was trained, and add a re-embed command for stored vectors by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/112
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.15.1...v2.15.2
+
 ## v2.15.1 (2026-11-05)
 
 ## What's Changed
