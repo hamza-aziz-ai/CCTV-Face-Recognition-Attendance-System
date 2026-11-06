@@ -150,6 +150,7 @@
     <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><path d="M12 16.5v.5"/></symbol>
     <symbol id="i-polygon" viewBox="0 0 24 24"><path d="M5 7 12 3l7 5-2 11H7z"/><circle cx="5" cy="7" r="1.5"/><circle cx="12" cy="3" r="1.5"/><circle cx="19" cy="8" r="1.5"/></symbol>
     <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+    <symbol id="i-wand" viewBox="0 0 24 24"><path d="m4 20 11-11"/><path d="m13 7 4 4"/><path d="M18 2v3M16.5 3.5h3M21 8v2M20 9h2M9 3v2M8 4h2"/></symbol>
     <symbol id="i-line" viewBox="0 0 24 24"><path d="M5 19 19 5"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/></symbol>
     <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3l14 7-6 2-2 6z"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6"/><path d="m20 20-3.5-3.5"/></symbol>
@@ -182,6 +183,7 @@
                 <button type="button" id="mode-line" aria-pressed="false" title="Drag from a point to draw a straight line; click to add a point (L)"><svg class="icon"><use href="#i-line"/></svg>Line</button>
                 <button type="button" id="mode-edit" aria-pressed="false" title="Drag a corner point, the shape, or a handle to scale (E)"><svg class="icon"><use href="#i-cursor"/></svg>Edit</button>
             </div>
+            <button class="btn" id="straighten" disabled title="Turn the outline into the nearest clean shape: triangle, quadrilateral or rectangle, pentagon, hexagon or ellipse (S)"><svg class="icon"><use href="#i-wand"/></svg>Straighten</button>
             <button class="btn icon-only" id="shrink" disabled title="Shrink the region by 10% (-)" aria-label="Shrink the region"><svg class="icon"><use href="#i-minus"/></svg></button>
             <button class="btn icon-only" id="grow" disabled title="Grow the region by 10% (+)" aria-label="Grow the region"><svg class="icon"><use href="#i-plus"/></svg></button>
             <span class="tool-sep"></span>
@@ -241,6 +243,7 @@
                 <ol class="steps">
                     <li><b>Pencil</b>: click to add corner points, or hold and drag to trace the area freehand; hold <kbd>Shift</kbd> while dragging for a straight line. Long strokes are smoothed to at most 100 points.</li>
                     <li><b>Line</b>: drag from a point to draw a straight line to where you let go, one side at a time. The outline stays open while you draw; click the first point, or switch to Edit, to close it.</li>
+                    <li><b>Straighten</b> (<kbd>S</kbd>): turns a hand-drawn outline into the nearest clean shape: a triangle, a quadrilateral (a rectangle when its corners are near right angles), a pentagon, a hexagon or an ellipse. Undo brings back the drawing.</li>
                     <li><b>Edit</b>: drag a corner point, drag inside the shape to move it, or drag a square handle to scale it. <kbd>+</kbd> and <kbd>−</kbd> grow or shrink it by 10%.</li>
                     <li>Everything outside the shape is ignored; without a region the whole picture is used. Points are stored at full resolution with the picture size.</li>
                     <li>Saving does not apply it yet: on an edge node, copy the camera configuration there first, then restart producer-consumer and the two controllers.</li>
@@ -385,7 +388,7 @@
         $("mode-draw").disabled = $("mode-line").disabled = $("mode-edit").disabled = !ready();
         $("undo").disabled = !history.length;
         $("reset").disabled = !points.length;
-        $("grow").disabled = $("shrink").disabled = !shape;
+        $("grow").disabled = $("shrink").disabled = $("straighten").disabled = !shape;
         $("show-preview").disabled = $("save").disabled = !shape;
         $("remove").disabled = !(cam && cam.points);
         const [kind, label] = regionState(cam);
@@ -492,11 +495,22 @@
 
     canvas.addEventListener("pointerleave", () => { if (!gesture) $("sb-cursor").textContent = "–"; });
 
+    // The outline as drawn becomes the nearest clean shape; undoable like every change
+    function straighten() {
+        if (points.length < 3 || !ready()) return;
+        const fixed = Region.straighten(points, shown.size);
+        if (!fixed) { status("No simple shape is close to this outline, so it is unchanged. Draw it again, or edit its corners."); return; }
+        change(fixed.points);
+        setMode("edit");
+        status(`Straightened into ${/^[aeiou]/.test(fixed.kind) ? "an" : "a"} ${fixed.kind} (${fixed.points.length} points). Undo brings back the drawing.`);
+    }
+
     function scaleBy(f) { if (points.length >= 3 && ready()) change(Region.scale(points, f, shown.size)); }
 
     $("mode-draw").onclick = () => setMode("draw");
     $("mode-line").onclick = () => setMode("line");
     $("mode-edit").onclick = () => setMode("edit");
+    $("straighten").onclick = straighten;
     $("grow").onclick = () => scaleBy(1.1);
     $("shrink").onclick = () => scaleBy(1 / 1.1);
     $("undo").onclick = () => { if (history.length) { points = history.pop(); render(); } };
@@ -512,6 +526,7 @@
         if (!ready()) return;
         if ("pPdD".includes(e.key)) setMode("draw");
         if (e.key === "l" || e.key === "L") setMode("line");
+        if (e.key === "s" || e.key === "S") straighten();
         if (e.key === "e" || e.key === "E") setMode("edit");
         if (e.key === "+" || e.key === "=") scaleBy(1.1);
         if (e.key === "-" || e.key === "_") scaleBy(1 / 1.1);
