@@ -132,6 +132,13 @@
     const main = document.getElementById("cameras");
 
     // "22:45:46.123" from the API as "10:45:46 PM": the owner reads times in 12-hour format
+    // "2026-11-06" from the API as "06 Nov 2026": the owner's date format
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    function day(date) {
+        const [y, m, d] = String(date).split("-").map(Number);
+        return y && m >= 1 && m <= 12 && d ? `${String(d).padStart(2, "0")} ${MONTHS[m - 1]} ${y}` : date;
+    }
+
     function clock(time) {
         const [h, m, s] = String(time).split(":").map(Number);
         if (Number.isNaN(h) || Number.isNaN(m)) return time;
@@ -186,7 +193,7 @@
                 list.replaceChildren(...(rows.length ? rows.map((row) => {
                     const item = document.createElement("li");
                     const score = row.score === null ? "" : ` · ${row.score.toFixed(2)}`;
-                    item.append(text("span", row.person_id), text("span", `${row.date} ${clock(row.time)}${score}`, "when"));
+                    item.append(text("span", row.person_id), text("span", `${day(row.date)}, ${clock(row.time)}${score}`, "when"));
                     return item;
                 }) : [text("li", "No recognitions yet", "empty")]));
             }

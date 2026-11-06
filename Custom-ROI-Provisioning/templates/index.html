@@ -150,6 +150,7 @@
     <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6"/><path d="M12 16.5v.5"/></symbol>
     <symbol id="i-polygon" viewBox="0 0 24 24"><path d="M5 7 12 3l7 5-2 11H7z"/><circle cx="5" cy="7" r="1.5"/><circle cx="12" cy="3" r="1.5"/><circle cx="19" cy="8" r="1.5"/></symbol>
     <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+    <symbol id="i-line" viewBox="0 0 24 24"><path d="M5 19 19 5"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/></symbol>
     <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3l14 7-6 2-2 6z"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6"/><path d="m20 20-3.5-3.5"/></symbol>
     <symbol id="i-minus" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6"/><path d="m20 20-3.5-3.5"/></symbol>
@@ -177,7 +178,8 @@
         <div class="toolbar">
             <div class="title"><strong id="camera-title">No camera selected</strong><span id="camera-sub">Select a camera from the list</span></div>
             <div class="segmented" role="group" aria-label="Tool">
-                <button type="button" id="mode-draw" aria-pressed="true" title="Click to add a point, or drag to draw freehand (D)"><svg class="icon"><use href="#i-pencil"/></svg>Draw</button>
+                <button type="button" id="mode-draw" aria-pressed="true" title="Click to add a point, or drag to draw freehand; hold Shift for a straight line (P)"><svg class="icon"><use href="#i-pencil"/></svg>Pencil</button>
+                <button type="button" id="mode-line" aria-pressed="false" title="Drag from a point to draw a straight line; click to add a point (L)"><svg class="icon"><use href="#i-line"/></svg>Line</button>
                 <button type="button" id="mode-edit" aria-pressed="false" title="Drag a corner point, the shape, or a handle to scale (E)"><svg class="icon"><use href="#i-cursor"/></svg>Edit</button>
             </div>
             <button class="btn icon-only" id="shrink" disabled title="Shrink the region by 10% (-)" aria-label="Shrink the region"><svg class="icon"><use href="#i-minus"/></svg></button>
@@ -237,7 +239,8 @@
             <div class="panel-head"><h2>Guidance</h2></div>
             <div class="section">
                 <ol class="steps">
-                    <li><b>Draw</b>: click to add corner points, or hold and drag to trace the area like a pencil. Long strokes are smoothed to at most 100 points.</li>
+                    <li><b>Pencil</b>: click to add corner points, or hold and drag to trace the area freehand; hold <kbd>Shift</kbd> while dragging for a straight line. Long strokes are smoothed to at most 100 points.</li>
+                    <li><b>Line</b>: drag from a point to draw a straight line to where you let go, one side at a time. The outline stays open while you draw; click the first point, or switch to Edit, to close it.</li>
                     <li><b>Edit</b>: drag a corner point, drag inside the shape to move it, or drag a square handle to scale it. <kbd>+</kbd> and <kbd>−</kbd> grow or shrink it by 10%.</li>
                     <li>Everything outside the shape is ignored; without a region the whole picture is used. Points are stored at full resolution with the picture size.</li>
                     <li>Saving does not apply it yet: on an edge node, copy the camera configuration there first, then restart producer-consumer and the two controllers.</li>
@@ -287,9 +290,8 @@
 
     function setMode(next) {
         mode = next;
-        $("mode-draw").setAttribute("aria-pressed", String(mode === "draw"));
-        $("mode-edit").setAttribute("aria-pressed", String(mode === "edit"));
-        canvas.style.cursor = mode === "draw" ? "crosshair" : "default";
+        for (const name of ["draw", "line", "edit"]) $(`mode-${name}`).setAttribute("aria-pressed", String(mode === name));
+        canvas.style.cursor = mode === "edit" ? "default" : "crosshair";
         render();
     }
 
@@ -343,12 +345,19 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const screen = points.map(toScreen);
         if (gesture && gesture.kind === "stroke") screen.push(...gesture.stroke);
+        if (gesture && gesture.kind === "line" && gesture.moved) screen.push(...(gesture.joins ? [] : [gesture.start]), gesture.end);
+        // While drawing, the outline stays open, with the closing side only hinted; Edit shows the closed region
+        const closed = mode === "edit";
         if (screen.length && img.clientWidth) {
             ctx.lineWidth = 2; ctx.strokeStyle = "#5eead4"; ctx.fillStyle = "rgba(94, 234, 212, 0.20)";
             ctx.beginPath();
             screen.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
-            if (screen.length > 2) ctx.closePath();
-            ctx.fill(); ctx.stroke();
+            if (closed && screen.length > 2) { ctx.closePath(); ctx.fill(); }
+            ctx.stroke();
+            if (!closed && screen.length > 2) {
+                ctx.save(); ctx.setLineDash([4, 6]); ctx.strokeStyle = "rgba(94, 234, 212, 0.55)"; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(...screen[screen.length - 1]); ctx.lineTo(...screen[0]); ctx.stroke(); ctx.restore();
+            }
             if (mode === "edit" && points.length >= 3) {
                 const h = handles();
                 ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = "rgba(255, 255, 255, 0.75)"; ctx.lineWidth = 1;
@@ -366,12 +375,14 @@
         $("sb-points").textContent = points.length;
         $("sb-coverage").textContent = cover === null ? "–" : `${cover.toFixed(1)} %`;
         $("sb-size").textContent = ready() ? fmtSize(shown.size) : "–";
-        $("sb-hint").innerHTML = mode === "draw"
-            ? "<kbd>Click</kbd> add point · <kbd>Drag</kbd> draw freehand · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo"
-            : "<kbd>Drag</kbd> point, shape or handle · <kbd>+</kbd>/<kbd>−</kbd> scale · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo";
+        $("sb-hint").innerHTML = {
+            draw: "<kbd>Click</kbd> add point · <kbd>Drag</kbd> freehand · <kbd>Shift</kbd>+<kbd>Drag</kbd> straight line · click the first point to close",
+            line: "<kbd>Drag</kbd> straight line · <kbd>Click</kbd> add point · click the first point to close",
+            edit: "<kbd>Drag</kbd> point, shape or handle · <kbd>+</kbd>/<kbd>−</kbd> scale · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo",
+        }[mode];
         const shape = ready() && points.length >= 3;
         $("load").disabled = !cam;
-        $("mode-draw").disabled = $("mode-edit").disabled = !ready();
+        $("mode-draw").disabled = $("mode-line").disabled = $("mode-edit").disabled = !ready();
         $("undo").disabled = !history.length;
         $("reset").disabled = !points.length;
         $("grow").disabled = $("shrink").disabled = !shape;
@@ -401,8 +412,14 @@
         if (!ready() || e.button !== 0) return;
         canvas.setPointerCapture(e.pointerId);
         const p = at(e);
-        if (mode === "draw") {
-            gesture = {kind: "stroke", start: p, stroke: [p], moved: false};
+        if (mode !== "edit") {
+            // Clicking the first point closes the outline: the region is done, so switch to Edit
+            if (points.length >= 3 && near(toScreen(points[0]), p, HIT)) { canvas.releasePointerCapture(e.pointerId); setMode("edit"); return; }
+            // A straight line starts at the last point when pressed on it, so sides join up
+            const last = points.length ? toScreen(points[points.length - 1]) : null;
+            gesture = mode === "line" || e.shiftKey
+                ? {kind: "line", start: last && near(last, p, HIT) ? last : p, joins: Boolean(last && near(last, p, HIT)), end: p, moved: false}
+                : {kind: "stroke", start: p, stroke: [p], moved: false};
             return;
         }
         const hit = hitTest(p);
@@ -428,6 +445,12 @@
             if (gesture.moved && !near(p, gesture.stroke[gesture.stroke.length - 1], 2)) { gesture.stroke.push(p); render(); }
             return;
         }
+        if (gesture.kind === "line") {
+            if (!gesture.moved && !near(p, gesture.start, 4)) gesture.moved = true;
+            gesture.end = p;
+            render();
+            return;
+        }
         const size = shown.size;
         if (gesture.kind === "vertex") {
             points = gesture.before.map((q, i) => i === gesture.index ? Region.toImage(p[0], p[1], factor(), size) : q);
@@ -445,6 +468,13 @@
         if (!gesture) return;
         const g = gesture;
         gesture = null;
+        if (g.kind === "line") {
+            const f = factor(), size = shown.size, to = ([x, y]) => Region.toImage(x, y, f, size);
+            const added = !g.moved ? [to(g.start)] : g.joins ? [to(g.end)] : [to(g.start), to(g.end)];
+            if (points.length + added.length > MAX_POINTS) { status(`A region holds at most ${MAX_POINTS} points.`, true); render(); return; }
+            change(points.concat(added));
+            return;
+        }
         if (g.kind === "stroke") {
             const f = factor(), size = shown.size;
             const added = g.moved
@@ -465,11 +495,12 @@
     function scaleBy(f) { if (points.length >= 3 && ready()) change(Region.scale(points, f, shown.size)); }
 
     $("mode-draw").onclick = () => setMode("draw");
+    $("mode-line").onclick = () => setMode("line");
     $("mode-edit").onclick = () => setMode("edit");
     $("grow").onclick = () => scaleBy(1.1);
     $("shrink").onclick = () => scaleBy(1 / 1.1);
     $("undo").onclick = () => { if (history.length) { points = history.pop(); render(); } };
-    $("reset").onclick = () => change([]);
+    $("reset").onclick = () => { change([]); if (mode === "edit") setMode("draw"); };
     $("filter").oninput = renderList;
     window.onresize = render;
 
@@ -479,7 +510,8 @@
         if (e.ctrlKey || e.metaKey || e.altKey) return;
         if (e.key === "Escape") { $("confirm").hidden = true; $("toast").hidden = true; }
         if (!ready()) return;
-        if (e.key === "d" || e.key === "D") setMode("draw");
+        if ("pPdD".includes(e.key)) setMode("draw");
+        if (e.key === "l" || e.key === "L") setMode("line");
         if (e.key === "e" || e.key === "E") setMode("edit");
         if (e.key === "+" || e.key === "=") scaleBy(1.1);
         if (e.key === "-" || e.key === "_") scaleBy(1 / 1.1);
