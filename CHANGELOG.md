@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.20.0 (2026-11-06)
+
+## What's Changed
+* feat(roi): serve the camera region page inside the website for client admins, with pencil drawing and polygon editing by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/127
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.19.0...v2.20.0
+
 ## v2.19.0 (2026-11-06)
 
 ## What's Changed
