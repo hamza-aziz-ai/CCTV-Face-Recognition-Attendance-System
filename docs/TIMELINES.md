@@ -132,6 +132,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #110 | 2026-11-05 15:55 | about 4h (estimate, over 2026-11-03 and 11-05) | 18m | +619/-39 15f | feat(enrolment): problem codes, per-site responsible party, and deletion on withdrawal or leaving (8e) |
 | #111 | 2026-11-05 16:54 | about 1h (estimate) | 13m | +37/-17 5f | fix(enrolment): avoid a hidden deadlock between a deletion and a publish, keep a deletion open when a folder cannot be removed, and let a restore keep an enrolment made after a deletion |
 | #112 | 2026-11-06 05:00 | about 1h (estimate) | 7m | +79/-6 6f | fix(recognition): feed the recognition model RGB, as it was trained, and add a re-embed command for stored vectors |
+| #113 | 2026-11-06 08:40 | about 1.5h (estimate, incl. council) | 13m | +172/-126 7f | fix(camera): judge darkness on the region's own pixels, stop keeping frames only to count them, and report a region that does not fit instead of reconnecting forever |
 
 ## Incidents that cost time
 
