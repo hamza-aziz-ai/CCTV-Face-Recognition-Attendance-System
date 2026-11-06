@@ -39,6 +39,8 @@ flowchart TB
     CRASH["`Exception: the process exits and Docker restarts the container`"]:::error
     PROD["`(10) Producer process: one thread per configured camera`"]:::step
     CONS["`(11) Main process: consumer with four recognition threads`"]:::step
+    WATCH["`(12) Readiness on :20010, workers watched`"]:::step
+    DIED["`A camera process or recognition thread died: the container exits and Docker restarts it`"]:::error
     RUN["`Recognition running`"]:::outcome
 
     START --> CFG --> SA --> UP --> INIT --> WAITDEP
@@ -46,7 +48,8 @@ flowchart TB
     LOAD -->|"`no`"| RETRY --> LOAD
     LOAD -->|"`yes`"| TOPICS
     TOPICS -->|"`no`"| CRASH
-    TOPICS -->|"`yes`"| PROD --> CONS --> RUN
+    TOPICS -->|"`yes`"| PROD --> CONS --> WATCH --> RUN
+    WATCH -->|"`a worker died`"| DIED
 
     classDef entry fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
     classDef step fill:#dcfce7,stroke:#15803d,color:#0f172a
@@ -68,19 +71,21 @@ flowchart TB
 8. `load_with_retry()` loads each collection, retrying every 10 seconds until it succeeds.
 9. `ensure_kafka_topics()` checks for a topic `<client>.<location>_<point>` (`<location>_<point>` for the legacy owner) for each entry point that has cameras, with one partition per camera. Only the legacy owner creates missing topics (5 s retention and 5 s segments) and adds partitions when cameras were added; for any other client a missing topic or partition stops the process with `rerun deploy/provision.py after changing cameras`, since provisioning makes them. Topics are never deleted (D-028). Any failure raises, so the process exits rather than produce to a missing topic, and the restart policy starts it again.
 10. The producer process reads `src/Camera-Configuration/camera_configuration.json` and starts one thread per camera, named `<location>_<point>_<camera>`. Section 2 follows each thread.
-11. The main process runs `consumer_main()`. With `THREAD_FLAG = True` it starts `NUMBER_OF_THREADS = 4` recognition threads; the multiprocess mode (`NUMBER_OF_PROCESSES = 2`) is off.
+11. The main process runs `consumer_main()`. With `THREAD_FLAG = True` it starts `NUMBER_OF_THREADS = 4` recognition threads; the multiprocess mode (`NUMBER_OF_PROCESSES = 2`) is off. Before the producer process forks, `src/main.py` creates shared progress slots, one per camera thread and recognition thread (`src/util/pipeline_health.py`).
+12. After the fork, the main process starts the attendance sender (section 3), the dependency checks and `GET /health` on `PIPELINE_HEALTH_PORT` (20010): starting, ready or unready with reason codes only (D-051). Docker's healthcheck and the display read it. The main process then watches the producer process and every recognition thread; if one dies it stops the sender, ends the producer and exits non-zero, so Docker's restart policy starts the container again. A worker that hangs is reported as unready, not restarted.
 
 ## 2. Camera frame to recognition
 
 ```mermaid
 flowchart TB
     subgraph PRODUCER["`Producer process, one thread per camera`"]
-        OPEN["`(1) Open the stream: an HTTP address as is, otherwise RTSP with the camera's credentials`"]:::entry
-        OPENED{"`Stream opened?`"}:::decision
+        OPEN["`(1) Check the camera answers on its port, then open the stream: an HTTP address as is, otherwise RTSP with the camera's credentials`"]:::entry
+        OPENED{"`Camera answers and stream opened?`"}:::decision
         DOWN["`(2) ERROR message to the camera's Kafka partition, wait 30 s, open again`"]:::error
         READ["`(3) Read a frame`"]:::step
         READOK{"`Frame read?`"}:::decision
         ROI["`(4) Crop and mask the ROI polygon, or resize to 640x360`"]:::step
+        BADROI["`Region does not fit the frame: paced ERROR, frame skipped`"]:::error
         DARK{"`(5) 80 of the last 100 frames dark?`"}:::decision
         HALT["`ERROR message to Kafka, frame not queued`"]:::error
         Q[("`(6) Frame queue: frame, camera name, camera address`")]:::store
@@ -100,7 +105,7 @@ flowchart TB
         ACC["`Accepted faces to the DB controller, section 3`"]:::outcome
         FULL{"`(13) Queue over 4096 frames?`"}:::decision
         PURGE["`Drop the 256 oldest frames`"]:::error
-        ERR["`(14) Batch exception: counted, logged every tenth time`"]:::error
+        ERR["`(14) Batch exception: logged, and failures in a row counted for readiness`"]:::error
     end
 
     OPEN --> OPENED
@@ -108,6 +113,7 @@ flowchart TB
     OPENED -->|"`yes`"| READ --> READOK
     READOK -->|"`no`"| DOWN
     READOK -->|"`yes`"| ROI --> DARK
+    ROI -->|"`region does not fit`"| BADROI
     DARK -->|"`yes`"| HALT
     DARK -->|"`no`"| Q
     Q --> ENOUGH
@@ -134,7 +140,7 @@ flowchart TB
 
 **Key:** camera threads are `IPCamera` and `create_camera()` in `src/multicam_stream_producer.py`, which opens each stream with `camera_stream_url()` from `src/util/generic_utilities.py`. Recognition threads are `face_recognition()` in `src/multicam_stream_consumer.py`, which calls `batched_frame_face_recognition()` in `src/insightface_face_recognition.py`. The InsightFace-REST client is `IFRClient` in `src/insightface_face_detection.py`, the search is `search_embedding()` in `src/milvus_server.py`, and the match rules are in `src/inference_data_cleaner.py`. Settings are in `src/parameters.py`.
 
-1. Each camera thread builds an `IPCamera`. `camera_stream_url()`, shared with the ROI page, builds the address: an `ip_address` that starts with `http` is opened as is; anything else becomes `rtsp://<user>:<password>@<ip>:<port>/<endpoint>`, with `CAM_USERNAME`, `CAM_PASSWORD`, `CAM_PORT` and `STREAM_ENDPOINT` as defaults for `null` fields.
+1. Each camera thread builds an `IPCamera`. `open_stream()` (`src/util/video_source.py`) first checks that the camera answers on its port within 5 s and hands a camera that does not to no decoder: OpenCV opens one stream at a time, so unreachable cameras used to queue behind each other for minutes. A reachable camera opens on the GPU, falling back to the CPU, which gives up after 10 s. `camera_stream_url()`, shared with the ROI page, builds the address: an `ip_address` that starts with `http` is opened as is; anything else becomes `rtsp://<user>:<password>@<ip>:<port>/<endpoint>`, with `CAM_USERNAME`, `CAM_PASSWORD`, `CAM_PORT` and `STREAM_ENDPOINT` as defaults for `null` fields.
 2. If the stream does not open, or a read fails later, the thread sends `ERROR <camera>: Camera stream from <camera> is not accessible.` to its Kafka topic and partition, waits `IP_CAM_REINIT_WAIT_DURATION` (30 s) and opens it again. A successful reopen sends a `SUCCESS` message. These messages go straight to Kafka, not through the feedback controller.
 3. The thread reads frames continuously. With `FRAME_RATE_FACTOR = 1` every frame is processed.
 4. If the camera has `masking-coordinates` (drawn on the ROI page, D-035) and `CROP_ROI` is on, the frame is cropped to the polygon's bounding box, masked outside the polygon, and resized to the area of a 640x360 frame, keeping its aspect ratio. Otherwise a frame larger than 640x360 is resized to it.
@@ -148,7 +154,7 @@ flowchart TB
 11. Otherwise, with `STAGING = True`, the IDs in both the primary and the staging top 5 are compared, and the one with the best primary score is accepted if that score is at least 0.45. Staging matches are recorded only. Anything else is ignored.
 12. `ENABLE_FACE_LIVENESS_DETECTION = False`, so this check is skipped. When on, each person's strict-match crops go to the liveness service on 6386, and a person with more spoof than real verdicts is removed from the accepted faces. The display and collector still receive that person.
 13. After each batch, if the queue holds more than `LIVE_STREAM_BUFFER_SIZE = 4096` frames, the thread drops the 256 oldest, so recognition stays near real time.
-14. Any exception in a batch, including an unreachable InsightFace-REST or Milvus, drops that batch. Only every tenth one is logged.
+14. Any exception in a batch, including an unreachable InsightFace-REST or Milvus, drops that batch and is logged. The thread records the outcome of every batch; 3 failures in a row make the readiness check unready (`recognition_failing`). Each camera thread also renews its progress on every frame and every reconnect attempt, about every 35 s for an unreachable camera, so a thread silent for 90 s is reported as `camera_stalled`.
 
 ## 3. Recognition to attendance record
 
@@ -156,38 +162,38 @@ flowchart TB
 sequenceDiagram
     autonumber
     participant C as Recognition thread
+    participant S as Attendance sender
+    participant SP as Spool volume attendance-spool
     participant DBC as DB controller, internal :20001
     participant PG as PostgreSQL
-    C->>DBC: POST /ingest with date, time and accepted faces, only when there are any
-    alt a required field is empty
-        DBC-->>C: 400
-    else payload valid
-        DBC-->>C: 200 status OK, before anything is written
-        DBC->>DBC: background task, per record: decode the frame, draw the box and ID, take the location from the camera name
-        DBC->>PG: SELECT the same person, location and camera in the last 5 minutes
-        alt a recent record exists
-            PG-->>DBC: row: this record is skipped
-        else no recent record
-            PG-->>DBC: no row
-            DBC->>PG: CREATE TABLE IF NOT EXISTS for the year and year-location partitions
-            DBC->>PG: INSERT INTO recognition_results
-            DBC->>PG: COMMIT after the last record
+    C->>S: accepted faces with date and time, only when there are any
+    S->>SP: write the batch to disk and flush it, before it is queued
+    loop oldest batch first, until it is confirmed
+        S->>DBC: POST /ingest with the batch, unchanged on every retry
+        alt the payload can never be saved
+            DBC-->>S: 400: the batch moves to rejected/
+        else the database fails or does not answer
+            DBC-->>S: 503 or no answer: nothing of the batch kept, retry in 2 s
+        else saved
+            DBC->>PG: one transaction: person locks, then partitions, then per record a duplicate check and INSERT
+            DBC->>PG: COMMIT
+            DBC-->>S: 200 committed true, with inserted and deduplicated counts
+            S->>SP: delete the batch's file
         end
     end
 ```
 
-**Key:** the client side is `batched_frame_face_recognition()` in `src/insightface_face_recognition.py`. The DB controller is `src/database_server/postgresql_server_controller.py` (FastAPI) and `insert_recognition_data()` in `src/database_server/postgresql_database.py`.
+**Key:** the recognition thread is `batched_frame_face_recognition()` in `src/insightface_face_recognition.py`; the sender is `AttendanceSender` in `src/util/attendance_sender.py`. The DB controller is `src/database_server/postgresql_server_controller.py` (FastAPI) and `insert_recognition_data()` in `src/database_server/postgresql_database.py` (D-051).
 
-1. The recognition thread posts `{current_date, current_time, results}` to `http://mfr-database-controller:20001/ingest`, by service name on the stack's own network, with a 5 s timeout. `results` maps each person ID to a list of `(camera name, camera address, score, frame as base64 JPEG, bounding box)`. Nothing is sent when no face was accepted, and a failed post is only logged.
-2. A payload with an empty field is refused with 400.
-3. Otherwise the controller schedules the insert as a background task and answers `{"status": "OK"}` at once. The caller never learns whether the insert worked.
-4. For each record the task decodes the frame, draws the box, ID and score on it, reduces an `http` camera address to its host name, and takes the location as the part of the camera name before the first underscore.
-5. It takes a lock on the person until the commit, so parallel batches cannot both pass the next check, then looks for a record of the same person, location and camera in the last `SAME_CAM_TIME_ENTRY_THRESHOLD = 5` minutes.
-6. A recent record means a duplicate: this record is skipped.
-7. No recent record: the insert goes ahead.
-8. The task creates the partition `recognition_results_<year>` (by date range) and its child `recognition_results_<year>_<location>` (by list) if they are missing.
-9. It inserts person, location, camera, camera address, date, time, score and the annotated frame, with `api_acknowledged` false. PostgreSQL routes the row to its partition.
-10. The task commits once, after the last record.
+1. The recognition thread hands `{current_date, current_time, results}` to its process's attendance sender and carries on: recognition never waits on the database. `results` maps each person ID to a list of `(camera name, camera address, score, frame as base64 JPEG, bounding box)`. Nothing is handed over when no face was accepted.
+2. The sender writes the batch to the spool, `attendance-spool/<process>/<sequence>-<records>.json`, and flushes it to disk before queueing it, so a restart, crash or power cut loses nothing: on start the sender reloads the spool oldest first. The spool is the client's own Docker volume (fsync is unreliable on Windows folder mounts, D-038), bounded at 2 GiB; a full or unwritable spool refuses new batches, counts them as lost and makes readiness unready.
+3. One sender per process sends the oldest batch first, so a new batch never overtakes a failed one, to `http://mfr-database-controller:20001/ingest` with a 30 s timeout. A retry sends the same bytes.
+4. A payload that can never be saved (a bad date, a record without its five fields, an unreadable frame) gets 400. Its file moves to the spool's `rejected/` folder and is not retried.
+5. A database failure gets 503 and nothing of the batch is kept; no answer counts the same. The sender retries every 2 s and reports `attendance_write_failing` to the readiness check until the batch is confirmed.
+6. Otherwise the controller decodes the frames, draws the box, ID and score, resolves camera addresses and takes each location from the camera name before any database work. In one transaction with a 20 s deadline it takes a lock per person, in order, then creates the partitions `recognition_results_<year>` and `recognition_results_<year>_<location>` if missing (each under its own lock), then for each record skips a duplicate (the same person, location and camera within `SAME_CAM_TIME_ENTRY_THRESHOLD = 5` minutes before it, by the record's own time) and inserts the rest. A record of a person whose pictures were already cleared (D-050) is saved without its picture. Any failure rolls back the whole batch.
+7. The controller commits.
+8. Only then it answers 200 with `{"status": "OK", "committed": true, "inserted": n, "deduplicated": m}`. A plain 200 from an older controller, which answered before writing, does not count as saved.
+9. The sender deletes the batch's file. Since duplicates are judged by the records' own time, a batch whose answer was lost and is sent again, even much later, saves nothing twice. The controller also writes a health row every 30 s; its `/health` and Docker healthcheck need the latest write to have succeeded within 90 s.
 
 ## 4. Recognition to display
 
@@ -201,7 +207,8 @@ sequenceDiagram
     participant KW as Kafka-WebApp
     participant D as Display image server, DISPLAY_IMAGE_PORT
     participant B as Browser on the display
-    KW->>KW: wait until the host and service ports answer, show a start message, wait 2 minutes
+    participant P as producer-consumer /health :20010
+    KW->>P: GET HEALTH_URL every 2 s: ready, starting or unready with reason codes, or no answer
     KW->>K: group topic.display, assign every partition of its topic or KAFKA_PARTITIONS, from the end
     C->>FBC: TCP, JSON of strict primary matches, every batch
     FBC-->>C: OK, not read by the sender
@@ -224,7 +231,7 @@ sequenceDiagram
     KW-->>B: new_message with the latest list and the camera status strip
 ```
 
-**Key:** the sender is `batched_frame_face_recognition()` in `src/insightface_face_recognition.py` with `feedback_data_formatter()` in `src/inference_data_cleaner.py`. The feedback controller is `src/feedback_server/feedback_msg_server_controller.py` and `feedback_message_publisher()` in `feedback_message_kafka_publisher.py`. The topic and partition map is `map_camera_to_kafka_topic_and_partition()` in `src/util/generic_utilities.py`. The display image server is `src/fetch_face_image_server/`. Kafka-WebApp runs from the image `ghcr.io/hamza-aziz-ai/kafka-webapp:v0.8.0`, pinned by digest in `docker-compose-main.yml`; its code (`app.py`, `parameters.py`) lives in its own repository and was checked here at the `v0.3.0` tag (`c1f4d7f`).
+**Key:** the sender is `batched_frame_face_recognition()` in `src/insightface_face_recognition.py` with `feedback_data_formatter()` in `src/inference_data_cleaner.py`. The feedback controller is `src/feedback_server/feedback_msg_server_controller.py` and `feedback_message_publisher()` in `feedback_message_kafka_publisher.py`. The topic and partition map is `map_camera_to_kafka_topic_and_partition()` in `src/util/generic_utilities.py`. The display image server is `src/fetch_face_image_server/`. Kafka-WebApp runs from the image `ghcr.io/hamza-aziz-ai/kafka-webapp:v0.8.0`, pinned by digest in `docker-compose-main.yml`; its code (`app.py`, `parameters.py`) lives in its own repository; the readiness behavior in step 1 is its v0.8.0 (Kafka-WebApp D-021).
 
 1. Kafka-WebApp (v0.8.0) asks producer-consumer's readiness, `HEALTH_URL` (`http://mfr-cctv-producer-consumer:20010/health` in the compose file; `https://<site host>/health` for a display outside the stack), every 2 s: 3 answers in a row change what it shows. `ready` shows the rows; `starting` shows "Getting Started"; any other answer shows "Temporarily Down"; no answer shows "Cannot Reach". The readiness comes from the workers' own progress, batch outcomes, expiring dependency checks and the attendance sender (D-051). Its own Kafka connection is watched separately.
 2. It reads `KAFKA_TOPIC` (default `maingate_entry`) as consumer group `<topic>.display`, and assigns itself every partition of the topic, so every camera of the entry point is shown; `KAFKA_PARTITIONS` (camera number minus 1, comma-separated) narrows it to chosen cameras. It starts at the end, so old messages are never replayed, and checks for partitions added with a new camera every 60 s. Since D-037 the broker accepts only SCRAM logins on 9092; the compose file passes the client's read-only display login as `KAFKA_USERNAME` and `KAFKA_PASSWORD`, and an empty one, on the legacy owner, means no login.
@@ -234,10 +241,10 @@ sequenceDiagram
 6. Camera threads publish their own `ERROR <camera>: ...` and `SUCCESS <camera>: ...` messages to the same topic and partition (section 2, steps 2 and 5). Topics keep messages for 5 s.
 7. Kafka-WebApp polls every 0.2 s.
 8. Each message is a person ID or a camera status text.
-9. An `ERROR <camera>: ...` or `SUCCESS <camera>: ...` text updates that camera's entry in a status strip and never enters the recognition list or `/post_images`. An `ERROR` stays until the same camera's `SUCCESS`; a `SUCCESS` shows for 5 s.
+9. An `ERROR <camera>: ...` or `SUCCESS <camera>: ...` text updates that camera's entry in a status strip and never enters the recognition list or `/post_images`. An `ERROR` stays until the same camera's `SUCCESS` or until it is not repeated for `CAMERA_ERROR_SECONDS` (180 s; an inaccessible camera repeats it about every 35 s); a `SUCCESS` shows for 5 s. Camera messages are read while the system is unready too.
 10. A person ID goes to the front of the list unless it is already there; the list holds at most `DISPLAY_LIST_SIZE = 4`.
 11. After each person ID Kafka-WebApp posts the list to `IMAGE_SERVER_ADDRESS`, which the compose file sets to this client's own server, `http://display-image-server:20013/post_images`, with a 5 s timeout.
-12. The display image server returns, for each ID, `DISPLAY-FACE-DATASET/<id>/front_face.jpg` resized to 256x256 as base64, or null if there is none, for which the display (v0.6.0 or later) draws a silhouette coloured from the ID. It still turns an `ERROR` or `SUCCESS` text into `{"ERROR": text}` or `{"SUCCESS": text}`, but v0.3.0 no longer sends those. It has no authentication and allows any origin.
+12. The display image server returns, for each ID, `DISPLAY-FACE-DATASET/<id>/front_face.jpg` resized to 256x256 as base64, or null if there is none, for which the display (v0.6.0 or later) draws a silhouette coloured from the ID. If the image server or the name server fails, v0.8.0 shows the current IDs with silhouettes and no names rather than the previous rows. It still turns an `ERROR` or `SUCCESS` text into `{"ERROR": text}` or `{"SUCCESS": text}`, but v0.3.0 no longer sends those. It has no authentication and allows any origin.
 13. The browser asks for updates over Socket.IO.
 14. Kafka-WebApp sends the latest list and the current camera status strip, which the page shows. The list clears after 15 s without a new recognition.
 
