@@ -127,9 +127,10 @@ def test():
             (f"00000000-0000-0000-0000-00000000000{number}", person))
     errors = []
 
-    def ingest(minute):
+    def ingest(minute, year):
         try:
-            db.insert_recognition_data("2020-01-01", f"10:{minute:02d}:00", {person: [RECORD] for person in reversed(people)})
+            records = {person: [(f"site{minute}_entry_cctv-camera-1",) + RECORD[1:]] for person in reversed(people)}
+            db.insert_recognition_data(f"{year}-01-01", f"10:{minute:02d}:00", records)
         except Exception as error:
             errors.append(error)
 
@@ -140,14 +141,34 @@ def test():
         except Exception as error:
             errors.append(error)
 
-    racers = [threading.Thread(target=ingest, args=(minute,)) for minute in range(0, 60, 10)] + [threading.Thread(target=clear)]
-    for racer in racers:
-        racer.start()
-    for racer in racers:
-        racer.join()
-    assert not errors, errors
+    # Repeated, each round on a new year so every batch also creates partitions: the deadlock CI caught once on arm64
+    # needed a batch creating a partition while another held a person lock
+    for year in range(2010, 2020):
+        racers = [threading.Thread(target=ingest, args=(minute, year)) for minute in range(0, 60, 10)] + [threading.Thread(target=clear)]
+        for racer in racers:
+            racer.start()
+        for racer in racers:
+            racer.join()
+        assert not errors, errors
+        sql("UPDATE deletions SET frames_cleared_at = NULL WHERE person_id LIKE 'race%%'")
     left = sql("SELECT count(*) FROM recognition_results WHERE person_id LIKE 'race%%' AND recognition_frame IS NOT NULL")[0][0]
     assert left == 0, f"{left} records kept a picture that was due to be cleared"
+
+    # Lock order, deterministically: a transaction holds a person's lock and then writes; a batch for that person that also
+    # creates a new partition must wait for it, not take the table first (CI hit that deadlock once on arm64)
+    import time
+    waiting = []
+    with closing(psycopg2.connect(**db.DB_CONFIG)) as holder, holder.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock(hashtext('lockorder'))")
+        batch = threading.Thread(target=lambda: waiting.append(save("lockorder", "10:00:00", "2005-01-01")))
+        batch.start()
+        time.sleep(1.5)  # the batch is now waiting for the person lock (it used to hold the new partition's table lock)
+        cursor.execute("""INSERT INTO recognition_results (person_id, location, camera_name, camera_ip, recognition_date,
+                          recognition_time, confidence_score) VALUES ('holder', 'maingate', 'maingate_entry_cctv-camera-1',
+                          '10.0.0.1', %s, '10:00:00', 0.9)""", (DAY,))
+        holder.commit()
+    batch.join(30)
+    assert waiting == [(1, 0)], f"the batch must save once the lock is free, got {waiting}"
 
     # The controller answers only once the batch is saved, says so, and refuses a bad payload with 400
     # (The endpoint is called directly: starlette's TestClient needs a package the image does not have)

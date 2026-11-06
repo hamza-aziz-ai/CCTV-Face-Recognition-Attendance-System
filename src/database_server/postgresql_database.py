@@ -288,14 +288,16 @@ def insert_recognition_data(current_date: str, current_time: str, results: dict)
     inserted = deduplicated = 0
     options = f"-c transaction_timeout={TRANSACTION_TIMEOUT} -c lock_timeout={LOCK_TIMEOUT}"
     with closing(psycopg2.connect(**DB_CONFIG, options=options)) as conn, conn, conn.cursor() as cursor:
+        # One lock per person, taken in order and held to the commit: parallel batches of one person save once, and the
+        # hourly clearing of camera pictures (enrolment_deletion.clear_frames) takes the same locks in the same order.
+        # Taken before creating a partition: creating one locks the table, and a batch that held that table lock while
+        # waiting for a person lock deadlocked with the transaction holding the person lock and waiting for the table
+        for person_id in sorted({row[0] for row in rows}):
+            cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (person_id,))
         for location in sorted({row[1] for row in rows}):
             ensure_year_location_partition_exists(cursor, location, event.year)
         cursor.execute("SELECT to_regclass('deletions') IS NOT NULL")
         has_deletions = cursor.fetchone()[0]
-        # One lock per person, taken in order and held to the commit: parallel batches of one person save once, and the
-        # hourly clearing of camera pictures (enrolment_deletion.clear_frames) takes the same locks in the same order
-        for person_id in sorted({row[0] for row in rows}):
-            cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (person_id,))
         for person_id, location, camera_name, camera_ip, confidence_score, recognition_frame in rows:
             cursor.execute("""SELECT 1 FROM recognition_results
                               WHERE person_id = %s AND location = %s AND camera_name = %s
