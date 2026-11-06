@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.18.1 (2026-11-06)
+
+## What's Changed
+* fix(deploy): pull the release bundle as amd64 on any host, so an arm64 edge node finds releases by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/123
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.18.0...v2.18.1
+
 ## v2.18.0 (2026-11-06)
 
 ## What's Changed
