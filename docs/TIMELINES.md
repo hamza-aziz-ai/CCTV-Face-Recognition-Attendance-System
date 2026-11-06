@@ -133,6 +133,10 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #111 | 2026-11-05 16:54 | about 1h (estimate) | 13m | +37/-17 5f | fix(enrolment): avoid a hidden deadlock between a deletion and a publish, keep a deletion open when a folder cannot be removed, and let a restore keep an enrolment made after a deletion |
 | #112 | 2026-11-06 05:00 | about 1h (estimate) | 7m | +79/-6 6f | fix(recognition): feed the recognition model RGB, as it was trained, and add a re-embed command for stored vectors |
 | #113 | 2026-11-06 08:40 | about 1.5h (estimate, incl. council) | 13m | +172/-126 7f | fix(camera): judge darkness on the region's own pixels, stop keeping frames only to count them, and report a region that does not fit instead of reconnecting forever |
+| #114 | 2026-11-06 12:16 | about 1h (estimate, incl. council) | 5m | +134/-32 8f | feat(roi): save the snapshot size with a region and refuse the region when the camera's resolution changes |
+| #115 | 2026-11-06 12:22 | about 6h (estimate, incl. two councils and live proofs) | 11m | +1191/-382 23f | feat(health): true readiness for the display, attendance confirmed saved and kept on disk, and a restart when a worker dies |
+| #117 | 2026-11-06 12:38 | about 30m (estimate) | 5m | +35/-12 2f | fix(records): take the person locks before creating a partition, so batches never deadlock |
+| #118 | 2026-11-06 13:23 | about 15m (estimate) | 3m | +4/-0 1f | fix(compose): put producer-consumer on the edge network, so the proxy's /health route reaches it |
 
 ## Incidents that cost time
 
@@ -170,6 +174,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | 2026-11-03 13:55 to 14:01 | PR #105 conflicted with main: `git commit -a` swept the local submodule pointers into it; merged main and reset both pins, and CI ran again |
 | 2026-11-03 21:00 to 22:20 | A display pin (#107) rebuilt every image twice, about 60 billed minutes, with Actions already past the 3,000 included; fixed by #108 (images built only when their inputs change, otherwise re-tagged) |
 | 2026-11-05 15:55 to 16:00 | #110's CI never started: GitHub refused the jobs over the Actions spending limit; the owner sorted billing and one re-run passed | about 5m (estimate) | Run annotations | Past the included minutes, expect jobs to be refused rather than queued |
+| 2026-11-06 12:23 to 12:38 | The release after #114 and #115 failed: the new race test deadlocked on the arm64 runner (a batch creating a partition held the table and waited for a person lock). Nothing was published; #117 fixed the lock order and made the test deterministic | about 15m | Release run log | A race test that only fails under one runner's timing needs a deterministic version before it is trusted |
 | 2026-11-05 16:12 to 16:22 | v2.15.0 did not start after #110 merged: the release starts only from automerge, and #110 was merged by hand; started by hand | about 10m | Run timestamps | A hand merge must be followed by `gh workflow run release.yml` |
 | 2026-11-05 16:12 | Codex's review of #110, posted during CI, found a hidden deadlock between a deletion and a publish, a skipped folder failure, and a restore that could remove a re-enrolment; fixed on `fix/8e-review` | under 1h (estimate) | PR comments | Read review comments that arrive before the merge |
 
