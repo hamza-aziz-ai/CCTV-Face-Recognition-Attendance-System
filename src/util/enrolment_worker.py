@@ -5,6 +5,9 @@ vectors.parquet (D-030) and Milvus is rebuilt by face_vectors.publish, one publi
 expired: the photos are deleted at once and only the reasons stay. Deletions the API records (8e) run here too, as soon
 as they are seen, and attendance records' camera pictures are cleared hourly once due (enrolment_deletion.py). Runs in the producer-consumer image, which has the
 InsightFace client, OpenCV and Milvus already: python3 src/util/enrolment_worker.py
+
+After the recognition model or its preprocessing changes, every stored vector is stale: python3 src/util/enrolment_worker.py reembed
+takes them again from each enrolled person's photos and publishes once.
 """
 import json
 import os
@@ -22,7 +25,7 @@ from enrol_person import best_match, check_photos  # noqa: E402
 from enrolment_checks import as_problems  # noqa: E402
 import enrolment_deletion  # noqa: E402
 from enrolment_store import Store  # noqa: E402
-from face_vectors import forget, publish, save  # noqa: E402
+from face_vectors import VECTORS_FILE, forget, publish, save  # noqa: E402
 from insightface_face_detection import IFRClient  # noqa: E402
 from milvus_server import create_collection, create_connection  # noqa: E402
 from parameters import ENROLMENT_PENDING_HOURS, FACE_MATCHING_TOLERANCE, FACIAL_RECOGNITION_DATASET_PATH, INSIGHTFACE_HOST, \
@@ -107,6 +110,55 @@ def process(conn, store, client, collection_source, dataset=FACIAL_RECOGNITION_D
     return True
 
 
+def reembed(store, client, publish_locked, dataset=FACIAL_RECOGNITION_DATASET_PATH, check=check_photos):
+    """Takes every enrolled person's vectors again from their photos, then publishes once. Photos come from the bucket
+    (API enrolments) or else the person's folder (enrol_person.py). Nothing is saved unless every person's photos pass,
+    so a failure leaves the vectors in use as they were. Returns the number of people redone."""
+    redone = {}
+    for folder in sorted(path.parent for path in Path(dataset).glob(f"*/{VECTORS_FILE}")):
+        keys = store.list(f"persons/{folder.name}/")
+        photos = {key.rsplit("/", 1)[-1][:-4]: store.get(key) for key in keys} or \
+            {photo.stem: photo.read_bytes() for photo in sorted(folder.glob("*.jpg"))}
+        vectors, lines = check(client, photos) if photos else ({}, ["no photos in the bucket or the folder"])
+        if lines:
+            sys.exit(f"{folder.name}: {lines}. Nothing was changed")
+        redone[folder] = vectors
+    for folder, vectors in redone.items():
+        save(folder, folder.name, vectors.values())
+    publish_locked(dataset)
+    return len(redone)
+
+
+def demo():
+    import tempfile
+    from enrolment_store import MemoryStore
+    import pandas as pd
+
+    with tempfile.TemporaryDirectory() as dataset:
+        api, cli, gone = (Path(dataset) / name for name in ("api_person", "cli_person", "no_photos"))
+        for folder in (api, cli):
+            folder.mkdir()
+            save(folder, folder.name, [[0.0] * 512])
+        store = MemoryStore()
+        store.put("persons/api_person/front.jpg", b"A")
+        (cli / "front.jpg").write_bytes(b"C")
+        published = []
+        check = lambda _, photos: ({pose: [float(data[0])] * 512 for pose, data in photos.items()}, [])  # noqa: E731
+        assert reembed(store, None, published.append, dataset, check) == 2 and published == [dataset], published
+        assert pd.read_parquet(api / VECTORS_FILE)["embeddings"][0][0] == ord("A")
+        assert pd.read_parquet(cli / VECTORS_FILE)["embeddings"][0][0] == ord("C")
+
+        gone.mkdir()
+        save(gone, gone.name, [[0.0] * 512])
+        try:
+            reembed(store, None, published.append, dataset, check)
+            raise AssertionError("a person with no photos must stop the re-embed")
+        except SystemExit as stop:
+            assert "no_photos" in str(stop), stop
+        assert len(published) == 1 and pd.read_parquet(api / VECTORS_FILE)["embeddings"][0][0] == ord("A")
+    print("enrolment_worker demo: all checks passed")
+
+
 def main():
     store = Store()
     client = IFRClient(host=INSIGHTFACE_HOST, port=INSIGHTFACE_PORT)
@@ -145,4 +197,20 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    if command == "demo":
+        demo()
+    elif command == "reembed":
+        conn = connect()
+
+        def publish_locked(dataset):
+            with conn.cursor() as db:
+                db.execute("SELECT pg_advisory_lock(%s)", (PUBLISH_LOCK,))
+                try:
+                    publish(dataset)
+                finally:
+                    db.execute("SELECT pg_advisory_unlock(%s)", (PUBLISH_LOCK,))
+
+        print(f"Re-embedded {reembed(Store(), IFRClient(host=INSIGHTFACE_HOST, port=INSIGHTFACE_PORT), publish_locked)} people and published")
+    else:
+        main()
