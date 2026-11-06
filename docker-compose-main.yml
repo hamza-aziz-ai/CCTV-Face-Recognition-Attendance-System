@@ -22,6 +22,8 @@ services:
       - ./src/Camera-Configuration:/Multi-Person-Face-Recognition/src/Camera-Configuration:ro
       - ./logs:/Multi-Person-Face-Recognition/logs
       - ./Recognition_Frames:/Multi-Person-Face-Recognition/Recognition_Frames
+      # Recognised attendance not yet confirmed saved, kept across restarts (D-051)
+      - attendance-spool:/Multi-Person-Face-Recognition/attendance-spool
     depends_on:
       mfr-database-controller:
         condition: service_healthy
@@ -29,6 +31,15 @@ services:
         condition: service_healthy
       dynamic-face-dataset-collector:
         condition: service_healthy
+    # Healthy only while camera and recognition threads make progress, batches succeed, attendance is confirmed saved and
+    # InsightFace, Milvus, Kafka, the feedback and database controllers pass their checks (src/util/pipeline_health.py).
+    # Docker does not restart an unhealthy container; a worker that dies makes the container exit, and restart does that
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:20010/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
     stop_grace_period: 30s
     # The GPU's video decoder (NVDEC) decodes the camera streams (VIDEO_DECODE, docs/features/gpu-decode.md); "video"
     # gives the container the decoder library, which Docker Desktop also provides once it is asked for
@@ -235,19 +246,15 @@ services:
 
   # Recognition display for this host (Raspberry Pis run the same image with its default ports); versioned in the Kafka-WebApp repository
   kafka-webapp:
-    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.7.5@sha256:7f531fd9c25c17c9753e40cc8a9142f4840b0c11abd507e66cb860c85cf15995
+    image: ghcr.io/hamza-aziz-ai/kafka-webapp:v0.8.0@sha256:bf4234b320c702e5964770122bbdc9532bbc554516128bb884b850283c2b8101
     restart: unless-stopped
     env_file:
       - path: ./master.env
         required: false
     environment:
-      # This host has no SSH, Redis or liveness service, so the client waits only for the services that run here
-      HOST_CHECK_PORT: 9092
-      # One InsightFace-REST container (D-032): nothing listens on 19001, so checking it kept the display waiting (#67)
-      PROJECT_SERVICES_PORT: 6385,19000,19530,9092,${DISPLAY_IMAGE_PORT:-20013}
-      # Newer Kafka-WebApp images check these instead, so failures of the internal services, which publish no host port,
-      # still show on the display; older images ignore it
-      PROJECT_SERVICES: 6385,19000,19530,9092,mfr-database-controller:20001,mfr-feedback-controller:20012,display-image-server:20013
+      # Up or down comes from producer-consumer's own readiness (D-051, Kafka-WebApp D-021), not from open ports: this
+      # client's producer by service name. Its port checks (HOST_CHECK_PORT, PROJECT_SERVICES) are gone from v0.8.0
+      HEALTH_URL: http://mfr-cctv-producer-consumer:20010/health
       # This client's own portrait server, by service name (Kafka-WebApp reads it from v0.2; older images use IP_ADDRESS:20013)
       IMAGE_SERVER_ADDRESS: http://display-image-server:20013/post_images
       # The client's read-only display login (D-037); empty until the owner's cutover, which Kafka-WebApp reads as no login
@@ -281,6 +288,9 @@ services:
 volumes:
   # MediaMTX's configuration, which holds camera passwords: a Docker volume, not a file in the site folder
   live-video-config:
+  # Attendance waiting to be confirmed saved: a volume, not a site folder, because fsync is unreliable on Windows folder
+  # mounts (D-038); compose prefixes it with the project, so each client has its own, removed with the client
+  attendance-spool:
 
 # Shared with the host's HTTPS proxy (D-040); the watcher and the start script create it
 networks:

@@ -9,6 +9,8 @@ Author: Anubhav Patrick and Hamza Aziz
 Date: 2022-03-17
 """
 import json
+import os
+import signal
 import threading
 import time
 from collections import deque
@@ -36,6 +38,8 @@ from util.video_source import open_stream
 
 # A list of all the active cameras
 cameras = []
+# Progress slots (util/pipeline_health.Workers), set by src/main.py before this process forks; None in tests
+workers = None
 camera_to_topic_and_partition = map_camera_to_kafka_topic_and_partition()
 
 
@@ -274,11 +278,15 @@ def create_camera(camera_name: str, camera_configuration: dict,  shared_buffer):
     """
     global cameras
 
+    if workers is not None:
+        workers.beat("camera", camera_name)  # before the first open, which can take up to about 50 s
     cam = IPCamera(camera_name, camera_configuration, shared_buffer)
     cameras.append(cam)
 
     # Place the frames in the buffer until the end of the camera stream is reached
     while True:
+        if workers is not None:
+            workers.beat("camera", camera_name)  # every frame and every reconnect attempt: a hang stops it
         if cam.is_initialized:
             try:
                 cam.place_frame_in_buffer()
@@ -306,6 +314,8 @@ def create_camera(camera_name: str, camera_configuration: dict,  shared_buffer):
                 f"Putting the thread to sleep for {camera_name} (url: {camera_configuration['ip_address']}) for {IP_CAM_REINIT_WAIT_DURATION} seconds..."
             )
             time.sleep(IP_CAM_REINIT_WAIT_DURATION)
+            if workers is not None:
+                workers.beat("camera", camera_name)
             # again try to recreate a new camera object
             multicam_server_logger.info(f"Creating a new camera object for {camera_name} (url: {camera_configuration['ip_address']})...")
             cam = IPCamera(camera_name, camera_configuration, shared_buffer)
@@ -318,21 +328,36 @@ def create_camera(camera_name: str, camera_configuration: dict,  shared_buffer):
                 # print(message)
 
 
+def configured_cameras(camera_configuration_data):
+    """(camera name, its configuration) for every camera in the configuration, in a fixed order."""
+    for location, points in camera_configuration_data.items():
+        for point, cctv_cameras in points["cctv-cameras"].items():
+            if not cctv_cameras:
+                multicam_server_logger.info(f"No CCTV Cameras installed for {point} point at {location}")
+                continue
+            for cctv_camera, cam_config in cctv_cameras.items():
+                yield f"{location}_{point}_{cctv_camera}", cam_config
+
+
 def producer_main(shared_buffer):
     # Each camera has its own thread; OpenCV's own thread pool on top of them cost about 40% more CPU per frame, measured
     # on a 1080p stream. This process only runs the producer, so the consumer keeps its threads
     cv2.setNumThreads(1)
+    # The parent's stop handler came across the fork, and failed here (it terminates a producer this process does not
+    # own); the parent stops this process itself
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
     with open(CAMERA_CONFIGURATION_FILE, "r") as camera_configuration_file:
         camera_configuration_data = json.load(camera_configuration_file)
 
-    for location, points in camera_configuration_data.items():
-        for point, cctv_cameras in points["cctv-cameras"].items():
-            if not cctv_cameras:
-                message = f"No CCTV Cameras installed for {point} point at {location}"
-                # print(message)
-                multicam_server_logger.info(message)
-                continue
+    threads = []
+    for cam_name, cam_config in configured_cameras(camera_configuration_data):
+        threads.append(threading.Thread(target=create_camera, args=(cam_name, cam_config, shared_buffer), name=cam_name))
+        threads[-1].start()
 
-            for cctv_camera, cam_config in cctv_cameras.items():
-                cam_name = f"{location}_{point}_{cctv_camera}"
-                threading.Thread(target=create_camera, args=(cam_name, cam_config, shared_buffer)).start()
+    # A camera thread only ends on an error its own loop does not catch; then this process exits, src/main.py sees it
+    # and stops the container, and Docker starts it again
+    while all(thread.is_alive() for thread in threads):
+        time.sleep(5)
+    multicam_server_logger.error(f"Camera thread(s) {[t.name for t in threads if not t.is_alive()]} died; stopping the producer")
+    os._exit(1)

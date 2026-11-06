@@ -290,7 +290,7 @@ def root_token(admin_env):
 
 
 def proxy_route(client, host):
-    """This client's HTTPS route (D-040). Pages with no login of their own, Kafka-WebApp and its WebSockets, are guarded by the API's /auth/check, and report routes by the API itself. Compose names the containers from the project."""
+    """This client's HTTPS route (D-040). Pages with no login of their own, Kafka-WebApp and its WebSockets, are guarded by the API's /auth/check, and report routes by the API itself. /health is producer-consumer's readiness for displays outside the stack: open by design, it answers only starting/ready/unready and reason codes (D-051). Compose names the containers from the project."""
     project = "cctv" if client == "owner" else f"cctv-{client}"
     api = f"{project}-mfr-api-service-1:8000"
     return f"""{host} {{
@@ -306,6 +306,9 @@ def proxy_route(client, host):
 		respond /redoc 404
 		respond /openapi.json 404
 		reverse_proxy {api}
+	}}
+	handle /health {{
+		reverse_proxy {project}-mfr-cctv-producer-consumer-1:20010
 	}}
 	handle /live/* {{
 		forward_auth {api} {{

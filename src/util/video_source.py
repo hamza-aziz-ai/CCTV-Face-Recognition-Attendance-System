@@ -7,8 +7,10 @@ Both return an object with cv2.VideoCapture's read() and release().
 """
 import json
 import re
+import socket
 import subprocess
 import threading
+from urllib.parse import urlsplit
 from collections import deque
 
 import cv2
@@ -20,6 +22,30 @@ from parameters import FRAME_HEIGHT, FRAME_WIDTH, VIDEO_DECODE
 # The NVDEC decoders FFmpeg calls <codec>_cuvid
 CUVID_CODECS = {"h264", "hevc", "av1", "vp8", "vp9", "mjpeg", "mpeg1video", "mpeg2video", "mpeg4", "vc1"}
 TIMEOUT_US = "5000000"  # a stalled stream ends read() after 5 s, so the producer reconnects as it does with OpenCV
+# The CPU path's limits: an unreachable camera took OpenCV's default 21 s to fail and nothing bounded it; now opening gives
+# up after 10 s and a stalled read after 5 s, so a reconnect cycle has a known worst case (D-051)
+CPU_OPEN_TIMEOUT_MS = 10000
+CPU_READ_TIMEOUT_MS = 5000
+REACH_TIMEOUT_S = 5
+DEFAULT_PORTS = {"rtsp": 554, "rtsps": 322, "http": 80, "https": 443}
+
+
+def reachable(url: str) -> bool:
+    """Whether the camera answers on its port at all. OpenCV's FFmpeg backend opens one stream at a time behind a global
+    lock, so with many unreachable cameras each waited for all the others (18 of them made every reconnect take about
+    3.5 minutes). A plain connection check runs in parallel and fails in seconds. A file or another scheme: True."""
+    parts = urlsplit(url)
+    try:
+        port = parts.port or DEFAULT_PORTS.get(parts.scheme)
+    except ValueError:
+        return True
+    if not parts.hostname or not port:
+        return True
+    try:
+        socket.create_connection((parts.hostname, port), REACH_TIMEOUT_S).close()
+        return True
+    except OSError:
+        return False
 
 
 def masked(text: str) -> str:
@@ -88,7 +114,11 @@ class NvdecCapture:
 
 def open_stream(url: str, full_frame: bool = False):
     """Opens url with the decoder VIDEO_DECODE asks for. The caller reads the first frame to check the stream opened,
-    so in auto mode a GPU attempt that yields no frame is closed and the camera is opened on the CPU instead."""
+    so in auto mode a GPU attempt that yields no frame is closed and the camera is opened on the CPU instead. A camera that
+    does not answer on its port is not handed to any decoder."""
+    if not reachable(url):
+        logger.error(f"{masked(url)} does not answer on its port; not trying to decode it")
+        return _Primed(None, (False, None))
     if VIDEO_DECODE in ("gpu", "auto"):
         try:
             capture = NvdecCapture(url, full_frame)
@@ -103,7 +133,8 @@ def open_stream(url: str, full_frame: bool = False):
             logger.error(f"GPU decoding could not open {masked(url)}: {reason}")
             return _Primed(None, (False, None))
         logger.warning(f"GPU decoding could not open {masked(url)} ({reason}); using the CPU for this connection")
-    return cv2.VideoCapture(url)
+    return cv2.VideoCapture(url, cv2.CAP_FFMPEG, [cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, CPU_OPEN_TIMEOUT_MS,
+                                                  cv2.CAP_PROP_READ_TIMEOUT_MSEC, CPU_READ_TIMEOUT_MS])
 
 
 class _Primed:

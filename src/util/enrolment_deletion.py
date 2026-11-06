@@ -107,6 +107,10 @@ def clear_frames(conn) -> int:
         due = db.fetchall()
         db.execute("SELECT to_regclass('recognition_results') IS NOT NULL AS present")
         records = db.fetchone()["present"]
+        # The same per-person locks as a batch of recognition records, in the same order, held to the commit: a late
+        # record either commits before the pictures are cleared, so it is cleared too, or sees the mark and keeps none
+        for person_id in sorted({request["person_id"] for request in due}):
+            db.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (person_id,))
         for request in due:
             if records:
                 db.execute("""UPDATE recognition_results SET recognition_frame = NULL WHERE person_id = %s

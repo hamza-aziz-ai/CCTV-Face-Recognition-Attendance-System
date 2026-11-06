@@ -302,6 +302,13 @@ FEEDBACK_HOST = "mfr-feedback-controller"  # service name: this client's own con
 
 # FEEDBACK port
 FEEDBACK_PORT = 20012
+
+# producer-consumer's own health check (util/pipeline_health.py): Docker and the display read GET /health here
+PIPELINE_HEALTH_PORT = 20010
+
+# Recognised attendance waiting to be confirmed saved, kept on disk across restarts (util/attendance_sender.py); in the
+# stack, the client's own attendance-spool volume
+ATTENDANCE_SPOOL_DIR = "attendance-spool"
 ########################################################################################################################
 
 
