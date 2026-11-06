@@ -40,6 +40,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 300s
+    # The proxy reaches /health over the shared edge network (D-051); producer-consumer listens on nothing else
+    networks:
+      - default
+      - edge
     stop_grace_period: 30s
     # The GPU's video decoder (NVDEC) decodes the camera streams (VIDEO_DECODE, docs/features/gpu-decode.md); "video"
     # gives the container the decoder library, which Docker Desktop also provides once it is asked for
