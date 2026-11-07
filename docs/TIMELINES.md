@@ -143,6 +143,15 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | #122 | 2026-11-06 16:12 | about 1h 15m (estimate) | 9m | +297/-26 10f | feat(deploy): run a client's capture on an edge node, and the rest on the central host (D-052) |
 | #123 | 2026-11-06 16:49 | about 30m (estimate, incl. the central switch fix found live) | 3m | +34/-3 2f | fix(deploy): pull the release bundle as amd64 on any host, so an arm64 edge node finds releases |
 | #124 | 2026-11-06 17:12 | about 20m (estimate) | 3m | +9/-1 1f | fix(insightface): judge InsightFace and its load balancer healthy by /health, the model self-check, not /info |
+| #125 | 2026-11-06 17:23 | 11m | 3m | +4/-0 2f | fix(compose): let the feedback controller stop on SIGTERM instead of being killed after 10 s |
+| #126 | 2026-11-06 17:47 | 24m | 5m | +216/-40 1f | feat(roi): give the region page the display's theme and a console layout |
+| #127 | 2026-11-06 18:16 | 30m | 12m | +945/-263 17f | feat(roi): serve the camera region page inside the website for client admins, with pencil drawing and polygon editing |
+| #128 | 2026-11-06 18:34 | 18m | 3m | +9/-1 2f | fix(deploy): stop a central site's own capture when it switches from full, as up leaves those containers running |
+| #129 | 2026-11-06 18:51 | 17m | 5m | +55/-16 2f | feat(roi): draw straight lines and keep the outline open while drawing; show live view dates as DD MMM YYYY |
+| #130 | 2026-11-06 19:19 | 28m | 5m | +170/-1 3f | feat(roi): straighten a hand-drawn region into the nearest clean shape |
+| #131 | 2026-11-06 19:43 | 24m | 5m | +55/-18 3f | fix(roi): straighten hand-drawn circles and ellipses into circles and ellipses, not hexagons and pentagons |
+| #132 | 2026-11-06 19:54 | 11m | 5m | +264/-85 3f | feat(roi): straighten into symmetric, regular shapes, and stretch a shape along one axis |
+| #133 | 2026-11-07 04:25 | about 40m (estimate, overnight gap, incl. answering the Jetson session's questions) | 11m | +10/-297 5f | fix: detector NMS threshold by its real name, drop dead src/feedback.py, validate VIDEO_DECODE |
 
 ## Incidents that cost time
 
@@ -186,6 +195,7 @@ Purpose: real durations, so promised timelines can be met. This project is a reh
 | 2026-11-06 16:18 to 16:40 | The Orin's GPU did not initialise on that boot (CUDA error 35, `Bootstrap HS ACR failed`), so InsightFace crash-looped; a reboot cleared it. A firmware package was suspected first and was not the cause | about 20m (estimate) | Jetson session report | After a Jetson boot, check `cuInit` or InsightFace `/health` before blaming software; reboot first |
 | 2026-11-06 16:43 to 16:50 | The Orin's watcher logged "No published release yet": the bundle image is amd64 only, the arm64 pull found no match, and the error read as no release. Fixed by #123, run on the board before it merged | about 7m (measured, watch.log) | watch.log | Pin the platform of files-only images; never map a broad "not found" to an empty result |
 | 2026-11-06 16:58 to 17:04 | The Orin cleanup deleted `~/insightface-spike`, which `ifr-jetson` mounts for its models and self-check picture; the edge was unready (`insightface_unavailable`) until both were restored | about 6m (measured, display log) | Display log, Jetson session report | Name live mounts in the runbook (done); check `docker inspect` mounts before deleting a folder |
+| 2026-11-07 about 07:30 to 09:00 (estimate) | LAN renumbering to fixed IPs: the Orin's move to .2 failed duplicate-address detection (the D-Link extender holds .2), so the plan shifted by one; each Nano IP change dropped its cloudflared tunnel until `systemctl restart cloudflared-facepipe`; the laptop's move meant updating IP_ADDRESS, EDGE_CENTRAL_IP, the proxy /health route and the Kafka advertised listener, then recreating the broker and both stacks | about 30m (estimate) | Session log | List every device's IP and what points at it before renumbering; keep `ipv4.dad-timeout` on so a taken address fails instead of colliding |
 
 ## Estimating from this
 
