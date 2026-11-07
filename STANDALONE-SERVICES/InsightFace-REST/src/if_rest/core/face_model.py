@@ -80,7 +80,9 @@ class Detector:
                                 root_dir=root_dir, download_model=False, triton_uri=triton_uri,
                                 max_batch_size=max_batch_size)
 
-        self.retina.prepare(nms=0.35)
+        # NMS IoU threshold. The keyword was once nms=0.35, which every detector's prepare() swallowed into **kwargs,
+        # so their own defaults ran; 0.4 keeps what SCRFD (the deployed detector) has always used
+        self.retina.prepare(nms_threshold=0.4)
 
     def detect(self, data, threshold=0.3):
         """

@@ -103,7 +103,9 @@ CROP_ROI = True
 
 # Video decoder for camera streams, from master.env: cpu (OpenCV, the original path), gpu (NVDEC through FFmpeg, which
 # also scales frames down on the GPU), or auto (gpu, falling back to cpu for a stream the GPU cannot open). See src/util/video_source.py
-VIDEO_DECODE = os.getenv("VIDEO_DECODE", "auto").lower()
+VIDEO_DECODE = os.getenv("VIDEO_DECODE", "auto").strip().lower()
+if VIDEO_DECODE not in ("auto", "gpu", "cpu"):
+    sys.exit(f"VIDEO_DECODE in master.env must be auto, gpu or cpu; got {VIDEO_DECODE!r}")
 
 # set BATCH_SIZE for face detection
 BATCH_SIZE = 32  # frames per InsightFace request; lower it on a small GPU, 8 for CPU

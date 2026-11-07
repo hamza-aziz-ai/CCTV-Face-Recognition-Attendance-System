@@ -9,7 +9,7 @@ The producer can decode camera streams on the GPU's video decoder (NVDEC) instea
 | `VIDEO_DECODE` | `auto`, `gpu`, `cpu` | `auto` | `gpu`: FFmpeg decodes each stream with the codec's NVDEC decoder (`h264_cuvid`, `hevc_cuvid`, ...), which also scales frames to 640x360, and pipes them to the producer. `cpu`: OpenCV decodes on the CPU, the original path. `auto`: `gpu`, falling back to `cpu` for any connection the GPU cannot open (no GPU, no decoder library, a codec NVDEC lacks, no VRAM left). |
 | `FRAME_TRANSPORT` | `jpeg`, `bmp` | `jpeg` | `jpeg`: base64 JPEG in JSON, the original. `bmp`: uncompressed BMP in a msgpack body, which InsightFace-REST already accepts, so it needs no change. |
 
-Restart the producer-consumer after changing either. A camera with a region of interest gets full-size frames from the GPU, as the region is cropped from them, so only the decoding moves to the GPU for it.
+Restart the producer-consumer after changing either. Any other `VIDEO_DECODE` value stops the services at start with a message naming it. Use `cpu` on a Jetson: its hardware decoder is not NVDEC, so `auto` would try `h264_cuvid`, log `Cannot load libnvcuvid.so.1` and fall back to the CPU on every connection. A camera with a region of interest gets full-size frames from the GPU, as the region is cropped from them, so only the decoding moves to the GPU for it.
 
 RTSP is read over TCP, as OpenCV reads it. FFmpeg's default, UDP, failed from Docker Desktop on the owner's phone camera (`Error during demuxing: Operation not permitted`), so v2.10.0 fell back to the CPU for every real camera; with TCP the same stream decoded on NVDEC at 17 fps with 1% Python CPU, against 35% on the CPU path (2026-11-03).
 
