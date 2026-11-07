@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.23.1 (2026-11-07)
+
+## What's Changed
+* fix: detector NMS threshold by its real name, drop dead src/feedback.py, validate VIDEO_DECODE by @hamza-aziz-ai in https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/pull/133
+
+
+**Full Changelog**: https://github.com/hamza-aziz-ai/CCTV-Face-Recognition-Attendance-System/compare/v2.23.0...v2.23.1
+
 ## v2.23.0 (2026-11-06)
 
 ## What's Changed
